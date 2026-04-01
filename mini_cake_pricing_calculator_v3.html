@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mini Cake Pricing Calculator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #FAF6F0;
+      --warm-white: #FFF9F3;
+      --dusty-rose: #C97D7D;
+      --rose-dark: #9A5A5A;
+      --rose-light: #F0D5D5;
+      --rose-pale: #FAF0F0;
+      --cocoa: #5C3D2E;
+      --cocoa-light: #8B6355;
+      --gold-light: #E8C87A;
+      --text-primary: #2C1F1A;
+      --text-secondary: #7A5C52;
+      --text-muted: #A88E86;
+      --border: rgba(92,61,46,0.12);
+      --border-strong: rgba(92,61,46,0.22);
+      --green: #4A7C59;
+      --amber: #8B6200;
+      --red: #A03030;
+      --red-bg: #FAEAEA;
+      --blue: #2A5F8F;
+      --blue-bg: #E8F0FA;
+      --purple: #6B4FA0;
+      --purple-bg: #F0EBF8;
+      --purple-border: rgba(107,79,160,0.22);
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--text-primary);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .page-wrap { max-width: 700px; margin: 0 auto; }
+
+    header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .cake-icon { font-size: 2.5rem; margin-bottom: 0.75rem; display: block; }
+
+    header h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem;
+      font-weight: 600;
+      color: var(--cocoa);
+      line-height: 1.2;
+      margin-bottom: 0.3rem;
+    }
+
+    header p { font-size: 0.85rem; color: var(--text-muted); font-weight: 300; }
+    header .recipe-links { margin-top: 0.6rem; font-size: 0.78rem; color: var(--text-muted); }
+    header .recipe-links a { color: var(--dusty-rose); text-decoration: none; }
+    header .recipe-links a:hover { text-decoration: underline; }
+
+    .card {
+      background: var(--warm-white);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--cocoa);
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-style: italic;
+      margin-top: -0.9rem;
+      margin-bottom: 1.1rem;
+      line-height: 1.5;
+    }
+
+    .toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+    .toggle-btn {
+      padding: 10px 14px;
+      border: 1.5px solid var(--border-strong);
+      border-radius: 10px;
+      background: transparent;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      line-height: 1.4;
+    }
+
+    .toggle-btn:hover { border-color: var(--dusty-rose); color: var(--rose-dark); }
+    .toggle-btn.active { background: var(--dusty-rose); border-color: var(--dusty-rose); color: white; font-weight: 500; }
+    .toggle-btn.active.blue-active { background: var(--blue); border-color: var(--blue); }
+
+    .slider-group { margin-bottom: 1.1rem; }
+    .slider-group:last-child { margin-bottom: 0; }
+    .slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .slider-label { font-size: 0.85rem; color: var(--text-secondary); }
+    .slider-val { font-size: 0.92rem; font-weight: 500; color: var(--cocoa); font-family: 'Playfair Display', serif; }
+
+    input[type=range] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 2px;
+      background: var(--rose-light);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      background: var(--dusty-rose);
+      border: 2px solid white;
+      box-shadow: 0 1px 4px rgba(201,125,125,0.4);
+      cursor: pointer;
+      transition: transform 0.15s;
+    }
+
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+    input[type=range]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: var(--dusty-rose); border: 2px solid white; cursor: pointer; }
+    input[type=range].red-slider { background: #F0D0D0; }
+    input[type=range].red-slider::-webkit-slider-thumb { background: var(--red); box-shadow: 0 1px 4px rgba(160,48,48,0.3); }
+    input[type=range].red-slider::-moz-range-thumb { background: var(--red); }
+    input[type=range].blue-slider { background: #C8D8EE; }
+    input[type=range].blue-slider::-webkit-slider-thumb { background: var(--blue); box-shadow: 0 1px 4px rgba(42,95,143,0.3); }
+    input[type=range].blue-slider::-moz-range-thumb { background: var(--blue); }
+
+    .breakdown { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+
+    .br-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 14px;
+      font-size: 0.83rem;
+      border-bottom: 1px solid var(--border);
+      gap: 12px;
+    }
+
+    .br-row:last-child { border-bottom: none; }
+    .br-row.subtotal { background: var(--rose-pale); }
+    .br-row.grand-total { background: var(--rose-pale); font-weight: 500; font-size: 0.9rem; }
+    .br-label { color: var(--text-secondary); flex: 1; line-height: 1.4; }
+    .br-label.strong { color: var(--text-primary); font-weight: 500; }
+    .br-amount { color: var(--text-primary); white-space: nowrap; font-weight: 500; }
+
+    .section-divider {
+      padding: 6px 14px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: rgba(92,61,46,0.04);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .fixed-note { font-size: 0.71rem; color: var(--text-muted); margin-left: 4px; }
+
+    .callout {
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 0.83rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+    }
+
+    .callout.purple { background: var(--purple-bg); border: 1px solid var(--purple-border); }
+    .callout.red    { background: var(--red-bg);    border: 1px solid rgba(160,48,48,0.18); }
+    .callout.blue   { background: var(--blue-bg);   border: 1px solid rgba(42,95,143,0.18); }
+    .callout .c-label { color: var(--text-secondary); flex: 1; line-height: 1.4; }
+    .callout .c-val   { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
+    .callout.purple .c-val { color: var(--purple); }
+    .callout.red    .c-val { color: var(--red); }
+    .callout.blue   .c-val { color: var(--blue); }
+
+    .note { font-size: 0.76rem; color: var(--text-muted); margin-top: 8px; font-style: italic; line-height: 1.5; }
+
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 1.25rem; }
+
+    .metric {
+      background: var(--warm-white);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .metric .m-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 5px; line-height: 1.3; }
+    .metric .m-val { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 600; line-height: 1; }
+    .metric .m-val.green { color: var(--green); }
+    .metric .m-val.amber { color: var(--amber); }
+    .metric .m-val.rose  { color: var(--dusty-rose); }
+
+    .discount-row { margin-top: 1rem; display: none; }
+    .discount-row.visible { display: block; }
+
+    .total-banner {
+      background: linear-gradient(135deg, var(--cocoa) 0%, var(--cocoa-light) 100%);
+      border-radius: 14px;
+      padding: 1.5rem 1.75rem;
+      color: white;
+      text-align: center;
+      margin-top: 1.25rem;
+    }
+
+    .total-banner .tb-label { font-size: 0.8rem; opacity: 0.75; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 300; }
+    .total-banner .tb-amount { font-family: 'Playfair Display', serif; font-size: 3rem; font-weight: 600; line-height: 1; color: var(--gold-light); }
+    .total-banner .tb-sub { font-size: 0.8rem; opacity: 0.65; margin-top: 6px; }
+    .total-banner .tb-adj { font-size: 0.8rem; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); opacity: 0.85; }
+    .total-banner .tb-adj span { color: #FFCCCC; }
+
+    footer { text-align: center; margin-top: 2.5rem; font-size: 0.76rem; color: var(--text-muted); line-height: 1.7; }
+    footer a { color: var(--dusty-rose); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 500px) {
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .metric:last-child { grid-column: 1 / -1; }
+      header h1 { font-size: 1.6rem; }
+      .total-banner .tb-amount { font-size: 2.4rem; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header>
+    <span class="cake-icon">🎂</span>
+    <h1>Mini Cake Pricing Calculator</h1>
+    <p>8 oz mini cakes &nbsp;·&nbsp; Culinary Arts Program &nbsp;·&nbsp; Recipe-accurate costing</p>
+    <div class="recipe-links">
+      <a href="https://sallysbakingaddiction.com/very-vanilla-cupcakes/" target="_blank">Vanilla Cake</a>
+      &nbsp;·&nbsp;
+      <a href="https://sallysbakingaddiction.com/classic-chocolate-cupcakes-with-vanilla-frosting/" target="_blank">Chocolate Cake</a>
+      &nbsp;·&nbsp;
+      <a href="https://blog.wilton.com/how-to-make-homemade-buttercream-frosting/" target="_blank">Wilton Buttercream</a>
+    </div>
+  </header>
+
+  <!-- Cake Style -->
+  <div class="card">
+    <div class="card-title">Cake style</div>
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="btn-vanilla-cake" onclick="setCakeStyle('vanilla')">Vanilla cake</button>
+      <button class="toggle-btn" id="btn-choc-cake" onclick="setCakeStyle('chocolate')">Chocolate cake</button>
+    </div>
+  </div>
+
+  <!-- Vanilla Extract -->
+  <div class="card">
+    <div class="card-title">Vanilla extract</div>
+    <p class="card-subtitle">Used in both cake batter and buttercream. Is the cost difference worth it?</p>
+    <div class="toggle-row" style="margin-bottom:12px;">
+      <button class="toggle-btn active" id="btn-imit" onclick="setVanilla('imitation')">Imitation vanilla<br><span style="font-size:0.74rem;opacity:0.85;">$3 / 8 oz</span></button>
+      <button class="toggle-btn" id="btn-real" onclick="setVanilla('real')">Pure vanilla extract<br><span style="font-size:0.74rem;opacity:0.85;">$6 / 2 oz</span></button>
+    </div>
+    <div class="callout purple">
+      <span class="c-label" id="vanillaCalloutLabel">—</span>
+      <span class="c-val"   id="vanillaCalloutVal">—</span>
+    </div>
+  </div>
+
+  <!-- Price Sliders -->
+  <div class="card">
+    <div class="card-title">Ingredient prices</div>
+    <p class="card-subtitle">Adjust for current market conditions. All other costs are fixed from your supplier quotes.</p>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Butter (per lb)</span>
+        <span class="slider-val" id="butterDisplay">$3.50</span>
+      </div>
+      <input type="range" min="2.00" max="6.00" step="0.25" value="3.50" id="sliderButter" oninput="update()">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Eggs (per dozen) <span class="fixed-note">— vanilla cake only</span></span>
+        <span class="slider-val" id="eggDisplay">$2.00</span>
+      </div>
+      <input type="range" min="1.00" max="8.00" step="0.25" value="2.00" id="sliderEgg" oninput="update()">
+    </div>
+
+    <div class="slider-group" id="cocoaGroup">
+      <div class="slider-header">
+        <span class="slider-label">Cocoa powder (per lb) <span class="fixed-note" id="cocoaNote">— chocolate cake only</span></span>
+        <span class="slider-val" id="cocoaDisplay">$10.00</span>
+      </div>
+      <input type="range" min="6.00" max="16.00" step="0.50" value="10.00" id="sliderCocoa" oninput="update()">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Frosting applied per cake (oz)</span>
+        <span class="slider-val" id="frostingDisplay">3.0 oz</span>
+      </div>
+      <input type="range" min="1.0" max="6.0" step="0.5" value="3.0" id="sliderFrosting" oninput="update()">
+      <p class="note">Weigh a frosted test cake to calibrate. Recipe baseline ≈ 2.5 oz per standard cupcake.</p>
+    </div>
+  </div>
+
+  <!-- Cost Breakdown -->
+  <div class="card">
+    <div class="card-title">Cost breakdown — per cake</div>
+
+    <div class="breakdown">
+
+      <div class="section-divider" id="batterSectionLabel">Vanilla cake batter</div>
+
+      <div class="br-row" id="row-butter-batter">
+        <span class="br-label" id="lbl-butter-batter">Butter (0.5 oz)</span>
+        <span class="br-amount" id="amt-butter-batter">—</span>
+      </div>
+      <div class="br-row" id="row-egg">
+        <span class="br-label">Egg whites <span class="fixed-note">0.25 egg equiv.</span></span>
+        <span class="br-amount" id="amt-egg">—</span>
+      </div>
+      <div class="br-row" id="row-yogurt">
+        <span class="br-label">Greek yogurt <span class="fixed-note">0.26 oz · fixed $0.094/oz</span></span>
+        <span class="br-amount" id="amt-yogurt">—</span>
+      </div>
+      <div class="br-row" id="row-oil" style="display:none;">
+        <span class="br-label">Vegetable oil <span class="fixed-note">0.27 oz · fixed $0.078/oz</span></span>
+        <span class="br-amount" id="amt-oil">—</span>
+      </div>
+      <div class="br-row" id="row-buttermilk" style="display:none;">
+        <span class="br-label">Buttermilk <span class="fixed-note">0.41 oz · fixed $0.045/oz</span></span>
+        <span class="br-amount" id="amt-buttermilk">—</span>
+      </div>
+      <div class="br-row" id="row-cocoa" style="display:none;">
+        <span class="br-label">Cocoa powder <span class="fixed-note">0.148 oz</span></span>
+        <span class="br-amount" id="amt-cocoa">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Flour, sugar, leavening, salt <span class="fixed-note">fixed</span></span>
+        <span class="br-amount" id="amt-dry">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Vanilla extract — batter</span>
+        <span class="br-amount" id="amt-vanilla-batter">—</span>
+      </div>
+      <div class="br-row subtotal">
+        <span class="br-label strong">Batter subtotal</span>
+        <span class="br-amount" id="amt-batter-sub">—</span>
+      </div>
+
+      <div class="section-divider">Wilton buttercream</div>
+
+      <div class="br-row">
+        <span class="br-label">Butter in frosting</span>
+        <span class="br-amount" id="amt-butter-frost">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Shortening <span class="fixed-note">fixed $0.119/oz</span></span>
+        <span class="br-amount" id="amt-shortening">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Powdered sugar <span class="fixed-note">fixed $0.0625/oz</span></span>
+        <span class="br-amount" id="amt-powsugar">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Vanilla extract — frosting</span>
+        <span class="br-amount" id="amt-vanilla-frost">—</span>
+      </div>
+      <div class="br-row">
+        <span class="br-label">Milk <span class="fixed-note">fixed</span></span>
+        <span class="br-amount" id="amt-milk">$0.00</span>
+      </div>
+      <div class="br-row subtotal">
+        <span class="br-label strong">Frosting subtotal <span class="fixed-note" id="frostingOzNote"></span></span>
+        <span class="br-amount" id="amt-frost-sub">—</span>
+      </div>
+
+      <div class="section-divider">Packaging</div>
+
+      <div class="br-row">
+        <span class="br-label">Container ($30 / 200 units)</span>
+        <span class="br-amount">$0.15</span>
+      </div>
+
+      <div class="br-row grand-total">
+        <span class="br-label strong">Total cost per cake</span>
+        <span class="br-amount" id="amt-total">—</span>
+      </div>
+
+    </div>
+
+    <div class="callout purple" id="vanillaSwapCallout">
+      <span class="c-label" id="vanillaSwapLabel">—</span>
+      <span class="c-val"   id="vanillaSwapVal">—</span>
+    </div>
+
+    <p class="note">Chocolate cake uses vegetable oil instead of butter — making it slightly cheaper per cake despite the cocoa cost.</p>
+  </div>
+
+  <!-- Sales Projection -->
+  <div class="card">
+    <div class="card-title">Sales projection</div>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Selling price per cake</span>
+        <span class="slider-val" id="sellDisplay">$4.00</span>
+      </div>
+      <input type="range" min="1.00" max="8.00" step="0.25" value="4.00" id="sliderSell" oninput="update()">
+    </div>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Number of cakes sold</span>
+        <span class="slider-val" id="countDisplay">200</span>
+      </div>
+      <input type="range" min="10" max="300" step="5" value="200" id="sliderCount" oninput="update()">
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="m-label">Profit per cake</div>
+        <div class="m-val green" id="profitPer">—</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Margin</div>
+        <div class="m-val amber" id="marginPct">—</div>
+      </div>
+      <div class="metric">
+        <div class="m-label">Total ingredient cost</div>
+        <div class="m-val rose" id="totalIngredCost">—</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Production Accuracy -->
+  <div class="card">
+    <div class="card-title">Production accuracy</div>
+    <p class="card-subtitle">What happens when you make too few — or too many?</p>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Customers turned away (ran out)</span>
+        <span class="slider-val" id="missedDisplay" style="color:var(--red);">0</span>
+      </div>
+      <input type="range" class="red-slider" min="0" max="100" step="5" value="0" id="sliderMissed" oninput="update()">
+    </div>
+
+    <div class="callout red" id="missedCallout" style="display:none;">
+      <span class="c-label">Lost revenue from customers you couldn't serve</span>
+      <span class="c-val" id="missedImpact">—</span>
+    </div>
+
+    <div style="height:1rem;"></div>
+
+    <div class="slider-group">
+      <div class="slider-header">
+        <span class="slider-label">Cakes produced but not sold</span>
+        <span class="slider-val" id="unsoldDisplay" style="color:var(--blue);">0</span>
+      </div>
+      <input type="range" class="blue-slider" min="0" max="100" step="5" value="0" id="sliderUnsold" oninput="update()">
+    </div>
+
+    <div id="unsoldImpactArea" style="display:none;">
+      <div class="toggle-row" style="margin-bottom:10px;">
+        <button class="toggle-btn active blue-active" id="btn-giveaway" onclick="setUnsoldMode('giveaway')">Given away / donated</button>
+        <button class="toggle-btn" id="btn-discount" onclick="setUnsoldMode('discount')">Sold at a discount</button>
+      </div>
+      <div class="discount-row" id="discountSliderRow">
+        <div class="slider-header">
+          <span class="slider-label">Discount selling price</span>
+          <span class="slider-val" id="discountDisplay">$2.00</span>
+        </div>
+        <input type="range" class="blue-slider" min="0.50" max="3.75" step="0.25" value="2.00" id="sliderDiscount" oninput="update()">
+      </div>
+      <div class="callout blue" style="margin-top:10px;">
+        <span class="c-label" id="unsoldLabel">Ingredient cost lost on unsold cakes</span>
+        <span class="c-val"   id="unsoldImpact">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Total Banner -->
+  <div class="total-banner">
+    <div class="tb-label">Estimated profit</div>
+    <div class="tb-amount" id="totalProfit">—</div>
+    <div class="tb-sub" id="totalSub">—</div>
+    <div class="tb-adj" id="adjLine" style="display:none;">
+      Adjusted for production losses: <span id="adjProfit">—</span> &nbsp;·&nbsp; <span id="adjDetail">—</span>
+    </div>
+  </div>
+
+  <footer>
+    Built for Culinary Arts · Costs based on supplier quotes, April 2026<br>
+    <a href="https://sallysbakingaddiction.com/very-vanilla-cupcakes/" target="_blank">Vanilla Cake</a>
+    &nbsp;·&nbsp;
+    <a href="https://sallysbakingaddiction.com/classic-chocolate-cupcakes-with-vanilla-frosting/" target="_blank">Chocolate Cake</a>
+    &nbsp;·&nbsp;
+    <a href="https://blog.wilton.com/how-to-make-homemade-buttercream-frosting/" target="_blank">Wilton Buttercream</a>
+  </footer>
+
+</div>
+
+<script>
+  var cakeStyle   = 'vanilla';
+  var vanillaType = 'imitation';
+  var unsoldMode  = 'giveaway';
+
+  // Fixed costs ($/oz unless noted)
+  var FC = {
+    shortening:  0.119,
+    oil:         0.078,
+    buttermilk:  0.045,
+    yogurt:      0.094,
+    powsugar:    0.0625,
+    milk:        0.003,
+    dryVanilla:  0.08,
+    dryChoc:     0.06,
+    vanillaImit: 0.375,
+    vanillaReal: 3.00,
+    container:   0.15
+  };
+
+  // Per-mini-cake batter quantities (oz) — scaled 1.5x from standard cupcake
+  var BATTER_V = { butterOz:0.5, eggFrac:0.25, yogurtOz:0.2625, vanillaOz:0.04167 };
+  var BATTER_C = { oilOz:0.27,   eggFrac:0.10, buttermilkOz:0.406, cocoaOz:0.148, vanillaOz:0.01667 };
+
+  // Frosting ingredient ratios per oz of applied frosting
+  // Wilton yields ~60oz total for 24 cupcakes
+  // butter 4oz, shortening 3.39oz, powsugar 16.93oz, vanilla 0.167oz in recipe
+  var FROST = { butterOz:0.06667, shorteningOz:0.05650, powsugarOz:0.28217, vanillaOz:0.002783 };
+
+  function fmt(n) { return '$' + Math.abs(n).toFixed(2); }
+  function el(id) { return document.getElementById(id); }
+
+  function setCakeStyle(s) {
+    cakeStyle = s;
+    el('btn-vanilla-cake').classList.toggle('active', s==='vanilla');
+    el('btn-choc-cake').classList.toggle('active', s==='chocolate');
+    el('cocoaGroup').style.opacity = s==='chocolate' ? '1' : '0.45';
+    update();
+  }
+
+  function setVanilla(v) {
+    vanillaType = v;
+    el('btn-imit').classList.toggle('active', v==='imitation');
+    el('btn-real').classList.toggle('active', v==='real');
+    update();
+  }
+
+  function setUnsoldMode(m) {
+    unsoldMode = m;
+    el('btn-giveaway').classList.toggle('active', m==='giveaway');
+    el('btn-giveaway').classList.toggle('blue-active', m==='giveaway');
+    el('btn-discount').classList.toggle('active', m==='discount');
+    el('btn-discount').classList.toggle('blue-active', m==='discount');
+    el('discountSliderRow').classList.toggle('visible', m==='discount');
+    update();
+  }
+
+  function update() {
+    var butterLb    = parseFloat(el('sliderButter').value);
+    var eggDoz      = parseFloat(el('sliderEgg').value);
+    var cocoaLb     = parseFloat(el('sliderCocoa').value);
+    var frostingOz  = parseFloat(el('sliderFrosting').value);
+    var sellPrice   = parseFloat(el('sliderSell').value);
+    var cakeCount   = parseInt(el('sliderCount').value);
+    var missed      = parseInt(el('sliderMissed').value);
+    var unsold      = parseInt(el('sliderUnsold').value);
+    var discount    = parseFloat(el('sliderDiscount').value);
+
+    var butterOz   = butterLb / 16;
+    var eggEach    = eggDoz / 12;
+    var cocoaOz    = cocoaLb / 16;
+    var vanillaOzP = vanillaType === 'imitation' ? FC.vanillaImit : FC.vanillaReal;
+
+    // Display slider values
+    el('butterDisplay').textContent   = '$' + butterLb.toFixed(2);
+    el('eggDisplay').textContent      = '$' + eggDoz.toFixed(2);
+    el('cocoaDisplay').textContent    = '$' + cocoaLb.toFixed(2);
+    el('frostingDisplay').textContent = frostingOz.toFixed(1) + ' oz';
+    el('sellDisplay').textContent     = '$' + sellPrice.toFixed(2);
+    el('countDisplay').textContent    = cakeCount;
+    el('missedDisplay').textContent   = missed;
+    el('unsoldDisplay').textContent   = unsold;
+    el('discountDisplay').textContent = '$' + discount.toFixed(2);
+    el('frostingOzNote').textContent  = frostingOz.toFixed(1) + ' oz applied';
+
+    // ── Batter ──────────────────────────────────────────────────────────
+    var batterCost = 0;
+    var vanillaBatter = 0;
+
+    if (cakeStyle === 'vanilla') {
+      var bb = BATTER_V.butterOz * butterOz;
+      var eb = BATTER_V.eggFrac  * eggEach;
+      var yb = BATTER_V.yogurtOz * FC.yogurt;
+      vanillaBatter = BATTER_V.vanillaOz * vanillaOzP;
+      batterCost = bb + eb + yb + vanillaBatter + FC.dryVanilla;
+
+      el('batterSectionLabel').textContent = 'Vanilla cake batter';
+      el('lbl-butter-batter').textContent  = 'Butter (0.5 oz per cake)';
+      el('amt-butter-batter').textContent  = fmt(bb);
+      el('row-butter-batter').style.display = '';
+      el('row-egg').style.display          = '';
+      el('amt-egg').textContent            = fmt(eb);
+      el('row-yogurt').style.display       = '';
+      el('amt-yogurt').textContent         = fmt(yb);
+      el('row-oil').style.display          = 'none';
+      el('row-buttermilk').style.display   = 'none';
+      el('row-cocoa').style.display        = 'none';
+      el('amt-dry').textContent            = fmt(FC.dryVanilla);
+
+    } else {
+      var oc = BATTER_C.oilOz        * FC.oil;
+      var ec = BATTER_C.eggFrac      * eggEach;
+      var bc = BATTER_C.buttermilkOz * FC.buttermilk;
+      var cc = BATTER_C.cocoaOz      * cocoaOz;
+      vanillaBatter = BATTER_C.vanillaOz * vanillaOzP;
+      batterCost = oc + ec + bc + cc + vanillaBatter + FC.dryChoc;
+
+      el('batterSectionLabel').textContent  = 'Chocolate cake batter';
+      el('row-butter-batter').style.display = 'none';
+      el('row-egg').style.display           = '';
+      el('amt-egg').textContent             = fmt(ec);
+      el('row-yogurt').style.display        = 'none';
+      el('row-oil').style.display           = '';
+      el('amt-oil').textContent             = fmt(oc);
+      el('row-buttermilk').style.display    = '';
+      el('amt-buttermilk').textContent      = fmt(bc);
+      el('row-cocoa').style.display         = '';
+      el('amt-cocoa').textContent           = fmt(cc);
+      el('amt-dry').textContent             = fmt(FC.dryChoc);
+    }
+
+    el('amt-vanilla-batter').textContent = fmt(vanillaBatter);
+    el('amt-batter-sub').textContent     = fmt(batterCost);
+
+    // ── Frosting ─────────────────────────────────────────────────────────
+    var bf = frostingOz * FROST.butterOz    * butterOz;
+    var sf = frostingOz * FROST.shorteningOz * FC.shortening;
+    var pf = frostingOz * FROST.powsugarOz  * FC.powsugar;
+    var vf = frostingOz * FROST.vanillaOz   * vanillaOzP;
+    var frostCost = bf + sf + pf + vf + FC.milk;
+
+    el('amt-butter-frost').textContent = fmt(bf);
+    el('amt-shortening').textContent   = fmt(sf);
+    el('amt-powsugar').textContent     = fmt(pf);
+    el('amt-vanilla-frost').textContent= fmt(vf);
+    el('amt-frost-sub').textContent    = fmt(frostCost);
+
+    // ── Total per cake ────────────────────────────────────────────────────
+    var totalPerCake = batterCost + frostCost + FC.container;
+    el('amt-total').textContent = fmt(totalPerCake);
+
+    // ── Vanilla toggle callouts ───────────────────────────────────────────
+    var altPrice        = vanillaType === 'imitation' ? FC.vanillaReal : FC.vanillaImit;
+    var vanillaBatterAlt = (cakeStyle==='vanilla' ? BATTER_V.vanillaOz : BATTER_C.vanillaOz) * altPrice;
+    var vanillaFrostAlt  = frostingOz * FROST.vanillaOz * altPrice;
+    var vanillaNow       = vanillaBatter + vf;
+    var vanillaAlt       = vanillaBatterAlt + vanillaFrostAlt;
+    var vanillaDiff      = Math.abs(vanillaNow - vanillaAlt);
+
+    if (vanillaType === 'imitation') {
+      el('vanillaCalloutLabel').textContent = 'Upgrading to pure vanilla extract adds per cake:';
+      el('vanillaCalloutVal').textContent   = '+' + fmt(vanillaDiff);
+      el('vanillaSwapLabel').textContent    = 'Across ' + cakeCount + ' cakes, pure vanilla costs ' + fmt(vanillaDiff * cakeCount) + ' more';
+      el('vanillaSwapVal').textContent      = '+' + fmt(vanillaDiff * cakeCount);
+    } else {
+      el('vanillaCalloutLabel').textContent = 'Switching to imitation vanilla saves per cake:';
+      el('vanillaCalloutVal').textContent   = '-' + fmt(vanillaDiff);
+      el('vanillaSwapLabel').textContent    = 'Across ' + cakeCount + ' cakes, imitation vanilla saves ' + fmt(vanillaDiff * cakeCount);
+      el('vanillaSwapVal').textContent      = '-' + fmt(vanillaDiff * cakeCount);
+    }
+
+    // ── Sales projection ──────────────────────────────────────────────────
+    var profitPer  = sellPrice - totalPerCake;
+    var margin     = (profitPer / sellPrice) * 100;
+    var revenue    = sellPrice * cakeCount;
+    var totalCost  = totalPerCake * cakeCount;
+    var baseProfit = revenue - totalCost;
+
+    el('profitPer').textContent       = fmt(profitPer);
+    el('marginPct').textContent       = Math.round(margin) + '%';
+    el('totalIngredCost').textContent = fmt(totalCost);
+    el('totalProfit').textContent     = fmt(baseProfit);
+    el('totalSub').textContent        = fmt(revenue) + ' revenue  ·  ' + fmt(totalCost) + ' in costs';
+
+    // ── Production accuracy ───────────────────────────────────────────────
+    var missedImpact = missed * sellPrice;
+    el('missedCallout').style.display = missed > 0 ? 'flex' : 'none';
+    el('missedImpact').textContent    = '-' + fmt(missedImpact);
+
+    el('unsoldImpactArea').style.display = unsold > 0 ? 'block' : 'none';
+
+    var unsoldLoss = 0;
+    if (unsoldMode === 'giveaway') {
+      unsoldLoss = unsold * totalPerCake;
+      el('unsoldLabel').textContent = 'Full ingredient cost lost on cakes given away';
+    } else {
+      var recovered = unsold * discount;
+      var spent     = unsold * totalPerCake;
+      unsoldLoss    = Math.max(0, spent - recovered);
+      el('unsoldLabel').textContent = 'Net loss: ' + fmt(spent) + ' cost − ' + fmt(recovered) + ' recovered';
+    }
+    el('unsoldImpact').textContent = '-' + fmt(unsoldLoss);
+
+    // ── Adjusted profit ───────────────────────────────────────────────────
+    var adjProfit = baseProfit - unsoldLoss;
+    var hasAdj    = missed > 0 || unsold > 0;
+    el('adjLine').style.display = hasAdj ? 'block' : 'none';
+
+    if (hasAdj) {
+      var parts = [];
+      if (missed > 0) parts.push(fmt(missedImpact) + ' in missed sales');
+      if (unsold > 0) parts.push(fmt(unsoldLoss)   + ' lost to overproduction');
+      el('adjProfit').textContent = fmt(adjProfit) + ' actual profit';
+      el('adjDetail').textContent = parts.join(' · ');
+    }
+  }
+
+  // Init
+  setCakeStyle('vanilla');
+  setVanilla('imitation');
+  setUnsoldMode('giveaway');
+  update();
+</script>
+</body>
+</html>
