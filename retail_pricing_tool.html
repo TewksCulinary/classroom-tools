@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retail Pricing & Ordering Tool</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream: #FAF6F0;
+      --warm-white: #FFF9F3;
+      --dusty-rose: #C97D7D;
+      --rose-dark: #9A5A5A;
+      --rose-light: #F0D5D5;
+      --rose-pale: #FAF0F0;
+      --cocoa: #5C3D2E;
+      --cocoa-light: #8B6355;
+      --gold-light: #E8C87A;
+      --text-primary: #2C1F1A;
+      --text-secondary: #7A5C52;
+      --text-muted: #A88E86;
+      --border: rgba(92,61,46,0.12);
+      --border-strong: rgba(92,61,46,0.22);
+      --green: #4A7C59;
+      --green-bg: #EBF4EF;
+      --green-border: rgba(74,124,89,0.22);
+      --amber: #8B6200;
+      --amber-bg: #FDF4DC;
+      --red: #A03030;
+      --red-bg: #FAEAEA;
+      --blue: #2A5F8F;
+      --blue-bg: #E8F0FA;
+      --blue-border: rgba(42,95,143,0.22);
+      --teal: #2A7F7F;
+      --teal-bg: #E6F4F4;
+      --teal-border: rgba(42,127,127,0.22);
+    }
+
+    body { font-family: 'DM Sans', sans-serif; background: var(--cream); color: var(--text-primary); min-height: 100vh; padding: 2rem 1rem 4rem; }
+    .page-wrap { max-width: 700px; margin: 0 auto; }
+
+    header { text-align: center; margin-bottom: 2rem; padding-bottom: 1.75rem; border-bottom: 1px solid var(--border); }
+    .header-icon { font-size: 2.5rem; margin-bottom: 0.6rem; display: block; }
+    header h1 { font-family: 'Playfair Display', serif; font-size: 2rem; font-weight: 600; color: var(--cocoa); line-height: 1.2; margin-bottom: 0.3rem; }
+    header p { font-size: 0.85rem; color: var(--text-muted); font-weight: 300; }
+
+    /* ── Tabs ── */
+    .step-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1.5rem; }
+    .step-tab { padding: 12px 16px; border: 1.5px solid var(--border-strong); border-radius: 12px; background: transparent; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.18s ease; text-align: left; }
+    .step-tab .tab-num { font-size: 0.7rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; display: block; margin-bottom: 2px; }
+    .step-tab .tab-name { font-size: 0.95rem; font-weight: 500; color: var(--text-secondary); }
+    .step-tab:hover { border-color: var(--dusty-rose); }
+    .step-tab.active { background: var(--cocoa); border-color: var(--cocoa); }
+    .step-tab.active .tab-num { color: rgba(255,255,255,0.6); }
+    .step-tab.active .tab-name { color: white; }
+
+    .step-panel { display: none; }
+    .step-panel.active { display: block; }
+
+    /* ── Card ── */
+    .card { background: var(--warm-white); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem 1.75rem; margin-bottom: 1.25rem; }
+    .card-title { font-family: 'Playfair Display', serif; font-size: 1rem; font-weight: 600; color: var(--cocoa); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 8px; }
+    .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .card-subtitle { font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-top: -0.9rem; margin-bottom: 1.1rem; line-height: 1.5; }
+
+    /* ── Fields ── */
+    .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .meta-grid.three { grid-template-columns: repeat(3, 1fr); }
+    .field-group { display: flex; flex-direction: column; gap: 5px; }
+    .field-group label { font-size: 0.78rem; color: var(--text-secondary); font-weight: 500; line-height: 1.35; }
+    .field-group input, .field-group select { padding: 9px 12px; border: 1.5px solid var(--border-strong); border-radius: 9px; background: var(--cream); font-family: 'DM Sans', sans-serif; font-size: 0.9rem; color: var(--text-primary); outline: none; transition: border-color 0.15s; }
+    .field-group input:focus, .field-group select:focus { border-color: var(--dusty-rose); }
+    .field-group.full { grid-column: 1 / -1; }
+    .field-note { font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; font-style: italic; }
+
+    /* ── Toggle buttons ── */
+    .toggle-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .toggle-btn { padding: 10px 14px; border: 1.5px solid var(--border-strong); border-radius: 10px; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 400; color: var(--text-secondary); cursor: pointer; transition: all 0.18s ease; line-height: 1.4; text-align: left; }
+    .toggle-btn:hover { border-color: var(--dusty-rose); color: var(--rose-dark); }
+    .toggle-btn.active { background: var(--dusty-rose); border-color: var(--dusty-rose); color: white; font-weight: 500; }
+    .toggle-btn.active.blue-t { background: var(--blue); border-color: var(--blue); }
+    .toggle-btn.active.teal-t { background: var(--teal); border-color: var(--teal); }
+
+    /* ── Discount panels ── */
+    .discount-panel { display: none; margin-top: 1rem; }
+    .discount-panel.visible { display: block; }
+
+    .tier-header { display: grid; grid-template-columns: 1fr 1fr 1fr 28px; gap: 8px; margin-bottom: 4px; }
+    .tier-col-label { font-size: 0.7rem; color: var(--text-muted); font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+    .tier-row { display: grid; grid-template-columns: 1fr 1fr 1fr 28px; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .tier-row input { padding: 8px 10px; border: 1.5px solid var(--border-strong); border-radius: 8px; background: var(--cream); font-family: 'DM Sans', sans-serif; font-size: 0.85rem; color: var(--text-primary); outline: none; width: 100%; transition: border-color 0.15s; }
+    .tier-row input:focus { border-color: var(--dusty-rose); }
+    .tier-row.tier-active input { background: var(--teal-bg); border-color: var(--teal); }
+
+    .remove-btn { width: 26px; height: 34px; border-radius: 6px; border: 1.5px solid var(--border-strong); background: transparent; cursor: pointer; font-size: 1rem; color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+    .remove-btn:hover { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+
+    .add-btn { display: flex; align-items: center; gap: 7px; padding: 8px 13px; border: 1.5px dashed var(--border-strong); border-radius: 9px; background: transparent; font-family: 'DM Sans', sans-serif; font-size: 0.82rem; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+    .add-btn:hover { border-color: var(--dusty-rose); color: var(--rose-dark); background: var(--rose-pale); }
+
+    /* ── Sliders ── */
+    .slider-group { margin-bottom: 1.1rem; }
+    .slider-group:last-child { margin-bottom: 0; }
+    .slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+    .slider-label { font-size: 0.85rem; color: var(--text-secondary); }
+    .slider-val { font-size: 0.92rem; font-weight: 500; color: var(--cocoa); font-family: 'Playfair Display', serif; }
+
+    input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 4px; border-radius: 2px; background: var(--rose-light); outline: none; cursor: pointer; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: var(--dusty-rose); border: 2px solid white; box-shadow: 0 1px 4px rgba(201,125,125,0.4); cursor: pointer; transition: transform 0.15s; }
+    input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+    input[type=range]::-moz-range-thumb { width:18px; height:18px; border-radius:50%; background:var(--dusty-rose); border:2px solid white; cursor:pointer; }
+    input[type=range].red-slider { background: #F0D0D0; }
+    input[type=range].red-slider::-webkit-slider-thumb { background: var(--red); }
+    input[type=range].blue-slider { background: #C8D8EE; }
+    input[type=range].blue-slider::-webkit-slider-thumb { background: var(--blue); }
+    input[type=range].teal-slider { background: #C0DEDE; }
+    input[type=range].teal-slider::-webkit-slider-thumb { background: var(--teal); box-shadow: 0 1px 4px rgba(42,127,127,0.3); }
+
+    /* ── Breakdown rows ── */
+    .breakdown { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 10px; }
+    .br-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 14px; font-size: 0.83rem; border-bottom: 1px solid var(--border); gap: 12px; }
+    .br-row:last-child { border-bottom: none; }
+    .br-row.subtotal { background: var(--rose-pale); }
+    .br-label { color: var(--text-secondary); flex: 1; line-height: 1.4; }
+    .br-label.strong { color: var(--text-primary); font-weight: 500; }
+    .br-amount { font-weight: 500; color: var(--text-primary); white-space: nowrap; }
+    .br-amount.green { color: var(--green); }
+    .br-amount.amber { color: var(--amber); }
+    .br-amount.red   { color: var(--red); }
+    .br-amount.teal  { color: var(--teal); }
+    .section-divider { padding: 5px 14px; font-size: 0.71rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); background: rgba(92,61,46,0.04); border-bottom: 1px solid var(--border); }
+
+    /* ── Metrics ── */
+    .metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 1.25rem; }
+    .metric { background: var(--warm-white); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; text-align: center; }
+    .metric .m-label { font-size: 0.72rem; color: var(--text-muted); margin-bottom: 5px; line-height: 1.3; }
+    .metric .m-val { font-family: 'Playfair Display', serif; font-size: 1.5rem; font-weight: 600; line-height: 1; }
+    .metric .m-val.green { color: var(--green); }
+    .metric .m-val.amber { color: var(--amber); }
+    .metric .m-val.rose  { color: var(--dusty-rose); }
+    .metric .m-val.red   { color: var(--red); }
+    .metric .m-val.teal  { color: var(--teal); }
+
+    /* ── Callouts ── */
+    .callout { border-radius: 10px; padding: 11px 14px; font-size: 0.83rem; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; }
+    .callout.green { background: var(--green-bg);  border: 1px solid var(--green-border); }
+    .callout.amber { background: var(--amber-bg);  border: 1px solid rgba(139,98,0,0.2); }
+    .callout.red   { background: var(--red-bg);    border: 1px solid rgba(160,48,48,0.18); }
+    .callout.blue  { background: var(--blue-bg);   border: 1px solid var(--blue-border); }
+    .callout.teal  { background: var(--teal-bg);   border: 1px solid var(--teal-border); }
+    .callout .c-label { color: var(--text-secondary); flex: 1; line-height: 1.4; }
+    .callout .c-val   { font-family: 'Playfair Display', serif; font-size: 1.2rem; font-weight: 600; white-space: nowrap; }
+    .callout.green .c-val { color: var(--green); }
+    .callout.amber .c-val { color: var(--amber); }
+    .callout.red   .c-val { color: var(--red); }
+    .callout.blue  .c-val { color: var(--blue); }
+    .callout.teal  .c-val { color: var(--teal); }
+
+    /* ── Pill ── */
+    .product-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--rose-pale); border: 1px solid var(--rose-light); border-radius: 20px; padding: 6px 14px; margin-bottom: 1.25rem; font-size: 0.8rem; color: var(--text-secondary); }
+    .product-pill strong { color: var(--cocoa); }
+
+    /* ── Proceed ── */
+    .proceed-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, var(--cocoa) 0%, var(--cocoa-light) 100%); border: none; border-radius: 12px; font-family: 'Playfair Display', serif; font-size: 1.05rem; font-weight: 600; color: white; cursor: pointer; transition: opacity 0.15s; margin-top: 1.25rem; }
+    .proceed-btn:hover { opacity: 0.88; }
+
+    /* ── Two-slider decision zone ── */
+    .decision-zone { background: var(--warm-white); border: 2px solid var(--border-strong); border-radius: 16px; padding: 1.5rem 1.75rem; margin-bottom: 1.25rem; }
+    .decision-zone-title { font-family: 'Playfair Display', serif; font-size: 1rem; font-weight: 600; color: var(--cocoa); margin-bottom: 0.3rem; display: flex; align-items: center; gap: 8px; }
+    .decision-zone-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .decision-zone-sub { font-size: 0.8rem; color: var(--text-muted); font-style: italic; margin-bottom: 1.25rem; line-height: 1.5; }
+    .snap-note { font-size: 0.73rem; color: var(--teal); margin-top: 3px; font-style: italic; min-height: 1.1em; }
+
+    /* ── Total banner ── */
+    .total-banner { background: linear-gradient(135deg, var(--cocoa) 0%, var(--cocoa-light) 100%); border-radius: 14px; padding: 1.5rem 1.75rem; color: white; text-align: center; margin-top: 1.25rem; }
+    .total-banner .tb-label { font-size: 0.8rem; opacity: 0.75; margin-bottom: 6px; letter-spacing: 0.05em; text-transform: uppercase; font-weight: 300; }
+    .total-banner .tb-amount { font-family: 'Playfair Display', serif; font-size: 3rem; font-weight: 600; line-height: 1; color: var(--gold-light); }
+    .total-banner .tb-sub { font-size: 0.8rem; opacity: 0.65; margin-top: 6px; }
+    .total-banner .tb-adj { font-size: 0.8rem; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.2); opacity: 0.85; }
+    .total-banner .tb-adj span { color: #FFCCCC; }
+
+    .clearance-row { margin-top: 1rem; display: none; }
+    .clearance-row.visible { display: block; }
+
+    .note { font-size: 0.76rem; color: var(--text-muted); margin-top: 8px; font-style: italic; line-height: 1.5; }
+    footer { text-align: center; margin-top: 2.5rem; font-size: 0.76rem; color: var(--text-muted); line-height: 1.7; }
+
+    @media (max-width: 520px) {
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .metric:last-child { grid-column: 1 / -1; }
+      header h1 { font-size: 1.6rem; }
+      .total-banner .tb-amount { font-size: 2.4rem; }
+      .meta-grid { grid-template-columns: 1fr; }
+      .meta-grid.three { grid-template-columns: 1fr 1fr; }
+      .tier-header, .tier-row { grid-template-columns: 1fr 1fr 28px; }
+      .tier-header .tier-col-label:nth-child(2),
+      .tier-row input:nth-child(2) { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <header>
+    <span class="header-icon">🏪</span>
+    <h1>Retail Pricing & Ordering Tool</h1>
+    <p>Business &amp; Entrepreneurship &nbsp;·&nbsp; Order smart &nbsp;·&nbsp; Price for profit &nbsp;·&nbsp; Understand your risk</p>
+  </header>
+
+  <div class="step-tabs">
+    <button class="step-tab active" id="tab-1" onclick="goToStep(1)">
+      <span class="tab-num">Step 1</span>
+      <span class="tab-name">Product &amp; Cost Setup</span>
+    </button>
+    <button class="step-tab" id="tab-2" onclick="goToStep(2)">
+      <span class="tab-num">Step 2</span>
+      <span class="tab-name">Order &amp; Pricing</span>
+    </button>
+  </div>
+
+
+  <!-- ═══════════════════════════════════════
+       STEP 1: SETUP
+       ═══════════════════════════════════════ -->
+  <div class="step-panel active" id="panel-1">
+
+    <div class="card">
+      <div class="card-title">Product info</div>
+      <div class="meta-grid">
+        <div class="field-group full">
+          <label>Product name</label>
+          <input type="text" id="productName" value="Custom T-Shirt" oninput="syncLabels()">
+        </div>
+        <div class="field-group full">
+          <label>Unit label (what do you call one item?)</label>
+          <input type="text" id="unitLabel" value="shirt" oninput="syncLabels()">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Wholesale cost</div>
+      <p class="card-subtitle">What does each item cost you from the supplier, before any quantity discounts?</p>
+      <div class="meta-grid">
+        <div class="field-group">
+          <label>Base cost per unit ($)</label>
+          <input type="number" id="baseCost" value="8.00" min="0.01" step="0.01" oninput="recalc()">
+        </div>
+        <div class="field-group">
+          <label>Other cost per unit ($) <span style="font-size:0.73rem;color:var(--text-muted);">shipping, fees…</span></label>
+          <input type="number" id="otherCost" value="1.50" min="0" step="0.01" oninput="recalc()">
+        </div>
+      </div>
+      <p class="note" style="margin-top:10px;">Landed cost per unit (before discounts): <strong id="landedCostNote">$9.50</strong></p>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Order rules</div>
+      <p class="card-subtitle">Many suppliers require a minimum order or that you buy in fixed increments — like cases of 12. The slider on the next page will snap to valid quantities automatically.</p>
+      <div class="meta-grid three">
+        <div class="field-group">
+          <label>Minimum order quantity</label>
+          <input type="number" id="moq" value="12" min="1" step="1" oninput="recalc()">
+          <span class="field-note">Fewest you can buy</span>
+        </div>
+        <div class="field-group">
+          <label>Order increment</label>
+          <input type="number" id="increment" value="12" min="1" step="1" oninput="recalc()">
+          <span class="field-note">Must buy multiples of this</span>
+        </div>
+        <div class="field-group">
+          <label>Slider maximum</label>
+          <input type="number" id="maxQty" value="120" min="1" step="1" oninput="recalc()">
+          <span class="field-note">Ceiling to consider</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Quantity discounts</div>
+      <p class="card-subtitle">Does ordering more unlock a better price? Choose a structure — or leave it off for a flat rate.</p>
+
+      <div class="toggle-row" style="margin-bottom:8px;">
+        <button class="toggle-btn active" id="btn-nodiscount" onclick="setDiscountMode('none')">No discount — flat price</button>
+        <button class="toggle-btn" id="btn-tiered" onclick="setDiscountMode('tiered')">Tiered pricing</button>
+      </div>
+      <div class="toggle-row">
+        <button class="toggle-btn" id="btn-bulk" onclick="setDiscountMode('bulk')">Bulk % discount</button>
+        <div></div>
+      </div>
+
+      <!-- Tiered -->
+      <div class="discount-panel" id="tiered-panel">
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;font-style:italic;">Set the price at each quantity level. The active tier highlights automatically when you order.</p>
+        <div class="tier-header">
+          <span class="tier-col-label">Min qty</span>
+          <span class="tier-col-label">Max qty <em style="font-weight:300;">(blank = no limit)</em></span>
+          <span class="tier-col-label">Price / unit ($)</span>
+          <span></span>
+        </div>
+        <div id="tierList"></div>
+        <button class="add-btn" onclick="addTier()">
+          <span style="font-size:1.1rem;line-height:1;">+</span> Add tier
+        </button>
+      </div>
+
+      <!-- Bulk % -->
+      <div class="discount-panel" id="bulk-panel">
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:10px;font-style:italic;">A percentage discount kicks in when you hit the threshold. Applies to every unit in the order.</p>
+        <div class="meta-grid">
+          <div class="field-group">
+            <label>Order at least this many…</label>
+            <input type="number" id="bulkThreshold" value="50" min="1" step="1" oninput="recalc()">
+          </div>
+          <div class="field-group">
+            <label>…to get this % off each unit</label>
+            <input type="number" id="bulkPct" value="10" min="0.1" max="99" step="0.5" oninput="recalc()">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="proceed-btn" onclick="goToStep(2)">Continue to Order &amp; Pricing →</button>
+
+  </div><!-- /panel-1 -->
+
+
+  <!-- ═══════════════════════════════════════
+       STEP 2: ORDER & PRICING (combined)
+       ═══════════════════════════════════════ -->
+  <div class="step-panel" id="panel-2">
+
+    <div class="product-pill">
+      <span>🏪</span>
+      <span><strong id="pill-name">Product</strong> &nbsp;·&nbsp; <span id="pill-landed">—</span> landed cost/unit (before discounts)</span>
+      <button onclick="goToStep(1)" style="background:none;border:none;cursor:pointer;color:var(--dusty-rose);font-size:0.75rem;padding:0;margin-left:4px;">← Edit setup</button>
+    </div>
+
+    <!-- ── THE DECISION ZONE: both sliders side by side ── -->
+    <div class="decision-zone">
+      <div class="decision-zone-title">Order quantity &amp; sell price</div>
+      <div class="decision-zone-sub">Move both sliders and watch how your costs, margins, and profit change together in real time.</div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Units to order <span style="font-size:0.76rem;color:var(--text-muted);" id="orderRuleHint"></span></span>
+          <span class="slider-val teal" id="orderQtyDisplay" style="color:var(--teal);">—</span>
+        </div>
+        <input type="range" class="teal-slider" id="sliderOrder" min="12" max="120" step="12" value="36" oninput="onOrderSlider()">
+        <div class="snap-note" id="snapNote"></div>
+      </div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Retail sell price per <span class="unit-label">unit</span></span>
+          <span class="slider-val" id="sellDisplay">$18.00</span>
+        </div>
+        <input type="range" min="0.25" max="60.00" step="0.25" value="18.00" id="sliderSell" oninput="update()">
+      </div>
+
+      <!-- Live cost + margin summary right under the sliders -->
+      <div class="breakdown" style="margin-top:0.5rem;margin-bottom:0;">
+        <div class="br-row">
+          <span class="br-label">Effective cost per <span class="unit-label">unit</span> <span style="font-size:0.74rem;color:var(--text-muted);" id="discountInlineNote"></span></span>
+          <span class="br-amount teal" id="effectiveCostDisplay">—</span>
+        </div>
+        <div class="br-row">
+          <span class="br-label">Total order cost (<span id="orderedQtyInline">—</span> units × cost)</span>
+          <span class="br-amount" id="totalOrderCostDisplay">—</span>
+        </div>
+        <div class="br-row subtotal">
+          <span class="br-label strong">Profit per <span class="unit-label">unit</span> sold</span>
+          <span class="br-amount" id="profitPerDisplay">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pricing metrics -->
+    <div class="card">
+      <div class="card-title">Pricing metrics</div>
+      <div class="metrics" style="margin-top:0;">
+        <div class="metric">
+          <div class="m-label">Profit per <span class="unit-label">unit</span></div>
+          <div class="m-val green" id="profitPer">—</div>
+        </div>
+        <div class="metric">
+          <div class="m-label">Margin</div>
+          <div class="m-val amber" id="marginPct">—</div>
+        </div>
+        <div class="metric">
+          <div class="m-label">Markup</div>
+          <div class="m-val rose" id="markupPct">—</div>
+        </div>
+      </div>
+      <div class="callout green" style="margin-top:12px;">
+        <span class="c-label">Break-even price <span style="font-size:0.75rem;">(sell at this to just cover your costs)</span></span>
+        <span class="c-val" id="breakEvenVal">—</span>
+      </div>
+      <div class="callout teal" id="discountCallout" style="display:none; margin-top:8px;">
+        <span class="c-label" id="discountCalloutLabel">—</span>
+        <span class="c-val" id="discountCalloutVal">—</span>
+      </div>
+      <div class="callout amber" id="nextTierCallout" style="display:none; margin-top:8px;">
+        <span class="c-label" id="nextTierLabel">—</span>
+        <span class="c-val" id="nextTierVal">—</span>
+      </div>
+    </div>
+
+    <!-- Sales forecast -->
+    <div class="card">
+      <div class="card-title">Sales forecast</div>
+      <p class="card-subtitle">How many units do you realistically expect to sell? You can't sell more than you ordered.</p>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Units expected to sell</span>
+          <span class="slider-val" id="soldDisplay">—</span>
+        </div>
+        <input type="range" min="1" max="120" step="1" value="30" id="sliderSold" oninput="update()">
+      </div>
+
+      <div class="breakdown" style="margin-bottom:0;">
+        <div class="br-row">
+          <span class="br-label">Units ordered</span>
+          <span class="br-amount teal" id="sf-ordered">—</span>
+        </div>
+        <div class="br-row">
+          <span class="br-label">Units sold (forecast)</span>
+          <span class="br-amount" id="sf-sold">—</span>
+        </div>
+        <div class="br-row">
+          <span class="br-label">Leftover inventory</span>
+          <span class="br-amount" id="sf-leftover">—</span>
+        </div>
+        <div class="br-row">
+          <span class="br-label">Total you spent on inventory</span>
+          <span class="br-amount" id="sf-totalCost">—</span>
+        </div>
+        <div class="br-row subtotal">
+          <span class="br-label strong">Revenue (forecast sales × sell price)</span>
+          <span class="br-amount green" id="sf-revenue">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- What could go wrong -->
+    <div class="card">
+      <div class="card-title">What could go wrong?</div>
+      <p class="card-subtitle">Real businesses face two risks: running out of stock and being stuck with too much. Use these sliders to explore both scenarios.</p>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Customers turned away — you ran out of stock</span>
+          <span class="slider-val" id="missedDisplay" style="color:var(--red);">0</span>
+        </div>
+        <input type="range" class="red-slider" min="0" max="50" step="1" value="0" id="sliderMissed" oninput="update()">
+      </div>
+      <div class="callout red" id="missedCallout" style="display:none;">
+        <span class="c-label">Lost revenue from customers you couldn't serve</span>
+        <span class="c-val" id="missedImpact">—</span>
+      </div>
+
+      <div style="height:1rem;"></div>
+
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">Units left over — couldn't sell them all</span>
+          <span class="slider-val" id="unsoldDisplay" style="color:var(--blue);">0</span>
+        </div>
+        <input type="range" class="blue-slider" min="0" max="50" step="1" value="0" id="sliderUnsold" oninput="update()">
+      </div>
+
+      <div id="unsoldImpactArea" style="display:none;">
+        <div class="toggle-row" style="margin-bottom:10px;">
+          <button class="toggle-btn active blue-t" id="btn-loss" onclick="setUnsoldMode('loss')">Written off as a loss</button>
+          <button class="toggle-btn" id="btn-clearance" onclick="setUnsoldMode('clearance')">Sold at clearance price</button>
+        </div>
+        <div class="clearance-row" id="clearanceRow">
+          <div class="slider-header">
+            <span class="slider-label">Clearance price per <span class="unit-label">unit</span></span>
+            <span class="slider-val" id="clearanceDisplay">$5.00</span>
+          </div>
+          <input type="range" class="blue-slider" min="0.25" max="60.00" step="0.25" value="5.00" id="sliderClearance" oninput="update()">
+        </div>
+        <div class="callout blue" style="margin-top:10px;">
+          <span class="c-label" id="unsoldLabel">Full cost lost on units written off</span>
+          <span class="c-val" id="unsoldImpact">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Total banner -->
+    <div class="total-banner">
+      <div class="tb-label">Estimated profit</div>
+      <div class="tb-amount" id="totalProfit">—</div>
+      <div class="tb-sub" id="totalSub">—</div>
+      <div class="tb-adj" id="adjLine" style="display:none;">
+        Adjusted for real-world losses: <span id="adjProfit">—</span> &nbsp;·&nbsp; <span id="adjDetail">—</span>
+      </div>
+    </div>
+
+  </div><!-- /panel-2 -->
+
+  <footer>Built for Business &amp; Entrepreneurship &nbsp;·&nbsp; Culinary Arts Program</footer>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════
+var discountMode = 'none';
+var unsoldMode   = 'loss';
+var tierCounter  = 0;
+
+function el(id) { return document.getElementById(id); }
+function fmt(n)  { return '$' + Math.abs(n).toFixed(2); }
+function fmtS(n) { return (n < 0 ? '-' : '') + '$' + Math.abs(n).toFixed(2); }
+function pct(n)  { return Math.round(n) + '%'; }
+function getVal(id, def) { var v = parseFloat(el(id) ? el(id).value : def); return isNaN(v) ? (def||0) : v; }
+function getInt(id, def) { var v = parseInt(el(id)  ? el(id).value  : def); return isNaN(v) ? (def||0) : v; }
+
+// ═══════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════
+function goToStep(n) {
+  [1,2].forEach(function(i){
+    el('panel-'+i).classList.toggle('active', i===n);
+    el('tab-'+i).classList.toggle('active', i===n);
+  });
+  if (n === 2) { syncOrderSlider(); update(); }
+}
+
+// ═══════════════════════════════════════════════════════
+// DISCOUNT MODE
+// ═══════════════════════════════════════════════════════
+function setDiscountMode(m) {
+  discountMode = m;
+  var map = { none: 'nodiscount', tiered: 'tiered', bulk: 'bulk' };
+  Object.keys(map).forEach(function(k){
+    el('btn-'+map[k]).classList.remove('active','teal-t');
+  });
+  el('btn-'+map[m]).classList.add('active','teal-t');
+  el('tiered-panel').classList.toggle('visible', m==='tiered');
+  el('bulk-panel').classList.toggle('visible', m==='bulk');
+  recalc();
+}
+
+// ═══════════════════════════════════════════════════════
+// TIER MANAGEMENT
+// ═══════════════════════════════════════════════════════
+function addTier(minQ, maxQ, price) {
+  var id = ++tierCounter;
+  var row = document.createElement('div');
+  row.className = 'tier-row';
+  row.id = 'tier-'+id;
+  row.innerHTML =
+    '<input type="number" id="t-min-'+id+'" value="'+(minQ||'')+'" placeholder="e.g. 1"  min="1" step="1" oninput="recalc()">' +
+    '<input type="number" id="t-max-'+id+'" value="'+(maxQ||'')+'" placeholder="no limit" min="1" step="1" oninput="recalc()">' +
+    '<input type="number" id="t-prc-'+id+'" value="'+(price||'')+'" placeholder="$0.00"   min="0.01" step="0.01" oninput="recalc()">' +
+    '<button class="remove-btn" onclick="removeTier('+id+')">×</button>';
+  el('tierList').appendChild(row);
+  recalc();
+}
+
+function removeTier(id) {
+  var r = el('tier-'+id); if (r) r.remove();
+  recalc();
+}
+
+function getTiers() {
+  var rows = el('tierList').querySelectorAll('.tier-row'), tiers = [];
+  rows.forEach(function(row){
+    var id = parseInt(row.id.replace('tier-',''));
+    var mn = getInt('t-min-'+id, 0);
+    var mx = el('t-max-'+id) && el('t-max-'+id).value.trim() !== '' ? parseInt(el('t-max-'+id).value) : Infinity;
+    var pr = getVal('t-prc-'+id, 0);
+    if (mn > 0 && pr > 0) tiers.push({ min:mn, max:mx, price:pr, id:id });
+  });
+  return tiers.sort(function(a,b){ return a.min - b.min; });
+}
+
+// ═══════════════════════════════════════════════════════
+// EFFECTIVE COST
+// ═══════════════════════════════════════════════════════
+function getEffectiveCost(qty) {
+  var base   = getVal('baseCost', 8);
+  var other  = getVal('otherCost', 0);
+  var landed = base + other;
+
+  if (discountMode === 'bulk') {
+    var thresh = getInt('bulkThreshold', 50);
+    var pctOff = getVal('bulkPct', 10) / 100;
+    if (qty >= thresh) {
+      var disc = base * pctOff;
+      return { costPerUnit: landed - disc, discount: disc,
+               discountDesc: getVal('bulkPct',10) + '% bulk discount applied',
+               nextTier: null };
+    }
+    return { costPerUnit: landed, discount: 0, discountDesc: '',
+             nextTier: { qty: thresh, needed: thresh - qty,
+                         saving: base * pctOff,
+                         desc: getVal('bulkPct',10) + '% off every unit' } };
+  }
+
+  if (discountMode === 'tiered') {
+    var tiers = getTiers(), applied = null;
+    tiers.forEach(function(t){ if (qty >= t.min && qty <= t.max) applied = t; });
+    if (applied) {
+      var disc = base - applied.price;
+      var effective = applied.price + other;
+      var next = null;
+      tiers.forEach(function(t){ if (t.min > qty && (!next || t.min < next.min)) next = t; });
+      return {
+        costPerUnit: effective,
+        discount: disc > 0 ? disc : 0,
+        discountDesc: disc > 0 ? 'Tier price: ' + fmt(applied.price) + '/unit (was ' + fmt(base) + ')' : '',
+        nextTier: next && next.price < applied.price ? {
+          qty: next.min, needed: next.min - qty,
+          saving: applied.price - next.price,
+          desc: fmt(next.price) + '/unit at ' + next.min + '+'
+        } : null
+      };
+    }
+    // Not in any tier
+    var lowest = tiers.length ? tiers[0] : null;
+    return { costPerUnit: landed, discount: 0, discountDesc: '',
+             nextTier: lowest ? { qty: lowest.min, needed: Math.max(0, lowest.min - qty),
+                                  saving: base - lowest.price,
+                                  desc: fmt(lowest.price) + '/unit at ' + lowest.min + '+' } : null };
+  }
+
+  return { costPerUnit: landed, discount: 0, discountDesc: '', nextTier: null };
+}
+
+// ═══════════════════════════════════════════════════════
+// ORDER SLIDER SETUP
+// ═══════════════════════════════════════════════════════
+function syncOrderSlider() {
+  var moq = Math.max(1, getInt('moq', 12));
+  var inc = Math.max(1, getInt('increment', 12));
+  var max = Math.max(moq, getInt('maxQty', 120));
+  var s   = el('sliderOrder');
+  s.min   = moq;
+  s.max   = max;
+  s.step  = inc;
+  var cur = parseInt(s.value) || moq;
+  s.value = snapToValid(Math.max(moq, cur), moq, inc, max);
+  el('orderRuleHint').textContent = '(min ' + moq + ', steps of ' + inc + ')';
+}
+
+function snapToValid(val, moq, inc, max) {
+  if (val <= moq) return moq;
+  var steps = Math.round((val - moq) / inc);
+  var snapped = moq + steps * inc;
+  return Math.min(snapped, max);
+}
+
+function onOrderSlider() {
+  var moq = Math.max(1, getInt('moq', 12));
+  var inc = Math.max(1, getInt('increment', 12));
+  var max = Math.max(moq, getInt('maxQty', 120));
+  var raw = parseInt(el('sliderOrder').value);
+  var snapped = snapToValid(raw, moq, inc, max);
+  var didSnap = snapped !== raw;
+  el('sliderOrder').value = snapped;
+  el('snapNote').textContent = didSnap ? 'Snapped to nearest valid quantity (' + snapped + ')' : '';
+  update();
+}
+
+// ═══════════════════════════════════════════════════════
+// LABELS
+// ═══════════════════════════════════════════════════════
+function syncLabels() {
+  var unit = (el('unitLabel').value || 'unit').trim();
+  document.querySelectorAll('.unit-label').forEach(function(e){ e.textContent = unit; });
+  el('pill-name').textContent = el('productName').value || 'Product';
+  el('pill-landed').textContent = fmt(getVal('baseCost',8) + getVal('otherCost',0));
+}
+
+// ═══════════════════════════════════════════════════════
+// STEP 1 recalc
+// ═══════════════════════════════════════════════════════
+function recalc() {
+  el('landedCostNote').textContent = fmt(getVal('baseCost',8) + getVal('otherCost',0));
+  syncLabels();
+  syncOrderSlider();
+  if (el('panel-2').classList.contains('active')) update();
+}
+
+// ═══════════════════════════════════════════════════════
+// UNSOLD MODE
+// ═══════════════════════════════════════════════════════
+function setUnsoldMode(m) {
+  unsoldMode = m;
+  el('btn-loss').classList.toggle('active', m==='loss');
+  el('btn-loss').classList.toggle('blue-t', m==='loss');
+  el('btn-clearance').classList.toggle('active', m==='clearance');
+  el('btn-clearance').classList.toggle('blue-t', m==='clearance');
+  el('clearanceRow').classList.toggle('visible', m==='clearance');
+  update();
+}
+
+// ═══════════════════════════════════════════════════════
+// MAIN UPDATE — runs whenever any slider moves
+// ═══════════════════════════════════════════════════════
+function update() {
+  var moq  = Math.max(1, getInt('moq', 12));
+  var inc  = Math.max(1, getInt('increment', 12));
+  var max  = Math.max(moq, getInt('maxQty', 120));
+  var qty  = snapToValid(parseInt(el('sliderOrder').value)||moq, moq, inc, max);
+  var unit = (el('unitLabel').value || 'unit').trim();
+
+  var res  = getEffectiveCost(qty);
+  var cost = res.costPerUnit;
+  var totalOrderCost = cost * qty;
+
+  var sellPrice = getVal('sliderSell', 18);
+  var sold      = Math.min(parseInt(el('sliderSold').value)||1, qty);
+  var missed    = parseInt(el('sliderMissed').value)||0;
+  var unsoldQ   = parseInt(el('sliderUnsold').value)||0;
+  var clearance = getVal('sliderClearance', 5);
+
+  // Clamp sold slider to order qty
+  el('sliderSold').max = qty;
+  if (sold > qty) { el('sliderSold').value = qty; sold = qty; }
+
+  var leftover = qty - sold;
+
+  // ── Decision zone inline summary ──
+  el('orderQtyDisplay').textContent   = qty + ' ' + unit + 's';
+  el('orderedQtyInline').textContent  = qty;
+  el('effectiveCostDisplay').textContent = fmt(cost);
+  el('discountInlineNote').textContent   = res.discount > 0 ? '(discount applied)' : '';
+  el('totalOrderCostDisplay').textContent = fmt(totalOrderCost);
+  var profitPerInline = sellPrice - cost;
+  el('profitPerDisplay').textContent = fmtS(profitPerInline);
+  el('profitPerDisplay').className   = 'br-amount ' + (profitPerInline >= 0 ? 'green' : 'red');
+
+  el('sellDisplay').textContent = fmt(sellPrice);
+
+  // ── Pricing metrics card ──
+  var margin = sellPrice > 0 ? (profitPerInline / sellPrice) * 100 : 0;
+  var markup = cost > 0 ? (profitPerInline / cost) * 100 : 0;
+  el('profitPer').textContent = fmtS(profitPerInline);
+  el('profitPer').className   = 'm-val ' + (profitPerInline >= 0 ? 'green' : 'red');
+  el('marginPct').textContent = pct(margin);
+  el('markupPct').textContent = pct(markup);
+  el('breakEvenVal').textContent = fmt(cost);
+
+  // Discount callout
+  if (res.discount > 0) {
+    el('discountCallout').style.display = 'flex';
+    el('discountCalloutLabel').textContent = res.discountDesc + ' — you save per unit:';
+    el('discountCalloutVal').textContent   = fmt(res.discount);
+  } else {
+    el('discountCallout').style.display = 'none';
+  }
+
+  // Next tier nudge
+  if (res.nextTier && res.nextTier.saving > 0 && res.nextTier.needed > 0) {
+    el('nextTierCallout').style.display = 'flex';
+    el('nextTierLabel').textContent =
+      'Order ' + res.nextTier.needed + ' more unit' + (res.nextTier.needed===1?'':'s') +
+      ' (reach ' + res.nextTier.qty + ') to unlock: ' + res.nextTier.desc;
+    el('nextTierVal').textContent = 'Save ' + fmt(res.nextTier.saving) + '/unit';
+  } else {
+    el('nextTierCallout').style.display = 'none';
+  }
+
+  // Highlight active tier rows
+  if (discountMode === 'tiered') {
+    getTiers().forEach(function(t){
+      var row = el('tier-'+t.id);
+      if (row) row.classList.toggle('tier-active', qty >= t.min && qty <= t.max);
+    });
+  }
+
+  // ── Sales forecast ──
+  el('soldDisplay').textContent    = sold + ' ' + unit + 's';
+  el('sf-ordered').textContent     = qty + ' ' + unit + 's';
+  el('sf-sold').textContent        = sold + ' ' + unit + 's';
+  el('sf-leftover').textContent    = leftover + ' ' + unit + (leftover === 1 ? '' : 's');
+  el('sf-leftover').style.color    = leftover > 0 ? 'var(--amber)' : 'var(--green)';
+  el('sf-totalCost').textContent   = fmt(totalOrderCost);
+  var revenue = sellPrice * sold;
+  el('sf-revenue').textContent     = fmt(revenue);
+
+  var baseProfit = revenue - totalOrderCost;
+
+  // ── Missed sales ──
+  var missedImpact = missed * sellPrice;
+  el('missedDisplay').textContent       = missed;
+  el('missedCallout').style.display     = missed > 0 ? 'flex' : 'none';
+  el('missedImpact').textContent        = '-' + fmt(missedImpact);
+
+  // ── Overstock ──
+  el('unsoldDisplay').textContent       = unsoldQ;
+  el('clearanceDisplay').textContent    = fmt(clearance);
+  el('unsoldImpactArea').style.display  = unsoldQ > 0 ? 'block' : 'none';
+  var unsoldLoss = 0;
+  if (unsoldMode === 'loss') {
+    unsoldLoss = unsoldQ * cost;
+    el('unsoldLabel').textContent = 'Full cost lost on units written off';
+  } else {
+    var recovered = unsoldQ * clearance;
+    var spent     = unsoldQ * cost;
+    unsoldLoss    = clearance >= cost ? 0 : Math.max(0, spent - recovered);
+    el('unsoldLabel').textContent = clearance >= cost
+      ? 'Clearance price covers cost — no loss on these units'
+      : 'Net loss: ' + fmt(spent) + ' cost \u2212 ' + fmt(recovered) + ' recovered';
+  }
+  el('unsoldImpact').textContent = '-' + fmt(unsoldLoss);
+
+  // ── Adjusted profit ──
+  var adjProfit = baseProfit - unsoldLoss;
+  var hasAdj    = missed > 0 || unsoldQ > 0;
+  el('adjLine').style.display = hasAdj ? 'block' : 'none';
+  if (hasAdj) {
+    var parts = [];
+    if (missed  > 0) parts.push(fmt(missedImpact) + ' in missed sales');
+    if (unsoldQ > 0) parts.push(fmt(unsoldLoss)   + ' on unsold stock');
+    el('adjProfit').textContent = fmt(adjProfit) + ' actual profit';
+    el('adjDetail').textContent = parts.join(' \u00b7 ');
+  }
+
+  el('totalProfit').textContent = fmtS(baseProfit);
+  el('totalProfit').style.color = baseProfit >= 0 ? 'var(--gold-light)' : '#FFAAAA';
+  el('totalSub').textContent    = fmt(revenue) + ' revenue  \u00b7  ' + fmt(totalOrderCost) + ' in costs';
+
+  // Pill
+  el('pill-landed').textContent = fmt(getVal('baseCost',8) + getVal('otherCost',0));
+}
+
+// ═══════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════
+addTier(1,  11, 8.00);
+addTier(12, 35, 7.00);
+addTier(36, 71, 6.00);
+addTier(72, '',  5.00);
+
+setDiscountMode('tiered');
+syncLabels();
+recalc();
+el('sliderOrder').value = 36;
+update();
+</script>
+</body>
+</html>
