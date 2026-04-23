@@ -1,0 +1,302 @@
+
+<style>
+  * { box-sizing: border-box; font-family: sans-serif; }
+  body { background: #f1efec; margin: 0; padding: 12px; }
+  .grp-btn { padding: 10px 6px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 13px; font-weight: 600; color: #2C2C2A !important; text-align: center; display: block; width: 100%; transition: all 0.15s; }
+  .grp-btn:hover { background: #e8e6e0 !important; }
+  .grp-btn.active { background: #185FA5 !important; border-color: #185FA5 !important; color: #ffffff !important; }
+  .section { background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+  .sec-label { font-size: 12px; color: #5F5E5A; margin: 0 0 8px; }
+  textarea { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px; font-size: 14px; color: #2C2C2A; background: #F1EFE8; resize: vertical; min-height: 72px; font-family: sans-serif; }
+  textarea:focus { outline: none; border-color: #185FA5; }
+  .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
+  .small-btn:hover { background: #F1EFE8; }
+  .export-btn { font-size: 13px; background: #2C2C2A; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; color: #ffffff; font-weight: 600; }
+  .export-btn:hover { background: #444441; }
+  .type-toggle { display: flex; border: 1.5px solid #B4B2A9; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .type-toggle button { padding: 7px 12px; font-size: 13px; font-weight: 500; border: none; cursor: pointer; background: #F1EFE8; color: #5F5E5A; }
+  .type-toggle button.sel-pos { background: #EAF3DE; color: #27500A; }
+  .type-toggle button.sel-ded { background: #FCEBEB; color: #791F1F; }
+  .add-row { display: flex; gap: 8px; align-items: center; }
+  .add-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; min-width: 0; font-family: sans-serif; }
+  .add-row input:focus { outline: none; border-color: #185FA5; }
+  .add-confirm { padding: 7px 14px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #185FA5; color: #ffffff; white-space: nowrap; }
+  .score-card { border-radius: 8px; padding: 10px 6px; text-align: center; }
+  .group-block { margin-bottom: 10px; }
+  .group-heading { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .log-item { font-size: 13px; padding: 4px 0; border-bottom: 1px solid #D3D1C7; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .log-item:last-child { border-bottom: none; }
+  .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+  .badge-pos { background: #C0DD97; color: #27500A; }
+  .badge-ded { background: #F7C1C1; color: #791F1F; }
+  .obs-btn { position: relative; display: flex; align-items: stretch; border-radius: 8px; overflow: hidden; min-height: 44px; }
+  .obs-tap { flex: 1; border: none; padding: 10px 28px 10px 10px; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; line-height: 1.3; display: flex; align-items: center; gap: 6px; font-family: sans-serif; }
+  .obs-tap:active { opacity: 0.8; }
+  .obs-del { position: absolute; top: 4px; right: 5px; background: none; border: none; opacity: 0.4; cursor: pointer; font-size: 12px; padding: 2px 4px; line-height: 1; }
+  .obs-del:hover { opacity: 0.85; }
+  .col-head { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 0 6px; }
+  .selection-hint { font-size: 12px; color: #5F5E5A; margin: 8px 0 0; text-align: center; min-height: 18px; }
+  .sel-all-row { display: flex; gap: 6px; margin-bottom: 8px; }
+</style>
+
+<div style="padding: 4px; max-width: 520px; margin: 0 auto;">
+
+  <div class="section">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <p class="sec-label" style="margin:0;">Select groups <span style="font-weight:400;">(tap to toggle)</span></p>
+      <div class="sel-all-row" style="margin:0;">
+        <button class="small-btn" onclick="selectAll()">All</button>
+        <button class="small-btn" onclick="selectNone()">None</button>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;" id="group-btns">
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 1</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 2</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 3</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 4</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 5</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 6</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 7</button>
+      <button class="grp-btn" onclick="toggleGroup(this)">Group 8</button>
+    </div>
+    <p class="selection-hint" id="selection-hint">No groups selected</p>
+  </div>
+
+  <div class="section">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <p class="sec-label" style="margin:0;">Observations</p>
+      <button class="small-btn" onclick="toggleAddForm()">+ Add label</button>
+    </div>
+    <div id="add-form" style="display:none; background:#F1EFE8; border-radius:8px; padding:10px 12px; margin-bottom:10px;">
+      <p class="sec-label" style="margin:0 0 8px;">New observation label</p>
+      <div class="type-toggle">
+        <button id="tog-pos" class="sel-pos" onclick="setNewType('positive')">+ Positive</button>
+        <button id="tog-ded" onclick="setNewType('deduction')">− Deduction</button>
+      </div>
+      <div class="add-row">
+        <input id="new-label" type="text" placeholder="e.g. Used cutting board correctly" maxlength="40" onkeydown="if(event.key==='Enter')addCustomLabel()" />
+        <button class="add-confirm" onclick="addCustomLabel()">Add</button>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px;">
+      <div class="col-head" style="color:#27500A;">+ Positives</div>
+      <div class="col-head" style="color:#791F1F;">− Deductions</div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; align-items:start;" id="btn-grid"></div>
+  </div>
+
+  <div class="section">
+    <p class="sec-label">Notes</p>
+    <textarea id="notes" placeholder="Type observation notes here..."></textarea>
+  </div>
+
+  <div class="section">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <p class="sec-label" style="margin:0;">Scores</p>
+      <div style="display:flex; gap:8px;">
+        <button class="export-btn" onclick="exportLog()">Export log</button>
+        <button class="small-btn" onclick="clearLog()">Clear log</button>
+      </div>
+    </div>
+    <div id="score-cards" style="display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px;"></div>
+    <p class="sec-label" style="margin:0 0 8px;">Log by group</p>
+    <div id="log-list">
+      <p style="font-size:13px; color:#5F5E5A; text-align:center; padding:8px 0;">No observations yet</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const groups = ['Group 1','Group 2','Group 3','Group 4','Group 5','Group 6','Group 7','Group 8'];
+  const scores = {};
+  groups.forEach(g => scores[g] = 0);
+  const log = [];
+  let newType = 'positive';
+  let selectedGroups = new Set();
+
+  let buttons = [
+    { type: 'positive', label: 'Ready to Go' },
+    { type: 'deduction', label: 'Off Task during instructions' },
+    { type: 'positive', label: 'Clean workspace' },
+    { type: 'deduction', label: 'No handwashing' },
+    { type: 'positive', label: 'Proper technique' },
+    { type: 'deduction', label: 'Unsafe knife use' },
+    { type: 'positive', label: 'Good teamwork' },
+    { type: 'deduction', label: 'Left Kitchen before signed off' },
+  ];
+
+  function toggleGroup(btn) {
+    const g = btn.textContent;
+    if (selectedGroups.has(g)) {
+      selectedGroups.delete(g);
+      btn.classList.remove('active');
+    } else {
+      selectedGroups.add(g);
+      btn.classList.add('active');
+    }
+    updateHint();
+  }
+
+  function selectAll() {
+    selectedGroups = new Set(groups);
+    document.querySelectorAll('.grp-btn').forEach(b => b.classList.add('active'));
+    updateHint();
+  }
+
+  function selectNone() {
+    selectedGroups.clear();
+    document.querySelectorAll('.grp-btn').forEach(b => b.classList.remove('active'));
+    updateHint();
+  }
+
+  function updateHint() {
+    const hint = document.getElementById('selection-hint');
+    if (selectedGroups.size === 0) {
+      hint.textContent = 'No groups selected';
+      hint.style.color = '#A32D2D';
+    } else if (selectedGroups.size === groups.length) {
+      hint.textContent = 'All groups selected';
+      hint.style.color = '#185FA5';
+    } else {
+      const names = groups.filter(g => selectedGroups.has(g));
+      hint.textContent = names.join(', ') + ' selected';
+      hint.style.color = '#185FA5';
+    }
+  }
+
+  function toggleAddForm() {
+    const f = document.getElementById('add-form');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+    if (f.style.display === 'block') setTimeout(() => document.getElementById('new-label').focus(), 50);
+  }
+
+  function setNewType(t) {
+    newType = t;
+    document.getElementById('tog-pos').className = t === 'positive' ? 'sel-pos' : '';
+    document.getElementById('tog-ded').className = t === 'deduction' ? 'sel-ded' : '';
+  }
+
+  function addCustomLabel() {
+    const inp = document.getElementById('new-label');
+    const label = inp.value.trim();
+    if (!label) return;
+    buttons.push({ type: newType, label });
+    inp.value = '';
+    document.getElementById('add-form').style.display = 'none';
+    renderButtons();
+  }
+
+  function removeButton(idx) {
+    buttons.splice(idx, 1);
+    renderButtons();
+  }
+
+  function logAction(type, label) {
+    if (selectedGroups.size === 0) {
+      const hint = document.getElementById('selection-hint');
+      hint.textContent = 'Select at least one group first!';
+      hint.style.color = '#A32D2D';
+      setTimeout(updateHint, 2000);
+      return;
+    }
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    groups.filter(g => selectedGroups.has(g)).forEach(g => {
+      scores[g] += type === 'positive' ? 1 : -1;
+      log.push({ group: g, type, label, time });
+    });
+    renderScores();
+    renderLog();
+  }
+
+  function makeBtn(b, realIdx) {
+    const bg = b.type === 'positive' ? '#EAF3DE' : '#FCEBEB';
+    const tc = b.type === 'positive' ? '#27500A' : '#791F1F';
+    const sym = b.type === 'positive' ? '+' : '&minus;';
+    const safe = b.label.replace(/'/g, "\\'");
+    return `<div class="obs-btn">
+      <button class="obs-tap" onclick="logAction('${b.type}','${safe}')" style="background:${bg};color:${tc};">
+        <span style="flex-shrink:0;font-size:14px;">${sym}</span>
+        <span>${b.label}</span>
+      </button>
+      <button class="obs-del" onclick="removeButton(${realIdx})" style="color:${tc};">&times;</button>
+    </div>`;
+  }
+
+  function renderButtons() {
+    const grid = document.getElementById('btn-grid');
+    const positives = buttons.map((b,i) => ({b,i})).filter(x => x.b.type === 'positive');
+    const deductions = buttons.map((b,i) => ({b,i})).filter(x => x.b.type === 'deduction');
+    const rows = Math.max(positives.length, deductions.length);
+    let html = '';
+    for (let r = 0; r < rows; r++) {
+      html += positives[r] ? makeBtn(positives[r].b, positives[r].i) : '<div></div>';
+      html += deductions[r] ? makeBtn(deductions[r].b, deductions[r].i) : '<div></div>';
+    }
+    grid.innerHTML = html;
+  }
+
+  function renderScores() {
+    const el = document.getElementById('score-cards');
+    el.innerHTML = groups.map(g => {
+      const s = scores[g];
+      const bg = s > 0 ? '#EAF3DE' : s < 0 ? '#FCEBEB' : '#F1EFE8';
+      const tc = s > 0 ? '#27500A' : s < 0 ? '#791F1F' : '#2C2C2A';
+      const sel = selectedGroups.has(g) ? 'outline: 2px solid #185FA5;' : '';
+      return `<div class="score-card" style="background:${bg};${sel}"><div style="font-size:11px;color:${tc};opacity:0.75;">${g}</div><div style="font-size:20px;font-weight:600;color:${tc};">${s > 0 ? '+' : ''}${s}</div></div>`;
+    }).join('');
+  }
+
+  function renderLog() {
+    const el = document.getElementById('log-list');
+    if (!log.length) { el.innerHTML = '<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No observations yet</p>'; return; }
+    el.innerHTML = groups.map(g => {
+      const entries = log.filter(e => e.group === g);
+      if (!entries.length) return '';
+      const s = scores[g];
+      const tc = s > 0 ? '#27500A' : s < 0 ? '#791F1F' : '#5F5E5A';
+      return `<div class="group-block">
+        <div class="group-heading" style="color:${tc};">${g} &middot; ${s > 0 ? '+' : ''}${s}</div>
+        ${entries.map(e => `<div class="log-item">
+          <span style="font-size:13px;color:#5F5E5A;">${e.time} &middot; ${e.label}</span>
+          <span class="badge ${e.type === 'positive' ? 'badge-pos' : 'badge-ded'}">${e.type === 'positive' ? '+1' : '&minus;1'}</span>
+        </div>`).join('')}
+      </div>`;
+    }).join('');
+  }
+
+  function exportLog() {
+    const notes = document.getElementById('notes').value.trim();
+    const date = new Date().toLocaleDateString([], {year:'numeric', month:'long', day:'numeric'});
+    const time = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    let out = `Kitchen Lab Observation Log\n${date} ${time}\n${'='.repeat(40)}\n\n`;
+    out += `SCORES\n${'-'.repeat(20)}\n`;
+    groups.forEach(g => { const s = scores[g]; out += `${g}: ${s > 0 ? '+' : ''}${s}\n`; });
+    out += `\nOBSERVATIONS BY GROUP\n${'-'.repeat(20)}\n`;
+    groups.forEach(g => {
+      const entries = log.filter(e => e.group === g);
+      if (!entries.length) return;
+      const s = scores[g];
+      out += `\n${g} (${s > 0 ? '+' : ''}${s})\n`;
+      entries.forEach(e => { out += `  ${e.time}  [${e.type === 'positive' ? '+1' : '-1'}]  ${e.label}\n`; });
+    });
+    if (notes) out += `\nNOTES\n${'-'.repeat(20)}\n${notes}\n`;
+    const blob = new Blob([out], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `lab-log-${new Date().toISOString().slice(0,10)}.txt`;
+    a.click();
+  }
+
+  function clearLog() {
+    log.length = 0;
+    groups.forEach(g => scores[g] = 0);
+    document.getElementById('notes').value = '';
+    renderScores();
+    renderLog();
+  }
+
+  renderButtons();
+  renderScores();
+  updateHint();
+</script>
