@@ -1,0 +1,1170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Classroom Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x2714;</text></svg>" />
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; }
+    body { background: #f1efec; margin: 0; padding: 12px; }
+    p { margin: 0; }
+    .section { background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .sec-label { font-size: 12px; color: #5F5E5A; margin: 0 0 8px; }
+    .page-title { font-size: 16px; font-weight: 700; color: #2C2C2A; margin: 0 0 4px; }
+    .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
+    .small-btn:hover { background: #F1EFE8; }
+    .primary-btn { font-size: 14px; background: #185FA5; border: none; border-radius: 8px; padding: 11px 20px; cursor: pointer; color: #ffffff; font-weight: 600; width: 100%; margin-top: 4px; }
+    .primary-btn:hover { background: #144d87; }
+    .danger-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #C0392B; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #C0392B; font-weight: 500; }
+    .danger-btn:hover { background: #FCEBEB; }
+    .num-btn { width: 44px; height: 44px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 16px; font-weight: 600; color: #2C2C2A; transition: all 0.15s; }
+    .num-btn:hover { background: #e8e6e0; }
+    .num-btn.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+    .period-tab { padding: 8px 12px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 12px; font-weight: 600; color: #2C2C2A; transition: all 0.15s; white-space: nowrap; }
+    .period-tab:hover { background: #e8e6e0; }
+    .period-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+    .absent-toggle { font-size: 12px; font-weight: 700; border: 2px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; background: #ffffff; color: #2C2C2A; transition: all 0.15s; white-space: nowrap; }
+    .absent-toggle.on { background: #555555; border-color: #555555; color: #ffffff; }
+    .stu-card { border-radius: 10px; padding: 9px 8px 7px; cursor: pointer; transition: all 0.15s; border: 2px solid transparent; text-align: center; user-select: none; position: relative; }
+    .stu-card:active { transform: scale(0.95); }
+    .stu-name { font-size: 11px; font-weight: 600; line-height: 1.2; margin-bottom: 2px; }
+    .stu-status { font-size: 9px; font-weight: 500; opacity: 0.85; }
+    .stu-timer { font-size: 10px; font-weight: 700; margin-top: 2px; }
+    .stu-snip { font-size: 9px; opacity: 0.8; margin-top: 1px; font-style: italic; }
+    .watch-flag { position: absolute; top: 3px; right: 4px; font-size: 10px; line-height: 1; }
+    .s-present  { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
+    .s-absent   { background: #F0F0F0; color: #555555; border-color: #BBBBBB; }
+    .s-tardy    { background: #FFF0D0; color: #7A4500; border-color: #F5C060; }
+    .s-bathroom { background: #E8F0FB; color: #1A3F7A; border-color: #A8C0EE; }
+    .s-water    { background: #E0F5F5; color: #0D6B6B; border-color: #80D5D5; }
+    .s-other    { background: #FFF6DC; color: #7A5500; border-color: #F0D070; }
+    .s-note     { background: #F5EAF9; color: #5B2D8E; border-color: #C9A8EE; }
+    .s-alert    { background: #FCEBEB; color: #791F1F; border-color: #C0392B; }
+    .action-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 99; display: none; }
+    .action-overlay.visible { display: block; }
+    .action-panel { position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-top: 2px solid #B4B2A9; border-radius: 16px 16px 0 0; padding: 16px 16px 24px; z-index: 100; box-shadow: 0 -4px 24px rgba(0,0,0,0.13); display: none; max-width: 540px; margin: 0 auto; max-height: 85vh; overflow-y: auto; }
+    .action-panel.visible { display: block; }
+    .action-btn { border: none; border-radius: 8px; padding: 12px 8px; font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; transition: all 0.15s; }
+    .action-btn:hover { opacity: 0.85; }
+    .ab-back     { background: #EAF3DE; color: #27500A; }
+    .ab-bathroom { background: #E8F0FB; color: #1A3F7A; }
+    .ab-water    { background: #E0F5F5; color: #0D6B6B; }
+    .ab-other    { background: #FFF6DC; color: #7A5500; }
+    .ab-absent   { background: #F0F0F0; color: #555555; }
+    .ab-present  { background: #EAF3DE; color: #27500A; }
+    .ab-note     { background: #F5EAF9; color: #5B2D8E; }
+    .ab-watch    { background: #FFF8E0; color: #7A5E00; border: 1.5px solid #C09A20; }
+    .ab-unwatch  { background: #F0F0F0; color: #555555; border: 1.5px solid #888780; }
+    .watch-warning { background: #FFF8E0; border: 1.5px solid #C09A20; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: #7A5E00; display: none; }
+    .watch-warning.visible { display: block; }
+    .note-panel { background: #F5EAF9; border-radius: 10px; padding: 12px; margin-top: 10px; display: none; border: 1.5px solid #C9A8EE; }
+    .note-panel.visible { display: block; }
+    .other-panel { background: #FFF6DC; border-radius: 10px; padding: 12px; margin-top: 10px; display: none; border: 1.5px solid #F0D070; }
+    .other-panel.visible { display: block; }
+    .lib-chip { display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; padding: 5px 8px; font-size: 12px; margin: 2px; cursor: pointer; }
+    .lib-chip-note { background: #ffffff; border: 1.5px solid #C9A8EE; color: #5B2D8E; }
+    .lib-chip-note:hover { background: #EDE0F7; }
+    .lib-chip-dest { background: #ffffff; border: 1.5px solid #F0D070; color: #7A5500; }
+    .lib-chip-dest:hover { background: #FFF0C0; }
+    .chip-del { background: none; border: none; opacity: 0.4; cursor: pointer; font-size: 12px; padding: 0 0 0 4px; line-height: 1; color: inherit; }
+    .chip-del:hover { opacity: 0.9; }
+    .note-row { display: flex; gap: 6px; margin-top: 8px; }
+    .note-row input { flex: 1; border: 1.5px solid #C9A8EE; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #ffffff; color: #2C2C2A; font-family: sans-serif; min-width: 0; }
+    .note-row input:focus { outline: none; border-color: #5B2D8E; }
+    .note-confirm { padding: 8px 12px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #5B2D8E; color: #ffffff; white-space: nowrap; }
+    .dest-row { display: flex; gap: 6px; margin-top: 8px; }
+    .dest-row input { flex: 1; border: 1.5px solid #F0D070; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #ffffff; color: #2C2C2A; font-family: sans-serif; min-width: 0; }
+    .dest-row input:focus { outline: none; border-color: #7A5500; }
+    .dest-confirm { padding: 8px 12px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #7A5500; color: #ffffff; white-space: nowrap; }
+    .hist-row { font-size: 12px; padding: 4px 0; border-bottom: 0.5px solid #e8e6e0; display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; flex-wrap: wrap; }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-head { font-size: 13px; font-weight: 700; color: #185FA5; border-bottom: 1.5px solid #B4B2A9; padding-bottom: 4px; margin-bottom: 6px; }
+    .stat-pill { display: inline-block; border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 600; margin: 2px; }
+    .search-input { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px 12px; font-size: 14px; background: #F1EFE8; color: #2C2C2A; font-family: sans-serif; }
+    .search-input:focus { outline: none; border-color: #185FA5; }
+    textarea { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #2C2C2A; background: #F1EFE8; resize: vertical; font-family: sans-serif; }
+    textarea:focus { outline: none; border-color: #185FA5; }
+    .preview-tag { display: inline-block; background: #185FA5; color: #fff; border-radius: 6px; padding: 2px 7px; font-size: 11px; margin: 2px; }
+    .class-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .class-name-row label { font-size: 13px; font-weight: 600; color: #185FA5; min-width: 70px; }
+    .class-name-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; font-family: sans-serif; }
+    .class-name-row input:focus { outline: none; border-color: #185FA5; }
+    .slider-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+    .slider-row input[type=range] { flex: 1; }
+    .slider-val { font-size: 14px; font-weight: 700; color: #185FA5; min-width: 75px; }
+    .date-input { border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 6px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; }
+    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+    .phase { display: none; }
+    .phase.visible { display: block; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
+    .pulsing { animation: pulse 1.5s infinite; }
+  </style>
+</head>
+<body>
+<div style="padding:4px;max-width:540px;margin:0 auto;">
+
+  <!-- SETUP -->
+  <div class="phase" id="phase-setup">
+    <div class="section">
+      <p class="page-title">Classroom Tracker</p>
+      <p class="sec-label" style="margin:0;">Track attendance, tardies, and hall passes. How many classes do you teach?</p>
+    </div>
+    <div class="section">
+      <p class="sec-label">Number of classes</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="num-btn" onclick="pickCount(this)">1</button>
+        <button class="num-btn" onclick="pickCount(this)">2</button>
+        <button class="num-btn" onclick="pickCount(this)">3</button>
+        <button class="num-btn" onclick="pickCount(this)">4</button>
+        <button class="num-btn" onclick="pickCount(this)">5</button>
+        <button class="num-btn" onclick="pickCount(this)">6</button>
+        <button class="num-btn" onclick="pickCount(this)">7</button>
+        <button class="num-btn" onclick="pickCount(this)">8</button>
+      </div>
+    </div>
+    <div class="section" id="s-names" style="display:none;">
+      <p class="sec-label" style="margin-bottom:10px;">Name your classes</p>
+      <div id="s-name-inputs"></div>
+    </div>
+    <div class="section" id="s-rosters" style="display:none;">
+      <p class="sec-label" style="margin-bottom:6px;">Student rosters</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:12px;">One name per line. Duplicates get a last initial.</p>
+      <div id="s-roster-inputs"></div>
+    </div>
+    <div class="section" id="s-thresholds" style="display:none;">
+      <p class="sec-label">Alert thresholds</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:4px;">Auto-flag students after this many bathroom passes:</p>
+      <div class="slider-row">
+        <input type="range" id="s-pass-thresh" min="1" max="20" value="5" oninput="document.getElementById('s-pt-lbl').textContent=this.value+' passes'" />
+        <span class="slider-val" id="s-pt-lbl">5 passes</span>
+      </div>
+      <p style="font-size:12px;color:#5F5E5A;margin-top:8px;margin-bottom:4px;">Over this many days:</p>
+      <div class="slider-row">
+        <input type="range" id="s-pass-win" min="1" max="30" value="7" oninput="document.getElementById('s-pw-lbl').textContent=this.value+' days'" />
+        <span class="slider-val" id="s-pw-lbl">7 days</span>
+      </div>
+      <p style="font-size:12px;color:#5F5E5A;margin-top:8px;margin-bottom:4px;">Out-too-long alert after:</p>
+      <div class="slider-row">
+        <input type="range" id="s-timeout" min="3" max="20" value="7" oninput="document.getElementById('s-to-lbl').textContent=this.value+' min'" />
+        <span class="slider-val" id="s-to-lbl">7 min</span>
+      </div>
+      <button class="primary-btn" onclick="saveSetup()">Save &amp; Start &rarr;</button>
+    </div>
+  </div>
+
+  <!-- TRACKER -->
+  <div class="phase" id="phase-tracker">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+        <div>
+          <p style="font-size:13px;font-weight:700;color:#2C2C2A;" id="t-date"></p>
+          <p style="font-size:11px;color:#5F5E5A;margin-top:2px;" id="t-summary"></p>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
+          <button class="small-btn" onclick="showSearch()">&#128269; Search</button>
+          <button class="small-btn" onclick="showHistory()">History</button>
+          <button class="small-btn" onclick="goToSettings()">&#9881;</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="class-tabs"></div>
+    </div>
+    <div class="section" style="padding:10px 16px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#5F5E5A;">
+        <span><span class="legend-dot" style="background:#27500A;"></span>Present</span>
+        <span><span class="legend-dot" style="background:#555555;"></span>Absent</span>
+        <span><span class="legend-dot" style="background:#7A4500;"></span>Tardy</span>
+        <span><span class="legend-dot" style="background:#1A3F7A;"></span>Bathroom</span>
+        <span><span class="legend-dot" style="background:#0D6B6B;"></span>Water</span>
+        <span><span class="legend-dot" style="background:#7A5500;"></span>Other</span>
+        <span><span class="legend-dot" style="background:#5B2D8E;"></span>Note</span>
+        <span><span class="legend-dot" style="background:#791F1F;"></span>Alert</span>
+        <span>&#128276; = watched</span>
+      </div>
+    </div>
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <p class="sec-label" style="margin:0;" id="grid-label">Tap a student to update status</p>
+        <div style="display:flex;gap:6px;">
+          <button class="absent-toggle" id="absent-toggle-btn" onclick="toggleAbsentMode()">Mark Absent</button>
+          <button class="small-btn" onclick="newDay()">New day</button>
+        </div>
+      </div>
+      <p id="absent-hint" style="font-size:12px;color:#555555;margin-bottom:8px;display:none;">
+        Absent mode &mdash; tap to mark/unmark. Tap <strong>Done</strong> when finished.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="student-grid"></div>
+    </div>
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">Today's log</p>
+        <button class="small-btn" onclick="exportToday()">Export</button>
+      </div>
+      <div id="today-log"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No activity yet</p></div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="phase" id="phase-search">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <p class="page-title">Student Search</p>
+        <button class="small-btn" onclick="showPhase('phase-tracker')">Back</button>
+      </div>
+      <input class="search-input" id="search-input" type="text" placeholder="Type a student name..." oninput="runSearch()" />
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="phase" id="phase-history">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p class="page-title">History</p>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="exportHistory()">Export</button>
+          <button class="small-btn" onclick="showPhase('phase-tracker')">Back</button>
+        </div>
+      </div>
+    </div>
+    <div id="history-area"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="phase" id="phase-settings">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p class="page-title">Settings</p>
+        <button class="small-btn" onclick="showPhase('phase-tracker')">Back</button>
+      </div>
+    </div>
+
+    <!-- CSV Report -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:4px;">Student report (CSV)</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">Per-student summary: attendance, tardies, passes, watch list. Opens in Google Sheets or Excel.</p>
+      <p style="font-size:12px;font-weight:600;color:#2C2C2A;margin-bottom:6px;">Date range</p>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:12px;color:#5F5E5A;">From</label>
+          <input type="date" id="csv-from" class="date-input" />
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <label style="font-size:12px;color:#5F5E5A;">To</label>
+          <input type="date" id="csv-to" class="date-input" />
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <button class="small-btn" onclick="csvPreset('week')">This week</button>
+        <button class="small-btn" onclick="csvPreset('month')">This month</button>
+        <button class="small-btn" onclick="csvPreset('all')">All time</button>
+      </div>
+      <p style="font-size:12px;font-weight:600;color:#2C2C2A;margin-bottom:6px;">Classes to include</p>
+      <div id="csv-class-checks" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;"></div>
+      <button class="primary-btn" onclick="exportCSV()">Download CSV</button>
+    </div>
+
+    <!-- Thresholds -->
+    <div class="section">
+      <p class="sec-label">Alert &amp; watch thresholds</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:4px;">Auto-flag after this many bathroom passes:</p>
+      <div class="slider-row">
+        <input type="range" id="cfg-pass-thresh" min="1" max="20" value="5" oninput="document.getElementById('cfg-pt-lbl').textContent=this.value+' passes'" />
+        <span class="slider-val" id="cfg-pt-lbl">5 passes</span>
+      </div>
+      <p style="font-size:12px;color:#5F5E5A;margin-top:8px;margin-bottom:4px;">Over this many days:</p>
+      <div class="slider-row">
+        <input type="range" id="cfg-pass-win" min="1" max="30" value="7" oninput="document.getElementById('cfg-pw-lbl').textContent=this.value+' days'" />
+        <span class="slider-val" id="cfg-pw-lbl">7 days</span>
+      </div>
+      <p style="font-size:12px;color:#5F5E5A;margin-top:8px;margin-bottom:4px;">Out-too-long alert:</p>
+      <div class="slider-row">
+        <input type="range" id="cfg-timeout" min="3" max="20" value="7" oninput="document.getElementById('cfg-to-lbl').textContent=this.value+' min'" />
+        <span class="slider-val" id="cfg-to-lbl">7 min</span>
+      </div>
+      <button class="small-btn" style="margin-top:10px;" onclick="saveThresholds()">Save thresholds</button>
+    </div>
+
+    <!-- Rosters -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:10px;">Update rosters</p>
+      <div id="cfg-rosters"></div>
+      <button class="primary-btn" style="margin-top:8px;" onclick="saveRosterUpdates()">Save roster changes</button>
+    </div>
+
+    <!-- Note library -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:8px;">Note library</p>
+      <div id="cfg-note-lib" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:6px;">
+        <input id="cfg-note-inp" type="text" maxlength="50" placeholder="e.g. Left for nurse"
+          style="flex:1;border:1.5px solid #B4B2A9;border-radius:8px;padding:7px 10px;font-size:13px;background:#F1EFE8;color:#2C2C2A;font-family:sans-serif;min-width:0;"
+          onkeydown="if(event.key==='Enter')addLibNote()" />
+        <button class="note-confirm" onclick="addLibNote()">Add</button>
+      </div>
+    </div>
+
+    <!-- Dest library -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:8px;">Other destinations</p>
+      <div id="cfg-dest-lib" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:6px;">
+        <input id="cfg-dest-inp" type="text" maxlength="40" placeholder="e.g. Library, Nurse, Office"
+          style="flex:1;border:1.5px solid #B4B2A9;border-radius:8px;padding:7px 10px;font-size:13px;background:#F1EFE8;color:#2C2C2A;font-family:sans-serif;min-width:0;"
+          onkeydown="if(event.key==='Enter')addLibDest()" />
+        <button class="dest-confirm" onclick="addLibDest()">Add</button>
+      </div>
+    </div>
+
+    <!-- Danger -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:8px;">Danger zone</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="danger-btn" onclick="clearAllHistory()">Clear all history</button>
+        <button class="danger-btn" onclick="resetEverything()">Full reset</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Action panel -->
+<div class="action-overlay" id="action-overlay" onclick="closePanel()"></div>
+<div class="action-panel" id="action-panel">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+    <div>
+      <p style="font-size:16px;font-weight:700;color:#2C2C2A;" id="ap-name"></p>
+      <p style="font-size:11px;color:#5F5E5A;margin-top:2px;" id="ap-watch-lbl"></p>
+    </div>
+    <button onclick="closePanel()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#888780;line-height:1;">&times;</button>
+  </div>
+  <p style="font-size:12px;color:#5F5E5A;margin-bottom:12px;" id="ap-status"></p>
+  <div class="watch-warning" id="ap-watch-warn">
+    &#9888;&#65039; <strong>Watch list:</strong> <span id="ap-warn-text"></span>
+  </div>
+  <div id="ap-buttons" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+  <div class="other-panel" id="other-panel">
+    <p style="font-size:13px;font-weight:700;color:#7A5500;margin-bottom:8px;">Where are they going?</p>
+    <div id="other-chips" style="margin-bottom:8px;"></div>
+    <div class="dest-row">
+      <input id="other-inp" type="text" maxlength="40" placeholder="e.g. Library, Nurse..."
+        onkeydown="if(event.key==='Enter')submitOther()" />
+      <button class="dest-confirm" onclick="submitOther()">Send</button>
+    </div>
+  </div>
+  <div class="note-panel" id="note-panel">
+    <p style="font-size:13px;font-weight:700;color:#5B2D8E;margin-bottom:8px;">Add a note</p>
+    <div id="note-chips" style="margin-bottom:8px;"></div>
+    <div class="note-row">
+      <input id="note-inp" type="text" maxlength="60" placeholder="Type a note..."
+        onkeydown="if(event.key==='Enter')submitNote()" />
+      <button class="note-confirm" onclick="submitNote()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+var TYPE_COLOR  = {bathroom:'#1A3F7A',water:'#0D6B6B',other:'#7A5500',absent:'#555555',tardy:'#7A4500',note:'#5B2D8E'};
+var TYPE_LABEL  = {bathroom:'Bathroom',water:'Water fountain',other:'Other',absent:'Absent',tardy:'Tardy arrival',note:'Note',present:'Present'};
+var STATUS_CLASS= {present:'s-present',absent:'s-absent',tardy:'s-tardy',bathroom:'s-bathroom',water:'s-water',other:'s-other',note:'s-note',alert:'s-alert'};
+var STATUS_LBL  = {present:'Present',absent:'Absent',tardy:'Tardy',bathroom:'Bathroom',water:'Water fountain',other:'Other',note:'Note',alert:'Out too long!'};
+
+var cfg = {classes:[],timeoutMins:7,passThreshold:5,passWindowDays:7};
+var noteLib = [];
+var destLib = [];
+var passData = {};
+var watchList = {};
+var activeClassId = null;
+var absentMode = false;
+var tickerInterval = null;
+var pendingCount = 0;
+var actionStudent = null;
+var notePanelOpen = false;
+var otherPanelOpen = false;
+
+// PERSISTENCE
+function save() {
+  try { localStorage.setItem('ct_cfg',  JSON.stringify(cfg)); } catch(e){}
+  try { localStorage.setItem('ct_data', JSON.stringify(passData)); } catch(e){}
+  try { localStorage.setItem('ct_notes',JSON.stringify(noteLib)); } catch(e){}
+  try { localStorage.setItem('ct_dests',JSON.stringify(destLib)); } catch(e){}
+  try {
+    var wl = {};
+    Object.keys(watchList).forEach(function(id){ wl[id] = Array.from(watchList[id]); });
+    localStorage.setItem('ct_watch', JSON.stringify(wl));
+  } catch(e){}
+}
+function loadStorage() {
+  try {
+    var c=localStorage.getItem('ct_cfg');
+    var d=localStorage.getItem('ct_data');
+    var n=localStorage.getItem('ct_notes');
+    var ds=localStorage.getItem('ct_dests');
+    var w=localStorage.getItem('ct_watch');
+    if(c) cfg=JSON.parse(c);
+    if(d) passData=JSON.parse(d);
+    if(n) noteLib=JSON.parse(n);
+    if(ds) destLib=JSON.parse(ds);
+    if(w){ var raw=JSON.parse(w); Object.keys(raw).forEach(function(id){ watchList[id]=new Set(raw[id]); }); }
+    return !!(c&&cfg.classes&&cfg.classes.length);
+  } catch(e){ return false; }
+}
+
+// HELPERS
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function fmtDate(key){
+  var parts=key.split('-');
+  return new Date(parts[0],parts[1]-1,parts[2]).toLocaleDateString([],{weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+function fmtTime(ts){ return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+function showPhase(id){
+  document.querySelectorAll('.phase').forEach(function(p){ p.classList.remove('visible'); });
+  document.getElementById(id).classList.add('visible');
+}
+function classById(id){ return cfg.classes.find(function(c){ return c.id===id; }); }
+function parseNames(raw){
+  var lines=raw.split('\n').map(function(l){ return l.trim(); }).filter(Boolean);
+  var parsed=lines.map(function(l){ var p=l.split(/\s+/); return {first:p[0],last:p.length>1?p[p.length-1]:''}; });
+  var firsts=parsed.map(function(p){ return p.first.toLowerCase(); });
+  var dupes=new Set(firsts.filter(function(n,i){ return firsts.indexOf(n)!==i; }));
+  return parsed.map(function(p){
+    return dupes.has(p.first.toLowerCase())&&p.last ? p.first+' '+p.last[0].toUpperCase()+'.' : p.first;
+  }).sort(function(a,b){ return a.localeCompare(b); });
+}
+function getWatchList(id){ if(!watchList[id]) watchList[id]=new Set(); return watchList[id]; }
+function isWatched(id,name){ return getWatchList(id).has(name); }
+
+// PASS COUNT
+function getBathroomCount(classId, name){
+  var cutoff=Date.now() - cfg.passWindowDays*24*60*60*1000;
+  var count=0;
+  var cd=passData[classId]||{};
+  Object.values(cd).forEach(function(day){
+    (day[name]||[]).forEach(function(t){ if(t.type==='bathroom'&&t.out>=cutoff) count++; });
+  });
+  return count;
+}
+function checkAutoWatch(classId, name){
+  if(getBathroomCount(classId,name)>=cfg.passThreshold){
+    getWatchList(classId).add(name); save();
+  }
+}
+
+// SETUP
+function pickCount(btn){
+  document.querySelectorAll('.num-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  pendingCount=parseInt(btn.textContent);
+  document.getElementById('s-names').style.display='block';
+  document.getElementById('s-rosters').style.display='block';
+  document.getElementById('s-thresholds').style.display='block';
+  document.getElementById('s-name-inputs').innerHTML=Array.from({length:pendingCount},function(_,i){
+    return '<div class="class-name-row"><label>Class '+(i+1)+'</label><input type="text" id="sn-'+i+'" placeholder="e.g. Period '+(i+1)+'" maxlength="40"/></div>';
+  }).join('');
+  document.getElementById('s-roster-inputs').innerHTML=Array.from({length:pendingCount},function(_,i){
+    return '<div style="margin-bottom:12px;"><p id="srl-'+i+'" style="font-size:13px;font-weight:600;color:#185FA5;margin-bottom:6px;">Class '+(i+1)+'</p>'
+      +'<textarea id="sr-'+i+'" rows="4" placeholder="Paste names here, one per line..."></textarea>'
+      +'<div id="srp-'+i+'" style="margin-top:4px;"></div></div>';
+  }).join('');
+  for(var i=0;i<pendingCount;i++){
+    (function(idx){
+      document.getElementById('sn-'+idx).addEventListener('input',function(){
+        var v=document.getElementById('sn-'+idx).value.trim();
+        document.getElementById('srl-'+idx).textContent=v||'Class '+(idx+1);
+      });
+      document.getElementById('sr-'+idx).addEventListener('input',function(){
+        var raw=document.getElementById('sr-'+idx).value.trim();
+        var prev=document.getElementById('srp-'+idx);
+        if(!raw){prev.innerHTML='';return;}
+        prev.innerHTML=parseNames(raw).map(function(n){ return '<span class="preview-tag">'+n+'</span>'; }).join('');
+      });
+    })(i);
+  }
+}
+
+function saveSetup(){
+  if(!pendingCount){alert('Select how many classes you have.');return;}
+  cfg.classes=Array.from({length:pendingCount},function(_,i){
+    var name=(document.getElementById('sn-'+i)||{}).value||'';
+    name=name.trim()||'Class '+(i+1);
+    var raw=(document.getElementById('sr-'+i)||{}).value||'';
+    var id=uid();
+    if(!passData[id]) passData[id]={};
+    if(!watchList[id]) watchList[id]=new Set();
+    return {id:id,name:name,students:raw.trim()?parseNames(raw.trim()):[]};
+  });
+  cfg.timeoutMins=parseInt(document.getElementById('s-timeout').value);
+  cfg.passThreshold=parseInt(document.getElementById('s-pass-thresh').value);
+  cfg.passWindowDays=parseInt(document.getElementById('s-pass-win').value);
+  save();
+  activeClassId=cfg.classes[0].id;
+  launchTracker();
+}
+
+// TRACKER
+function launchTracker(){
+  showPhase('phase-tracker');
+  startTicker();
+  renderAll();
+}
+
+function renderClassTabs(){
+  document.getElementById('class-tabs').innerHTML=cfg.classes.map(function(c){
+    return '<button class="period-tab '+(c.id===activeClassId?'active':'')+'" onclick="switchClass(\''+c.id+'\')">'+c.name+'</button>';
+  }).join('');
+}
+function switchClass(id){ activeClassId=id; renderAll(); }
+
+// ABSENT MODE
+function toggleAbsentMode(){
+  absentMode=!absentMode;
+  var btn=document.getElementById('absent-toggle-btn');
+  var hint=document.getElementById('absent-hint');
+  var lbl=document.getElementById('grid-label');
+  if(absentMode){
+    btn.textContent='Done'; btn.classList.add('on');
+    hint.style.display='block';
+    lbl.textContent='Tap students to mark / unmark absent';
+  } else {
+    btn.textContent='Mark Absent'; btn.classList.remove('on');
+    hint.style.display='none';
+    lbl.textContent='Tap a student to update status';
+  }
+  renderGrid();
+}
+function tapAbsentMode(name){ toggleAbsent(activeClassId,name); renderGrid(); renderSummary(); renderTodayLog(); }
+
+// STUDENT DATA
+function ensureData(classId,name){
+  if(!passData[classId]) passData[classId]={};
+  var t=todayKey();
+  if(!passData[classId][t]) passData[classId][t]={};
+  if(!passData[classId][t][name]) passData[classId][t][name]=[];
+}
+function getTodayTrips(classId,name){
+  var cd=passData[classId]; if(!cd) return [];
+  var dd=cd[todayKey()]; if(!dd) return [];
+  return dd[name]||[];
+}
+function getStudentStatus(classId,name){
+  var trips=getTodayTrips(classId,name);
+  if(trips.some(function(t){ return t.type==='absent'; })) return 'absent';
+  if(trips.some(function(t){ return t.type==='tardy'&&!t.back; })) return 'tardy';
+  var active=trips.find(function(t){ return ['absent','tardy','note'].indexOf(t.type)===-1&&!t.back; });
+  if(!active) return 'present';
+  if(active.type==='other') return 'other';
+  var elapsed=(Date.now()-active.out)/1000/60;
+  return elapsed>=cfg.timeoutMins?'alert':active.type;
+}
+function getActiveTrip(classId,name){
+  return getTodayTrips(classId,name).find(function(t){
+    return ['absent','tardy','note'].indexOf(t.type)===-1&&!t.back;
+  })||null;
+}
+function elapsedLabel(classId,name){
+  var trip=getActiveTrip(classId,name);
+  if(!trip||trip.type==='other') return '';
+  var s=Math.floor((Date.now()-trip.out)/1000);
+  return Math.floor(s/60)+'m '+String(s%60).padStart(2,'0')+'s';
+}
+function sendOut(classId,name,type,destination){
+  ensureData(classId,name);
+  var t=todayKey();
+  passData[classId][t][name].forEach(function(x){
+    if(['absent','tardy','note'].indexOf(x.type)===-1&&!x.back) x.back=Date.now();
+  });
+  var entry={type:type,out:Date.now(),back:null};
+  if(destination) entry.destination=destination;
+  passData[classId][t][name].push(entry);
+  if(type==='bathroom') checkAutoWatch(classId,name);
+  save();
+}
+function sendBack(classId,name){
+  var trips=getTodayTrips(classId,name);
+  var open=trips.find(function(t){ return ['absent','tardy','note'].indexOf(t.type)===-1&&!t.back; });
+  if(open) open.back=Date.now();
+  save();
+}
+function sendBackUnknown(classId,name){
+  var trips=getTodayTrips(classId,name);
+  var open=trips.find(function(t){ return ['absent','tardy','note'].indexOf(t.type)===-1&&!t.back; });
+  if(open){ open.back=open.out; open.backUnknown=true; }
+  save();
+}
+function toggleAbsent(classId,name){
+  ensureData(classId,name);
+  var t=todayKey();
+  var trips=passData[classId][t][name];
+  trips.forEach(function(x){ if(['absent','tardy','note'].indexOf(x.type)===-1&&!x.back) x.back=Date.now(); });
+  var wasAbsent=trips.some(function(x){ return x.type==='absent'; });
+  passData[classId][t][name]=trips.filter(function(x){ return x.type!=='absent'&&x.type!=='tardy'; });
+  if(!wasAbsent) passData[classId][t][name].push({type:'absent',out:Date.now(),back:null});
+  save();
+}
+function markTardy(classId,name){
+  ensureData(classId,name);
+  var t=todayKey();
+  var trips=passData[classId][t][name];
+  passData[classId][t][name]=trips.filter(function(x){ return x.type!=='absent'; });
+  passData[classId][t][name].push({type:'tardy',out:Date.now(),back:Date.now()});
+  save();
+}
+function markPresent(classId,name){
+  var t=todayKey();
+  if(passData[classId]&&passData[classId][t]&&passData[classId][t][name]){
+    passData[classId][t][name]=passData[classId][t][name].filter(function(x){ return x.type!=='absent'&&x.type!=='tardy'; });
+  }
+  save();
+}
+function addNoteEntry(classId,name,text){
+  ensureData(classId,name);
+  passData[classId][todayKey()][name].push({type:'note',text:text,out:Date.now(),back:Date.now()});
+  save();
+}
+
+// RENDER GRID
+function renderGrid(){
+  var cls=classById(activeClassId); if(!cls) return;
+  document.getElementById('student-grid').innerHTML=cls.students.map(function(name){
+    var status=getStudentStatus(activeClassId,name);
+    var sc=STATUS_CLASS[status]||'s-present';
+    var elapsed=['bathroom','water','alert'].indexOf(status)>-1?elapsedLabel(activeClassId,name):'';
+    var isAlert=status==='alert';
+    var watched=isWatched(activeClassId,name);
+    var safeName=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    var fn=absentMode?'tapAbsentMode(\''+safeName+'\')':'openPanel(\''+safeName+'\')';
+
+    var snip='';
+    if(status==='other'){
+      var active=getActiveTrip(activeClassId,name);
+      if(active&&active.destination){
+        var dest=active.destination.slice(0,14)+(active.destination.length>14?'...':'');
+        snip='<div class="stu-snip">'+dest+'</div>';
+      }
+    }
+    if(status==='tardy'){
+      var tardyTrip=getTodayTrips(activeClassId,name).find(function(t){ return t.type==='tardy'; });
+      if(tardyTrip) snip='<div class="stu-snip">arrived '+fmtTime(tardyTrip.out)+'</div>';
+    }
+    if(status==='note'){
+      var noteTrips=getTodayTrips(activeClassId,name).filter(function(t){ return t.type==='note'; });
+      var lastNote=noteTrips[noteTrips.length-1];
+      if(lastNote){
+        var ntxt=lastNote.text.slice(0,14)+(lastNote.text.length>14?'...':'');
+        snip='<div class="stu-snip">'+ntxt+'</div>';
+      }
+    }
+
+    return '<div class="stu-card '+sc+(isAlert?' pulsing':'')+'" onclick="'+fn+'">'
+      +(watched?'<span class="watch-flag">&#128276;</span>':'')
+      +'<div class="stu-name">'+name+'</div>'
+      +'<div class="stu-status">'+(STATUS_LBL[status]||'')+'</div>'
+      +snip
+      +(elapsed?'<div class="stu-timer">'+elapsed+'</div>':'')
+      +'</div>';
+  }).join('');
+}
+
+function renderSummary(){
+  var cls=classById(activeClassId); if(!cls) return;
+  var counts={present:0,absent:0,tardy:0,bathroom:0,water:0,other:0,note:0,alert:0};
+  cls.students.forEach(function(n){
+    var s=getStudentStatus(activeClassId,n);
+    counts[s]=(counts[s]||0)+1;
+  });
+  var out=counts.bathroom+counts.water+counts.other+counts.alert;
+  document.getElementById('t-date').textContent=fmtDate(todayKey());
+  var parts=[];
+  if(counts.absent) parts.push(counts.absent+' absent');
+  if(counts.tardy) parts.push(counts.tardy+' tardy');
+  if(out) parts.push(out+' out');
+  if(counts.alert) parts.push(counts.alert+' overdue');
+  document.getElementById('t-summary').textContent=parts.length?parts.join(' - '):'All present';
+}
+
+function renderTodayLog(){
+  var el=document.getElementById('today-log');
+  var cls=classById(activeClassId); if(!cls){el.innerHTML='';return;}
+  var dayData=(passData[activeClassId]||{})[todayKey()]||{};
+  var entries=[];
+  cls.students.forEach(function(name){
+    (dayData[name]||[]).forEach(function(t){ entries.push(Object.assign({name:name},t)); });
+  });
+  entries.sort(function(a,b){ return a.out-b.out; });
+  if(!entries.length){el.innerHTML='<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No activity yet</p>';return;}
+  el.innerHTML=entries.map(function(e){
+    var tc=TYPE_COLOR[e.type]||'#2C2C2A';
+    var tl=TYPE_LABEL[e.type]||e.type;
+    var notPass=['absent','tardy','note'].indexOf(e.type)>-1;
+    var dur=e.backUnknown?'':e.back&&!notPass?Math.round((e.back-e.out)/1000/60)+'m':'';
+    var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):'';
+    var backStr=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';
+    return '<div class="hist-row">'
+      +'<span style="font-weight:600;min-width:75px;">'+e.name+'</span>'
+      +'<span style="color:'+tc+';">'+tl+extra+'</span>'
+      +'<span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(e.out))+backStr+(dur?' ('+dur+')':'')+'</span>'
+      +'</div>';
+  }).join('');
+}
+
+function renderAll(){ renderClassTabs(); renderGrid(); renderSummary(); renderTodayLog(); }
+
+// ACTION PANEL
+function openPanel(name){
+  if(absentMode){ tapAbsentMode(name); return; }
+  actionStudent=name; notePanelOpen=false; otherPanelOpen=false;
+  document.getElementById('note-panel').classList.remove('visible');
+  document.getElementById('other-panel').classList.remove('visible');
+  document.getElementById('note-inp').value='';
+  document.getElementById('other-inp').value='';
+
+  var status=getStudentStatus(activeClassId,name);
+  var watched=isWatched(activeClassId,name);
+  var passCount=getBathroomCount(activeClassId,name);
+
+  document.getElementById('ap-name').textContent=name;
+  document.getElementById('ap-watch-lbl').textContent=watched?'On watch list - '+passCount+' bathroom pass'+(passCount!==1?'es':'')+' in last '+cfg.passWindowDays+' days':'';
+  document.getElementById('ap-status').textContent='Status: '+(STATUS_LBL[status]||'Present');
+
+  var warnEl=document.getElementById('ap-watch-warn');
+  var warnText=document.getElementById('ap-warn-text');
+  if(watched){
+    warnText.textContent=passCount+' bathroom pass'+(passCount!==1?'es':'')+' in last '+cfg.passWindowDays+' days.';
+    warnEl.classList.add('visible');
+  } else {
+    warnEl.classList.remove('visible');
+  }
+
+  var isOut=['bathroom','water','other','alert'].indexOf(status)>-1;
+  var isAbsent=status==='absent';
+  var html='';
+  var watchBtn=watched
+    ?'<button class="action-btn ab-unwatch" style="grid-column:span 2;" onclick="toggleWatch()">Remove from watch list</button>'
+    :'<button class="action-btn ab-watch" style="grid-column:span 2;" onclick="toggleWatch()">Add to watch list</button>';
+
+  if(isOut){
+    html+='<button class="action-btn ab-back" onclick="doAction(\'back\')">&#10003; Back in class</button>';
+    html+='<button class="action-btn" style="background:#F1EFE8;color:#5F5E5A;border:1.5px solid #888780;" onclick="doAction(\'backunknown\')">Back &mdash; time unknown</button>';
+    html+='<button class="action-btn ab-bathroom" onclick="doAction(\'bathroom\')">Bathroom</button>';
+    html+='<button class="action-btn ab-water" onclick="doAction(\'water\')">Water fountain</button>';
+    html+='<button class="action-btn ab-other" onclick="toggleOtherPanel()">Other...</button>';
+    html+='<button class="action-btn ab-absent" onclick="doAction(\'absent\')">Mark absent</button>';
+    html+='<button class="action-btn ab-note" style="grid-column:span 2;" onclick="toggleNotePanel()">Add note</button>';
+    html+=watchBtn;
+  } else if(isAbsent){
+    html+='<button class="action-btn ab-present" style="grid-column:span 2;" onclick="doAction(\'tardy\')">Arrived (mark tardy)</button>';
+    html+='<button class="action-btn ab-present" style="grid-column:span 2;" onclick="doAction(\'present\')">Mark present (remove absent)</button>';
+    html+='<button class="action-btn ab-note" style="grid-column:span 2;" onclick="toggleNotePanel()">Add note</button>';
+    html+=watchBtn;
+  } else {
+    html+='<button class="action-btn ab-bathroom" onclick="doAction(\'bathroom\')">Bathroom</button>';
+    html+='<button class="action-btn ab-water" onclick="doAction(\'water\')">Water fountain</button>';
+    html+='<button class="action-btn ab-other" onclick="toggleOtherPanel()">Other...</button>';
+    html+='<button class="action-btn ab-absent" onclick="doAction(\'absent\')">Mark absent</button>';
+    html+='<button class="action-btn ab-note" style="grid-column:span 2;" onclick="toggleNotePanel()">Add note</button>';
+    html+=watchBtn;
+  }
+  document.getElementById('ap-buttons').innerHTML=html;
+  renderNoteChips(); renderOtherChips();
+  document.getElementById('action-panel').classList.add('visible');
+  document.getElementById('action-overlay').classList.add('visible');
+}
+
+function closePanel(){
+  document.getElementById('action-panel').classList.remove('visible');
+  document.getElementById('action-overlay').classList.remove('visible');
+  document.getElementById('note-panel').classList.remove('visible');
+  document.getElementById('other-panel').classList.remove('visible');
+  notePanelOpen=false; otherPanelOpen=false; actionStudent=null;
+}
+
+function doAction(action){
+  if(!actionStudent) return;
+  if(action==='back') sendBack(activeClassId,actionStudent);
+  else if(action==='backunknown') sendBackUnknown(activeClassId,actionStudent);
+  else if(action==='absent') toggleAbsent(activeClassId,actionStudent);
+  else if(action==='present') markPresent(activeClassId,actionStudent);
+  else if(action==='tardy') markTardy(activeClassId,actionStudent);
+  else sendOut(activeClassId,actionStudent,action);
+  closePanel(); renderAll();
+}
+
+function toggleWatch(){
+  if(!actionStudent) return;
+  var wl=getWatchList(activeClassId);
+  if(wl.has(actionStudent)) wl.delete(actionStudent); else wl.add(actionStudent);
+  save(); closePanel(); renderAll();
+}
+
+function toggleOtherPanel(){
+  otherPanelOpen=!otherPanelOpen;
+  if(otherPanelOpen){ notePanelOpen=false; document.getElementById('note-panel').classList.remove('visible'); }
+  document.getElementById('other-panel').classList[otherPanelOpen?'add':'remove']('visible');
+  if(otherPanelOpen){ renderOtherChips(); setTimeout(function(){ document.getElementById('other-inp').focus(); },80); }
+}
+function renderOtherChips(){
+  var el=document.getElementById('other-chips'); if(!el) return;
+  if(!destLib.length){el.innerHTML='<p style="font-size:11px;color:#888780;margin-bottom:4px;">Type a destination below.</p>';return;}
+  el.innerHTML=destLib.map(function(d,i){
+    return '<span class="lib-chip lib-chip-dest" onclick="applyDest(\''+d.replace(/'/g,"\\'")+'\')">'+d
+      +'<button class="chip-del" onclick="event.stopPropagation();removeDestChip('+i+')">&times;</button></span>';
+  }).join('');
+}
+function applyDest(dest){ if(!actionStudent) return; sendOut(activeClassId,actionStudent,'other',dest); closePanel(); renderAll(); }
+function removeDestChip(i){ destLib.splice(i,1); save(); renderOtherChips(); }
+function submitOther(){
+  var inp=document.getElementById('other-inp');
+  var dest=inp.value.trim(); if(!actionStudent) return;
+  if(dest&&destLib.indexOf(dest)===-1){ destLib.push(dest); save(); }
+  sendOut(activeClassId,actionStudent,'other',dest||null);
+  inp.value=''; closePanel(); renderAll();
+}
+
+function toggleNotePanel(){
+  notePanelOpen=!notePanelOpen;
+  if(notePanelOpen){ otherPanelOpen=false; document.getElementById('other-panel').classList.remove('visible'); }
+  document.getElementById('note-panel').classList[notePanelOpen?'add':'remove']('visible');
+  if(notePanelOpen){ renderNoteChips(); setTimeout(function(){ document.getElementById('note-inp').focus(); },80); }
+}
+function renderNoteChips(){
+  var el=document.getElementById('note-chips'); if(!el) return;
+  if(!noteLib.length){el.innerHTML='<p style="font-size:11px;color:#888780;margin-bottom:4px;">Type a note below.</p>';return;}
+  el.innerHTML=noteLib.map(function(note,i){
+    return '<span class="lib-chip lib-chip-note" onclick="applyNote(\''+note.replace(/'/g,"\\'")+'\')">'+note
+      +'<button class="chip-del" onclick="event.stopPropagation();removeNoteChip('+i+')">&times;</button></span>';
+  }).join('');
+}
+function applyNote(text){ if(!actionStudent) return; addNoteEntry(activeClassId,actionStudent,text); closePanel(); renderAll(); }
+function removeNoteChip(i){ noteLib.splice(i,1); save(); renderNoteChips(); }
+function submitNote(){
+  var inp=document.getElementById('note-inp');
+  var text=inp.value.trim(); if(!text||!actionStudent) return;
+  if(noteLib.indexOf(text)===-1){ noteLib.push(text); save(); }
+  addNoteEntry(activeClassId,actionStudent,text);
+  inp.value=''; closePanel(); renderAll();
+}
+
+// TICKER
+function startTicker(){
+  if(tickerInterval) clearInterval(tickerInterval);
+  tickerInterval=setInterval(function(){ renderGrid(); renderSummary(); },5000);
+}
+function newDay(){
+  if(!confirm('Start a new day? Today\'s data is saved to history.')) return;
+  renderAll();
+}
+
+// SEARCH
+function showSearch(){
+  showPhase('phase-search');
+  document.getElementById('search-input').value='';
+  document.getElementById('search-results').innerHTML='';
+  setTimeout(function(){ document.getElementById('search-input').focus(); },80);
+}
+function runSearch(){
+  var q=document.getElementById('search-input').value.trim().toLowerCase();
+  var el=document.getElementById('search-results');
+  if(q.length<2){el.innerHTML='';return;}
+  var matches=[];
+  cfg.classes.forEach(function(cls){
+    (cls.students||[]).forEach(function(name){
+      if(name.toLowerCase().indexOf(q)>-1) matches.push({classId:cls.id,className:cls.name,name:name});
+    });
+  });
+  if(!matches.length){el.innerHTML='<div class="section"><p style="font-size:13px;color:#5F5E5A;text-align:center;">No students found</p></div>';return;}
+  el.innerHTML=matches.map(function(m){ return buildStudentCard(m.classId,m.className,m.name); }).join('');
+}
+
+function buildStudentCard(classId,className,name){
+  var cd=passData[classId]||{};
+  var allDays=Object.keys(cd).sort(function(a,b){ return b.localeCompare(a); });
+  var totals={absent:0,tardy:0,bathroom:0,water:0,other:0,notes:0};
+  var timeline=[];
+  allDays.forEach(function(day){
+    (cd[day][name]||[]).forEach(function(t){
+      if(t.type==='absent') totals.absent++;
+      else if(t.type==='tardy') totals.tardy++;
+      else if(t.type==='bathroom') totals.bathroom++;
+      else if(t.type==='water') totals.water++;
+      else if(t.type==='other') totals.other++;
+      else if(t.type==='note') totals.notes++;
+      timeline.push(Object.assign({day:day},t));
+    });
+  });
+  var watched=isWatched(classId,name);
+  var passCount=getBathroomCount(classId,name);
+  var pills=[
+    totals.absent?'<span class="stat-pill" style="background:#F0F0F0;color:#555555;">'+totals.absent+' absent</span>':'',
+    totals.tardy?'<span class="stat-pill" style="background:#FFF0D0;color:#7A4500;">'+totals.tardy+' tardy</span>':'',
+    totals.bathroom?'<span class="stat-pill" style="background:#E8F0FB;color:#1A3F7A;">'+totals.bathroom+' bathroom</span>':'',
+    totals.water?'<span class="stat-pill" style="background:#E0F5F5;color:#0D6B6B;">'+totals.water+' water</span>':'',
+    totals.other?'<span class="stat-pill" style="background:#FFF6DC;color:#7A5500;">'+totals.other+' other</span>':'',
+    totals.notes?'<span class="stat-pill" style="background:#F5EAF9;color:#5B2D8E;">'+totals.notes+' note'+(totals.notes!==1?'s':'')+'</span>':'',
+  ].filter(Boolean).join('');
+  var rows=timeline.sort(function(a,b){ return b.out-a.out; }).map(function(t){
+    var tc=TYPE_COLOR[t.type]||'#2C2C2A';
+    var tl=TYPE_LABEL[t.type]||t.type;
+    var notPass=['absent','tardy','note'].indexOf(t.type)>-1;
+    var dur=t.back&&!notPass?Math.round((t.back-t.out)/1000/60)+'m':'';
+    var extra=t.type==='note'?' - "'+t.text+'"':t.type==='other'&&t.destination?' - '+t.destination:t.type==='tardy'?' arrived '+fmtTime(t.out):'';
+    return '<div class="hist-row">'
+      +'<span style="color:#5F5E5A;min-width:70px;font-size:11px;">'+fmtDate(t.day)+'</span>'
+      +'<span style="color:'+tc+';">'+tl+extra+'</span>'
+      +'<span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(t.out))+(t.back&&!notPass?' -> '+fmtTime(t.back):'')+(dur?' ('+dur+')':'')+'</span>'
+      +'</div>';
+  }).join('');
+  return '<div class="section">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
+    +'<div><p style="font-size:14px;font-weight:700;color:#2C2C2A;">'+name+'</p><p style="font-size:11px;color:#5F5E5A;">'+className+'</p></div>'
+    +(watched?'<span style="font-size:11px;background:#FFF8E0;color:#7A5E00;border:1px solid #C09A20;border-radius:6px;padding:2px 8px;">Watched - '+passCount+' passes ('+cfg.passWindowDays+'d)</span>':'')
+    +'</div>'
+    +(pills?'<div style="margin-bottom:10px;">'+pills+'</div>':'<p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">No activity recorded yet</p>')
+    +(rows?'<div style="border-top:1px solid #e8e6e0;padding-top:8px;">'+rows+'</div>':'')
+    +'</div>';
+}
+
+// HISTORY
+function showHistory(){ showPhase('phase-history'); renderHistory(); }
+function renderHistory(){
+  var el=document.getElementById('history-area');
+  var cls=classById(activeClassId);
+  if(!cls||!passData[activeClassId]){el.innerHTML='<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p>';return;}
+  var days=Object.keys(passData[activeClassId]).sort(function(a,b){ return b.localeCompare(a); });
+  var blocks=days.map(function(day){
+    var dayData=passData[activeClassId][day];
+    var entries=[];
+    cls.students.forEach(function(name){ (dayData[name]||[]).forEach(function(t){ entries.push(Object.assign({name:name},t)); }); });
+    entries.sort(function(a,b){ return a.out-b.out; });
+    if(!entries.length) return '';
+    return '<div class="section"><div class="hist-head">'+fmtDate(day)+' - '+cls.name+'</div>'
+      +entries.map(function(e){
+        var tc=TYPE_COLOR[e.type]||'#2C2C2A';
+        var tl=TYPE_LABEL[e.type]||e.type;
+        var notPass=['absent','tardy','note'].indexOf(e.type)>-1;
+        var dur=e.back&&!notPass?Math.round((e.back-e.out)/1000/60)+'m':'';
+        var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):'';
+        return '<div class="hist-row">'
+          +'<span style="font-weight:600;min-width:75px;">'+e.name+'</span>'
+          +'<span style="color:'+tc+';">'+tl+extra+'</span>'
+          +'<span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(e.out))+(e.back&&!notPass?' -> '+fmtTime(e.back):'')+(dur?' ('+dur+')':'')+'</span>'
+          +'</div>';
+      }).join('')+'</div>';
+  }).filter(Boolean);
+  el.innerHTML=blocks.length?blocks.join(''):'<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p>';
+}
+
+// EXPORT - text
+function buildExport(classId,days){
+  var cls=classById(classId); if(!cls) return '';
+  var out='Classroom Log - '+cls.name+'\n'+'='.repeat(40)+'\n\n';
+  days.forEach(function(day){
+    var dayData=(passData[classId]||{})[day]||{};
+    var entries=[];
+    cls.students.forEach(function(name){ (dayData[name]||[]).forEach(function(t){ entries.push(Object.assign({name:name},t)); }); });
+    entries.sort(function(a,b){ return a.out-b.out; });
+    if(!entries.length) return;
+    out+=fmtDate(day)+'\n'+'-'.repeat(30)+'\n';
+    entries.forEach(function(e){
+      var tl=TYPE_LABEL[e.type]||e.type;
+      var notPass=['absent','tardy','note'].indexOf(e.type)>-1;
+      var extra=e.type==='note'?' ('+e.text+')':e.type==='other'&&e.destination?' ('+e.destination+')':e.type==='tardy'?' arrived '+fmtTime(e.out):'';
+      var ts=notPass?'':fmtTime(e.out);
+      var back=e.back&&!notPass?' -> '+fmtTime(e.back):'';
+      var dur=e.back&&!notPass?' ('+Math.round((e.back-e.out)/1000/60)+'m)':'';
+      out+='  '+e.name.padEnd(22)+(tl+extra).padEnd(24)+ts+back+dur+'\n';
+    });
+    out+='\n';
+  });
+  return out;
+}
+function dl(text,filename){
+  var blob=new Blob([text],{type:'text/plain'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click();
+}
+function exportToday(){
+  var text=buildExport(activeClassId,[todayKey()]);
+  if(text.indexOf('\n  ')===-1){alert('No activity to export yet.');return;}
+  dl(text,'classroom-today-'+todayKey()+'.txt');
+}
+function exportHistory(){
+  var days=Object.keys((passData[activeClassId])||{}).sort(function(a,b){ return b.localeCompare(a); });
+  if(!days.length){alert('No history to export.');return;}
+  var cls=classById(activeClassId);
+  dl(buildExport(activeClassId,days),'classroom-'+(cls?cls.name:'class').replace(/\s+/g,'-').toLowerCase()+'-history.txt');
+}
+
+// CSV EXPORT
+function csvPreset(preset){
+  var today=new Date();
+  var pad=function(n){ return String(n).padStart(2,'0'); };
+  var fmt=function(d){ return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate()); };
+  var from, to=fmt(today);
+  if(preset==='week'){
+    var d=new Date(today); d.setDate(d.getDate()-d.getDay()); from=fmt(d);
+  } else if(preset==='month'){
+    from=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-01';
+  } else {
+    var earliest=todayKey();
+    Object.values(passData).forEach(function(cd){ Object.keys(cd).forEach(function(day){ if(day<earliest) earliest=day; }); });
+    from=earliest;
+  }
+  document.getElementById('csv-from').value=from;
+  document.getElementById('csv-to').value=to;
+}
+function renderCsvClassChecks(){
+  var el=document.getElementById('csv-class-checks'); if(!el) return;
+  el.innerHTML=cfg.classes.map(function(c){
+    return '<label style="display:flex;align-items:center;gap:5px;background:#F1EFE8;border:1.5px solid #B4B2A9;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:500;color:#2C2C2A;">'
+      +'<input type="checkbox" id="csv-c-'+c.id+'" checked style="cursor:pointer;" />'+c.name+'</label>';
+  }).join('');
+}
+function exportCSV(){
+  var fromVal=document.getElementById('csv-from').value;
+  var toVal=document.getElementById('csv-to').value;
+  if(!fromVal||!toVal){alert('Please select a date range.');return;}
+  if(fromVal>toVal){alert('From date must be before To date.');return;}
+  var selected=cfg.classes.filter(function(c){
+    var cb=document.getElementById('csv-c-'+c.id); return cb&&cb.checked;
+  });
+  if(!selected.length){alert('Please select at least one class.');return;}
+  var rows=[['Class','Student','Days Present','Days Absent','Days Tardy',
+    'Bathroom Passes','Water Passes','Other Passes','Notes',
+    'On Watch List','Watch Reason','Latest Absence','Latest Tardy']];
+  selected.forEach(function(cls){
+    var cd=passData[cls.id]||{};
+    var days=Object.keys(cd).filter(function(d){ return d>=fromVal&&d<=toVal; }).sort();
+    (cls.students||[]).forEach(function(name){
+      var daysPresent=0,daysAbsent=0,daysTardy=0;
+      var bathroom=0,water=0,other=0,notes=0;
+      var latestAbsence='',latestTardy='';
+      days.forEach(function(day){
+        var trips=(cd[day]||{})[name]||[];
+        var hasAbsent=trips.some(function(t){ return t.type==='absent'; });
+        var hasTardy=trips.some(function(t){ return t.type==='tardy'; });
+        if(hasAbsent){daysAbsent++;latestAbsence=day;}
+        else if(hasTardy){daysTardy++;latestTardy=day;}
+        else daysPresent++;
+        trips.forEach(function(t){
+          if(t.type==='bathroom') bathroom++;
+          else if(t.type==='water') water++;
+          else if(t.type==='other') other++;
+          else if(t.type==='note') notes++;
+        });
+      });
+      var watched=isWatched(cls.id,name);
+      var passCount=getBathroomCount(cls.id,name);
+      var watchReason=watched?(passCount>=cfg.passThreshold?'Auto-flagged ('+passCount+' passes/'+cfg.passWindowDays+'d)':'Manual'):'';
+      var fmtD=function(d){ return d?d.slice(5).replace('-','/'):''; };
+      rows.push([cls.name,name,daysPresent,daysAbsent,daysTardy,bathroom,water,other,notes,
+        watched?'Yes':'No',watchReason,fmtD(latestAbsence),fmtD(latestTardy)]);
+    });
+    if(selected.length>1) rows.push([]);
+  });
+  var csv=rows.map(function(row){
+    return row.map(function(cell){
+      var s=String(cell);
+      return s.indexOf(',')>-1||s.indexOf('"')>-1||s.indexOf('\n')>-1?'"'+s.replace(/"/g,'""')+'"':s;
+    }).join(',');
+  }).join('\n');
+  var blob=new Blob([csv],{type:'text/csv'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='classroom-report-'+fromVal+'-to-'+toVal+'.csv'; a.click();
+}
+
+// SETTINGS
+function goToSettings(){
+  showPhase('phase-settings');
+  document.getElementById('cfg-pass-thresh').value=cfg.passThreshold;
+  document.getElementById('cfg-pt-lbl').textContent=cfg.passThreshold+' passes';
+  document.getElementById('cfg-pass-win').value=cfg.passWindowDays;
+  document.getElementById('cfg-pw-lbl').textContent=cfg.passWindowDays+' days';
+  document.getElementById('cfg-timeout').value=cfg.timeoutMins;
+  document.getElementById('cfg-to-lbl').textContent=cfg.timeoutMins+' min';
+  renderCfgNoteLib(); renderCfgDestLib(); renderCfgRosters(); renderCsvClassChecks();
+  // Default date range to this month
+  var today=new Date();
+  var pad=function(n){ return String(n).padStart(2,'0'); };
+  var fromEl=document.getElementById('csv-from');
+  var toEl=document.getElementById('csv-to');
+  if(!fromEl.value) fromEl.value=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-01';
+  if(!toEl.value) toEl.value=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
+}
+function saveThresholds(){
+  cfg.passThreshold=parseInt(document.getElementById('cfg-pass-thresh').value);
+  cfg.passWindowDays=parseInt(document.getElementById('cfg-pass-win').value);
+  cfg.timeoutMins=parseInt(document.getElementById('cfg-timeout').value);
+  save(); alert('Saved!');
+}
+function renderCfgNoteLib(){
+  var el=document.getElementById('cfg-note-lib'); if(!el) return;
+  if(!noteLib.length){el.innerHTML='<p style="font-size:12px;color:#888780;">No saved notes yet.</p>';return;}
+  el.innerHTML=noteLib.map(function(note,i){
+    return '<span class="lib-chip lib-chip-note" style="cursor:default;">'+note
+      +'<button class="chip-del" onclick="removeLibNote('+i+')">&times;</button></span>';
+  }).join('');
+}
+function addLibNote(){
+  var inp=document.getElementById('cfg-note-inp');
+  var text=inp.value.trim(); if(!text) return;
+  if(noteLib.indexOf(text)===-1) noteLib.push(text);
+  inp.value=''; save(); renderCfgNoteLib();
+}
+function removeLibNote(i){ noteLib.splice(i,1); save(); renderCfgNoteLib(); }
+function renderCfgDestLib(){
+  var el=document.getElementById('cfg-dest-lib'); if(!el) return;
+  if(!destLib.length){el.innerHTML='<p style="font-size:12px;color:#888780;">No saved destinations yet.</p>';return;}
+  el.innerHTML=destLib.map(function(d,i){
+    return '<span class="lib-chip lib-chip-dest" style="cursor:default;">'+d
+      +'<button class="chip-del" onclick="removeLibDest('+i+')">&times;</button></span>';
+  }).join('');
+}
+function addLibDest(){
+  var inp=document.getElementById('cfg-dest-inp');
+  var text=inp.value.trim(); if(!text) return;
+  if(destLib.indexOf(text)===-1) destLib.push(text);
+  inp.value=''; save(); renderCfgDestLib();
+}
+function removeLibDest(i){ destLib.splice(i,1); save(); renderCfgDestLib(); }
+function renderCfgRosters(){
+  var el=document.getElementById('cfg-rosters'); if(!el) return;
+  el.innerHTML=cfg.classes.map(function(c){
+    return '<div style="margin-bottom:12px;">'
+      +'<p style="font-size:13px;font-weight:600;color:#185FA5;margin-bottom:6px;">'+c.name+'</p>'
+      +'<textarea id="cfgr-'+c.id+'" rows="4">'+((c.students||[]).join('\n'))+'</textarea>'
+      +'</div>';
+  }).join('');
+}
+function saveRosterUpdates(){
+  cfg.classes.forEach(function(c){
+    var ta=document.getElementById('cfgr-'+c.id);
+    if(ta&&ta.value.trim()) c.students=parseNames(ta.value.trim());
+  });
+  save(); showPhase('phase-tracker'); renderAll();
+}
+function clearAllHistory(){
+  if(!confirm('Clear ALL history? Cannot be undone.')) return;
+  passData={}; save(); showPhase('phase-tracker'); renderAll();
+}
+function resetEverything(){
+  if(!confirm('Full reset - delete all data?')) return;
+  ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch'].forEach(function(k){ localStorage.removeItem(k); });
+  cfg={classes:[],timeoutMins:7,passThreshold:5,passWindowDays:7};
+  passData={}; noteLib=[]; destLib=[]; watchList={};
+  activeClassId=null; absentMode=false; pendingCount=0;
+  document.querySelectorAll('.num-btn').forEach(function(b){ b.classList.remove('active'); });
+  ['s-names','s-rosters','s-thresholds'].forEach(function(id){ document.getElementById(id).style.display='none'; });
+  if(tickerInterval) clearInterval(tickerInterval);
+  showPhase('phase-setup');
+}
+
+// INIT
+function init(){
+  var hasData=loadStorage();
+  if(hasData&&cfg.classes.length>0){ activeClassId=cfg.classes[0].id; launchTracker(); }
+  else showPhase('phase-setup');
+}
+init();
+</script>
+</body>
+</html>

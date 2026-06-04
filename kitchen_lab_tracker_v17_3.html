@@ -1,0 +1,1379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kitchen Lab Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F4CB;</text></svg>" />
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; }
+    body { background: #f1efec; margin: 0; padding: 12px; }
+    p { margin: 0; }
+
+    .section { background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .sec-label { font-size: 12px; color: #5F5E5A; margin: 0 0 8px; }
+    .page-title { font-size: 15px; font-weight: 700; color: #2C2C2A; margin: 0 0 4px; }
+
+    .num-btn { width: 44px; height: 44px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 16px; font-weight: 600; color: #2C2C2A; transition: all 0.15s; }
+    .num-btn:hover { background: #e8e6e0; }
+    .num-btn.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+
+    .grp-btn { padding: 8px 6px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 600; color: #2C2C2A !important; text-align: center; display: block; width: 100%; transition: all 0.15s; }
+    .grp-btn:hover { background: #e8e6e0 !important; }
+
+    .class-tab { padding: 8px 12px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 12px; font-weight: 600; color: #2C2C2A; transition: all 0.15s; white-space: nowrap; }
+    .class-tab:hover { background: #e8e6e0; }
+    .class-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+
+    .stu-btn { padding: 8px 8px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 500; color: #2C2C2A !important; text-align: center; transition: all 0.15s; line-height: 1.3; }
+    .stu-btn:hover { background: #e8e6e0 !important; }
+    .stu-btn.assigned { color: #ffffff !important; border-color: transparent !important; }
+
+    .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
+    .small-btn:hover { background: #F1EFE8; }
+    .export-btn { font-size: 13px; background: #2C2C2A; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; color: #ffffff; font-weight: 600; }
+    .export-btn:hover { background: #444441; }
+    .primary-btn { font-size: 14px; background: #185FA5; border: none; border-radius: 8px; padding: 11px 20px; cursor: pointer; color: #ffffff; font-weight: 600; width: 100%; margin-top: 4px; }
+    .primary-btn:hover { background: #144d87; }
+    .random-btn { font-size: 13px; background: #2A9E5F; border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer; color: #ffffff; font-weight: 600; white-space: nowrap; }
+    .random-btn:hover { background: #227a4a; }
+    .danger-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #C0392B; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #C0392B; font-weight: 500; }
+    .danger-btn:hover { background: #FCEBEB; }
+    .add-confirm { padding: 7px 14px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #185FA5; color: #ffffff; white-space: nowrap; }
+
+    .obs-btn { position: relative; display: flex; align-items: stretch; border-radius: 8px; overflow: hidden; min-height: 40px; }
+    .obs-tap { flex: 1; border: none; padding: 8px 24px 8px 8px; font-size: 12px; font-weight: 600; text-align: left; cursor: pointer; line-height: 1.3; display: flex; align-items: center; gap: 6px; font-family: sans-serif; }
+    .obs-tap:active { opacity: 0.8; }
+    .obs-del { position: absolute; top: 3px; right: 4px; background: none; border: none; opacity: 0.4; cursor: pointer; font-size: 11px; padding: 2px 3px; line-height: 1; }
+    .obs-del:hover { opacity: 0.85; }
+    .col-head { font-size: 11px; font-weight: 600; text-align: center; padding: 3px 0 6px; }
+
+    .type-toggle { display: flex; border: 1.5px solid #B4B2A9; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+    .type-toggle button { padding: 7px 12px; font-size: 13px; font-weight: 500; border: none; cursor: pointer; background: #F1EFE8; color: #5F5E5A; }
+    .type-toggle button.sel-pos { background: #EAF3DE; color: #27500A; }
+    .type-toggle button.sel-ded { background: #FCEBEB; color: #791F1F; }
+
+    .add-row { display: flex; gap: 8px; align-items: center; }
+    .add-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; min-width: 0; font-family: sans-serif; }
+    .add-row input:focus { outline: none; border-color: #185FA5; }
+
+    .badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; white-space: nowrap; }
+    .badge-pos { background: #C0DD97; color: #27500A; }
+    .badge-ded { background: #F7C1C1; color: #791F1F; }
+
+    .score-card { border-radius: 8px; padding: 8px 4px; text-align: center; }
+    .group-block { margin-bottom: 10px; }
+    .log-item { font-size: 12px; padding: 3px 0; border-bottom: 0.5px solid #D3D1C7; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .log-item:last-child { border-bottom: none; }
+
+    textarea { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #2C2C2A; background: #F1EFE8; resize: vertical; font-family: sans-serif; }
+    textarea:focus { outline: none; border-color: #185FA5; }
+
+    .hint { font-size: 12px; text-align: center; min-height: 18px; margin-top: 6px; }
+    .preview-tag { display: inline-block; background: #185FA5; color: #fff; border-radius: 6px; padding: 2px 7px; font-size: 11px; margin: 2px; }
+    .class-name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .class-name-row label { font-size: 13px; font-weight: 600; color: #185FA5; min-width: 70px; }
+    .class-name-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; font-family: sans-serif; }
+    .class-name-row input:focus { outline: none; border-color: #185FA5; }
+
+    .prev-lab-card { border: 1.5px solid #A8C0EE; border-radius: 8px; padding: 8px 10px; margin-bottom: 6px; background: #ffffff; cursor: pointer; }
+    .prev-lab-card:hover { background: #EAF3F9; }
+
+    .lab-name-bar { background: #185FA5; color: #ffffff; border-radius: 8px; padding: 8px 12px; font-size: 13px; font-weight: 600; }
+    .hist-row { font-size: 12px; padding: 3px 0; border-bottom: 0.5px solid #e8e6e0; display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .hist-row:last-child { border-bottom: none; }
+    .hist-head { font-size: 13px; font-weight: 700; color: #185FA5; border-bottom: 1.5px solid #B4B2A9; padding-bottom: 4px; margin-bottom: 6px; }
+    .warn-banner { background: #FFF8E0; border: 1.5px solid #C09A20; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: #7A5E00; }
+
+    .phase { display: none; }
+    .phase.visible { display: block; }
+  </style>
+</head>
+<body>
+<div style="padding:4px;max-width:520px;margin:0 auto;">
+
+  <!-- PHASE 1: CLASS COUNT & NAMES -->
+  <div class="phase" id="phase-count">
+    <div class="section">
+      <p class="page-title">Kitchen Lab Tracker</p>
+      <p class="sec-label" style="margin:0;">How many classes do you teach?</p>
+    </div>
+    <div class="section">
+      <p class="sec-label">Number of classes</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="class-count-btns">
+        <button class="num-btn" onclick="pickClassCount(this)">1</button>
+        <button class="num-btn" onclick="pickClassCount(this)">2</button>
+        <button class="num-btn" onclick="pickClassCount(this)">3</button>
+        <button class="num-btn" onclick="pickClassCount(this)">4</button>
+        <button class="num-btn" onclick="pickClassCount(this)">5</button>
+        <button class="num-btn" onclick="pickClassCount(this)">6</button>
+        <button class="num-btn" onclick="pickClassCount(this)">7</button>
+        <button class="num-btn" onclick="pickClassCount(this)">8</button>
+      </div>
+    </div>
+    <div class="section" id="class-name-section" style="display:none;">
+      <p class="sec-label" style="margin-bottom:10px;">Name your classes</p>
+      <div id="class-name-inputs"></div>
+      <button class="primary-btn" onclick="goToObsSetup()">Next: Set up observation labels &rarr;</button>
+    </div>
+  </div>
+
+  <!-- PHASE 2: OBSERVATION LABEL SETUP -->
+  <div class="phase" id="phase-obs-setup">
+    <div class="section">
+      <p class="page-title">Observation Labels</p>
+      <p class="sec-label" style="margin:0;">Set your default labels. They appear every lab day. You can adjust each day too.</p>
+    </div>
+    <div class="section">
+      <div class="warn-banner">Start empty and build your own, or tap suggestions below.</div>
+      <p style="font-size:11px;font-weight:600;color:#5F5E5A;margin-bottom:6px;">SUGGESTED POSITIVES</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;" id="suggested-pos"></div>
+      <p style="font-size:11px;font-weight:600;color:#5F5E5A;margin-bottom:6px;">SUGGESTED DEDUCTIONS</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="suggested-ded"></div>
+    </div>
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <p class="sec-label" style="margin:0;">Your labels</p>
+        <button class="small-btn" onclick="toggleObsSetupForm()">+ Add label</button>
+      </div>
+      <div id="obs-setup-form" style="display:none;background:#F1EFE8;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <div class="type-toggle">
+          <button id="obs-tog-pos" class="sel-pos" onclick="setObsSetupType('positive')">+ Positive</button>
+          <button id="obs-tog-ded" onclick="setObsSetupType('deduction')">&minus; Deduction</button>
+        </div>
+        <div class="add-row">
+          <input id="obs-setup-input" type="text" placeholder="e.g. Used cutting board correctly" maxlength="40" onkeydown="if(event.key==='Enter')addObsSetupLabel()" />
+          <button class="add-confirm" onclick="addObsSetupLabel()">Add</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+        <div class="col-head" style="color:#27500A;">+ Positives</div>
+        <div class="col-head" style="color:#791F1F;">&minus; Deductions</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start;" id="obs-setup-grid"></div>
+      <p class="hint" id="obs-setup-hint" style="color:#5F5E5A;">No labels yet</p>
+    </div>
+    <div class="section" style="padding:12px 16px;">
+      <button class="primary-btn" onclick="goToRosters()">Next: Enter rosters &rarr;</button>
+    </div>
+  </div>
+
+  <!-- PHASE 3: ROSTERS -->
+  <div class="phase" id="phase-rosters">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <p class="page-title">Student Rosters</p>
+          <p class="sec-label" style="margin:0;">One name per line. Duplicates get a last initial.</p>
+        </div>
+        <button class="small-btn" onclick="showPhase('phase-obs-setup')">&#8617; Back</button>
+      </div>
+    </div>
+    <div id="roster-sections"></div>
+    <div class="section" style="padding:12px 16px;">
+      <button class="primary-btn" onclick="saveRosters()">Save &amp; Start Tracking &rarr;</button>
+    </div>
+  </div>
+
+  <!-- PHASE 4: LAB SETUP -->
+  <div class="phase" id="phase-setup">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="page-title" id="setup-title">Lab Setup</p>
+        <button class="small-btn" onclick="goToSettings()">&#9881; Settings</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="setup-class-tabs"></div>
+    </div>
+
+    <div class="section">
+      <p class="sec-label">Today's lab name</p>
+      <div class="add-row">
+        <input id="lab-name-input" type="text" maxlength="60" placeholder="e.g. Knife Skills, Stocks &amp; Sauces..." />
+      </div>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">Today's observation labels</p>
+        <button class="small-btn" onclick="toggleDayObsForm()">+ Add label</button>
+      </div>
+      <div id="day-obs-form" style="display:none;background:#F1EFE8;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <div class="type-toggle">
+          <button id="day-tog-pos" class="sel-pos" onclick="setDayObsType('positive')">+ Positive</button>
+          <button id="day-tog-ded" onclick="setDayObsType('deduction')">&minus; Deduction</button>
+        </div>
+        <div class="add-row">
+          <input id="day-obs-input" type="text" placeholder="e.g. Used scale correctly" maxlength="40" onkeydown="if(event.key==='Enter')addDayObsLabel()" />
+          <button class="add-confirm" onclick="addDayObsLabel()">Add</button>
+        </div>
+        <p style="font-size:11px;color:#888780;margin-top:6px;">Today only, unless saved as default in Settings.</p>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+        <div class="col-head" style="color:#27500A;">+ Positives</div>
+        <div class="col-head" style="color:#791F1F;">&minus; Deductions</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start;" id="day-obs-grid"></div>
+    </div>
+
+    <!-- Group assignment with 3 start options -->
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:8px;">Assign students to groups</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;">
+        <button onclick="startClearGroups()"
+          style="border:2px solid #888780;border-radius:8px;padding:8px 4px;background:#ffffff;cursor:pointer;font-size:11px;font-weight:600;color:#2C2C2A;line-height:1.5;">
+          Start fresh<br><span style="font-weight:400;font-size:10px;">empty groups</span>
+        </button>
+        <button onclick="showRandomPanel()"
+          style="border:2px solid #2A9E5F;border-radius:8px;padding:8px 4px;background:#ffffff;cursor:pointer;font-size:11px;font-weight:600;color:#2A9E5F;line-height:1.5;">
+          &#x1F500; Random<br><span style="font-weight:400;font-size:10px;">shuffle &amp; assign</span>
+        </button>
+        <button onclick="showPrevPanel()"
+          style="border:2px solid #185FA5;border-radius:8px;padding:8px 4px;background:#ffffff;cursor:pointer;font-size:11px;font-weight:600;color:#185FA5;line-height:1.5;">
+          &#128337; Previous<br><span style="font-weight:400;font-size:10px;">reuse a past lab</span>
+        </button>
+      </div>
+
+      <div id="random-panel" style="display:none;background:#F1EFE8;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <p style="font-size:12px;font-weight:600;color:#2C2C2A;margin-bottom:8px;">Randomly assign into:</p>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <select id="random-group-count" style="border:1.5px solid #888780;border-radius:8px;padding:6px 10px;font-size:13px;background:#ffffff;color:#2C2C2A;">
+            <option value="2">2 groups</option>
+            <option value="3">3 groups</option>
+            <option value="4">4 groups</option>
+            <option value="5">5 groups</option>
+            <option value="6">6 groups</option>
+            <option value="7">7 groups</option>
+            <option value="8" selected>8 groups</option>
+          </select>
+          <button class="random-btn" onclick="randomizeGroups()">&#x1F500; Randomize now</button>
+        </div>
+      </div>
+
+      <div id="prev-panel" style="display:none;background:#EAF3F9;border-radius:8px;padding:10px 12px;margin-bottom:10px;border:1.5px solid #A8C0EE;">
+        <p style="font-size:12px;font-weight:600;color:#1A3F7A;margin-bottom:8px;">Load groups from a previous lab:</p>
+        <div id="prev-group-list"></div>
+      </div>
+
+      <div style="display:grid;gap:6px;margin-bottom:6px;" id="setup-group-btns"></div>
+      <p class="hint" id="setup-group-hint" style="color:#185FA5;">Choose an option above, or tap a group then tap students</p>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">Students</p>
+        <button class="small-btn" onclick="resetAssignments()">Reset all</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="student-assign-grid"></div>
+      <p class="hint" id="unassigned-hint" style="color:#A32D2D;margin-top:8px;"></p>
+    </div>
+
+    <div class="section" style="padding:12px 16px;">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;" id="setup-summary"></div>
+      <button class="primary-btn" id="start-btn" onclick="startLab()">Start Lab</button>
+    </div>
+  </div>
+
+  <!-- PHASE 5: LAB -->
+  <div class="phase" id="phase-lab">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="lab-name-bar" style="flex:1;margin-right:8px;" id="lab-name-bar"></div>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="showHistory()">History</button>
+          <button class="small-btn" onclick="goToSetup()">&#8617; Setup</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="lab-class-tabs"></div>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">Select groups <span style="font-weight:400;">(tap to toggle)</span></p>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="selectAll()">All</button>
+          <button class="small-btn" onclick="selectNone()">None</button>
+        </div>
+      </div>
+      <div style="display:grid;gap:6px;" id="lab-group-btns"></div>
+      <p class="hint" id="lab-hint" style="color:#185FA5;"></p>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <p class="sec-label" style="margin:0;">Students in selected groups</p>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="selectAllStudents()">All</button>
+          <button class="small-btn" onclick="selectNoStudents()">None</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="student-obs-grid"></div>
+      <p class="hint" id="stu-hint" style="color:#5F5E5A;">Tap students to select, then tap an observation</p>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <p class="sec-label" style="margin:0;">Observations</p>
+        <button class="small-btn" onclick="toggleLabAddForm()">+ Add label</button>
+      </div>
+      <div id="lab-add-form" style="display:none;background:#F1EFE8;border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+        <div class="type-toggle">
+          <button id="lab-tog-pos" class="sel-pos" onclick="setLabNewType('positive')">+ Positive</button>
+          <button id="lab-tog-ded" onclick="setLabNewType('deduction')">&minus; Deduction</button>
+        </div>
+        <div class="add-row">
+          <input id="lab-new-label" type="text" placeholder="e.g. Used cutting board correctly" maxlength="40" onkeydown="if(event.key==='Enter')addLabCustomLabel()" />
+          <button class="add-confirm" onclick="addLabCustomLabel()">Add</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        <div class="col-head" style="color:#27500A;">+ Positives</div>
+        <div class="col-head" style="color:#791F1F;">&minus; Deductions</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start;" id="btn-grid"></div>
+    </div>
+
+    <div class="section">
+      <p class="sec-label">Notes</p>
+      <textarea id="notes" style="min-height:72px;" placeholder="Type observation notes here..."></textarea>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <p class="sec-label" style="margin:0;">Scores</p>
+        <div style="display:flex;gap:8px;">
+          <button class="export-btn" onclick="exportLog()">Export log</button>
+          <button class="small-btn" onclick="clearLog()">Clear log</button>
+        </div>
+      </div>
+      <div id="score-cards" style="display:grid;gap:6px;margin-bottom:14px;"></div>
+      <p class="sec-label" style="margin:0 0 8px;">Log by group</p>
+      <div id="log-list">
+        <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No observations yet</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 6: HISTORY -->
+  <div class="phase" id="phase-history">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="page-title">Lab History</p>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="exportHistory()">Export all</button>
+          <button class="small-btn" onclick="showPhase('phase-lab')">Back</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="hist-class-tabs"></div>
+    </div>
+    <div id="history-area">
+      <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p>
+    </div>
+  </div>
+
+  <!-- PHASE 7: SETTINGS -->
+  <div class="phase" id="phase-settings">
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <p class="page-title">Settings</p>
+        <button class="small-btn" onclick="showPhase('phase-setup')">Back</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:4px;">Default observation labels</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">These load every lab day. You can still adjust per-day during setup.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:6px;">
+        <div class="col-head" style="color:#27500A;">+ Positives</div>
+        <div class="col-head" style="color:#791F1F;">&minus; Deductions</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:start;margin-bottom:10px;" id="settings-obs-grid"></div>
+      <div id="settings-obs-form" style="display:none;background:#F1EFE8;border-radius:8px;padding:10px 12px;margin-bottom:8px;">
+        <div class="type-toggle">
+          <button id="settings-tog-pos" class="sel-pos" onclick="setSettingsObsType('positive')">+ Positive</button>
+          <button id="settings-tog-ded" onclick="setSettingsObsType('deduction')">&minus; Deduction</button>
+        </div>
+        <div class="add-row">
+          <input id="settings-obs-input" type="text" placeholder="New label" maxlength="40" onkeydown="if(event.key==='Enter')addSettingsObs()" />
+          <button class="add-confirm" onclick="addSettingsObs()">Add</button>
+        </div>
+      </div>
+      <button class="small-btn" onclick="toggleSettingsObsForm()">+ Add label</button>
+    </div>
+
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:10px;">Update rosters</p>
+      <div id="settings-rosters"></div>
+      <button class="primary-btn" style="margin-top:8px;" onclick="saveRosterUpdates()">Save roster changes</button>
+    </div>
+
+    <div class="section">
+      <p class="sec-label" style="margin-bottom:8px;">Danger zone</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="danger-btn" onclick="clearHistory()">Clear all history</button>
+        <button class="danger-btn" onclick="resetEverything()">Full reset</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script>
+var GROUP_COLORS = [
+  '#3B7DD8','#C0562A','#2A9E5F','#8B4DB8',
+  '#C09A20','#2A8FAD','#B83060','#5C7A2A'
+];
+var ABSENT_COLOR = '#6B6B6B';
+var SUGGESTED_POS = ['Ready to Go','Clean workspace','Proper technique','Good teamwork','Safe food handling','Following instructions'];
+var SUGGESTED_DED = ['Off Task during instructions','No handwashing','Unsafe knife use','Left Kitchen before signed off','Cross-contamination','Improper storage'];
+
+// STATE
+var cfg = { classes: [], groupCount: 8 };
+var labData = {};
+var defaultObs = [];
+var dayObs = [];
+var history = [];
+var activeClassId = null;
+var histActiveClassId = null;
+var setupActiveGroup = null;
+var selectedGroups = new Set();
+var selectedStudents = new Set();
+var scores = {};
+var log = [];
+var labName = '';
+var labNewType = 'positive';
+var obsSetupType = 'positive';
+var dayObsType = 'positive';
+var settingsObsType = 'positive';
+var pendingClassCount = 0;
+
+// PERSISTENCE
+function save() {
+  try { localStorage.setItem('klt_cfg', JSON.stringify(cfg)); } catch(e){}
+  try { localStorage.setItem('klt_labdata', JSON.stringify(labData)); } catch(e){}
+  try { localStorage.setItem('klt_defobs', JSON.stringify(defaultObs)); } catch(e){}
+  try { localStorage.setItem('klt_history', JSON.stringify(history)); } catch(e){}
+}
+function loadStorage() {
+  try {
+    var c = localStorage.getItem('klt_cfg');
+    var d = localStorage.getItem('klt_labdata');
+    var o = localStorage.getItem('klt_defobs');
+    var h = localStorage.getItem('klt_history');
+    if (c) cfg = JSON.parse(c);
+    if (d) labData = JSON.parse(d);
+    if (o) defaultObs = JSON.parse(o);
+    if (h) history = JSON.parse(h);
+    return !!(c && cfg.classes && cfg.classes.length);
+  } catch(e) { return false; }
+}
+
+// HELPERS
+function uid() { return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(function(p) { p.classList.remove('visible'); });
+  document.getElementById(id).classList.add('visible');
+}
+function classById(id) {
+  return cfg.classes.find(function(c) { return c.id === id; });
+}
+function currentLabData() {
+  return labData[activeClassId] || {students:[],studentGroups:{},groups:[]};
+}
+function groupColor(g) {
+  if (g === 'Absent') return ABSENT_COLOR;
+  var idx = parseInt(g.replace(/\D/g,'')) - 1;
+  return GROUP_COLORS[idx >= 0 ? idx % GROUP_COLORS.length : 0] || '#888780';
+}
+function parseNames(raw) {
+  var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+  var parsed = lines.map(function(l) {
+    var p = l.split(/\s+/);
+    return {first: p[0], last: p.length > 1 ? p[p.length-1] : ''};
+  });
+  var firsts = parsed.map(function(p) { return p.first.toLowerCase(); });
+  var dupes = new Set(firsts.filter(function(n,i) { return firsts.indexOf(n) !== i; }));
+  return parsed.map(function(p) {
+    return dupes.has(p.first.toLowerCase()) && p.last
+      ? p.first + ' ' + p.last[0].toUpperCase() + '.' : p.first;
+  }).sort(function(a,b) { return a.localeCompare(b); });
+}
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length-1; i > 0; i--) {
+    var j = Math.floor(Math.random()*(i+1));
+    var tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
+// PHASE 1 - CLASS COUNT & NAMES
+function pickClassCount(btn) {
+  document.querySelectorAll('#class-count-btns .num-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  pendingClassCount = parseInt(btn.textContent);
+  document.getElementById('class-name-section').style.display = 'block';
+  var html = '';
+  for (var i = 0; i < pendingClassCount; i++) {
+    html += '<div class="class-name-row">'
+      + '<label>Class ' + (i+1) + '</label>'
+      + '<input type="text" id="cname-' + i + '" placeholder="e.g. Period ' + (i+1) + '" maxlength="40" />'
+      + '</div>';
+  }
+  document.getElementById('class-name-inputs').innerHTML = html;
+  document.getElementById('cname-0').focus();
+}
+
+function goToObsSetup() {
+  if (!pendingClassCount) { alert('Please select how many classes you have.'); return; }
+  cfg.classes = [];
+  for (var i = 0; i < pendingClassCount; i++) {
+    var el = document.getElementById('cname-'+i);
+    var name = el ? el.value.trim() : '';
+    if (!name) name = 'Class ' + (i+1);
+    var id = uid();
+    if (!labData[id]) labData[id] = {students:[],studentGroups:{},groups:[]};
+    cfg.classes.push({id: id, name: name});
+  }
+  save();
+  showPhase('phase-obs-setup');
+  renderSuggestedObs();
+  renderObsSetupGrid();
+}
+
+// PHASE 2 - OBS SETUP
+function renderSuggestedObs() {
+  var posHtml = '', dedHtml = '';
+  SUGGESTED_POS.forEach(function(l) {
+    var safe = l.replace(/'/g, '\\x27');
+    posHtml += '<button class="small-btn" onclick="addSuggestedObs(\'positive\',\'' + safe + '\')">+ ' + l + '</button>';
+  });
+  SUGGESTED_DED.forEach(function(l) {
+    var safe = l.replace(/'/g, '\\x27');
+    dedHtml += '<button class="small-btn" onclick="addSuggestedObs(\'deduction\',\'' + safe + '\')">+ ' + l + '</button>';
+  });
+  document.getElementById('suggested-pos').innerHTML = posHtml;
+  document.getElementById('suggested-ded').innerHTML = dedHtml;
+}
+
+function addSuggestedObs(type, label) {
+  if (!defaultObs.find(function(o) { return o.label===label; })) {
+    defaultObs.push({type: type, label: label});
+    save(); renderObsSetupGrid();
+  }
+}
+function toggleObsSetupForm() {
+  var f = document.getElementById('obs-setup-form');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+  if (f.style.display==='block') setTimeout(function() { document.getElementById('obs-setup-input').focus(); }, 50);
+}
+function setObsSetupType(t) {
+  obsSetupType = t;
+  document.getElementById('obs-tog-pos').className = t==='positive' ? 'sel-pos' : '';
+  document.getElementById('obs-tog-ded').className = t==='deduction' ? 'sel-ded' : '';
+}
+function addObsSetupLabel() {
+  var inp = document.getElementById('obs-setup-input');
+  var label = inp.value.trim(); if (!label) return;
+  if (!defaultObs.find(function(o) { return o.label===label; })) defaultObs.push({type:obsSetupType,label:label});
+  inp.value=''; document.getElementById('obs-setup-form').style.display='none';
+  save(); renderObsSetupGrid();
+}
+function removeDefaultObs(i) { defaultObs.splice(i,1); save(); renderObsSetupGrid(); }
+function renderObsSetupGrid() {
+  renderObsGrid('obs-setup-grid', defaultObs, 'removeDefaultObs');
+  var hint = document.getElementById('obs-setup-hint');
+  if (hint) hint.textContent = defaultObs.length ? defaultObs.length + ' labels set' : 'No labels yet';
+}
+function goToRosters() { showPhase('phase-rosters'); renderRosterInputs('roster-sections'); }
+
+// PHASE 3 - ROSTERS
+function renderRosterInputs(containerId) {
+  var el = document.getElementById(containerId); if (!el) return;
+  var html = '';
+  cfg.classes.forEach(function(c) {
+    var existing = labData[c.id] ? labData[c.id].students : [];
+    html += '<div class="section">'
+      + '<p style="font-size:13px;font-weight:600;color:#185FA5;margin:0 0 6px;">' + c.name + '</p>'
+      + '<textarea id="roster-' + c.id + '" rows="5" placeholder="Paste names here, one per line...">'
+      + existing.join('\n') + '</textarea>'
+      + '<div id="preview-' + c.id + '" style="margin-top:6px;min-height:18px;"></div>'
+      + '<p id="phint-' + c.id + '" style="font-size:11px;color:#27500A;margin-top:3px;"></p>'
+      + '</div>';
+  });
+  el.innerHTML = html;
+  cfg.classes.forEach(function(c) {
+    var ta = document.getElementById('roster-'+c.id);
+    if (ta) {
+      ta.addEventListener('input', function() { livePreview(c.id); });
+      livePreview(c.id);
+    }
+  });
+}
+function livePreview(classId) {
+  var raw = (document.getElementById('roster-'+classId)||{}).value||'';
+  var prev = document.getElementById('preview-'+classId);
+  var hint = document.getElementById('phint-'+classId);
+  if (!raw.trim()) { if(prev) prev.innerHTML=''; if(hint) hint.textContent=''; return; }
+  var names = parseNames(raw.trim());
+  if (prev) prev.innerHTML = names.map(function(n) { return '<span class="preview-tag">'+n+'</span>'; }).join('');
+  if (hint) hint.textContent = names.length + ' students - sorted A-Z';
+}
+function saveRosters() {
+  cfg.classes.forEach(function(c) {
+    var ta = document.getElementById('roster-'+c.id);
+    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},groups:[]};
+    labData[c.id].students = ta && ta.value.trim() ? parseNames(ta.value.trim()) : [];
+    labData[c.id].studentGroups = {};
+  });
+  save();
+  activeClassId = cfg.classes[0].id;
+  launchSetup();
+}
+
+// PHASE 4 - LAB SETUP
+function launchSetup() {
+  dayObs = JSON.parse(JSON.stringify(defaultObs));
+  setupActiveGroup = null;
+  showPhase('phase-setup');
+  renderSetupClassTabs();
+  renderSetupGroupBtns();
+  renderStudentAssignGrid();
+  renderDayObsGrid();
+  // hide sub-panels
+  document.getElementById('random-panel').style.display = 'none';
+  document.getElementById('prev-panel').style.display = 'none';
+  var d = currentLabData();
+  var gc = d.groups ? d.groups.length : 8;
+  var sel = document.getElementById('random-group-count');
+  if (sel) sel.value = String(Math.min(Math.max(gc,2),8));
+}
+
+function renderSetupClassTabs() {
+  var html = '';
+  cfg.classes.forEach(function(c) {
+    var active = c.id === activeClassId ? ' active' : '';
+    html += '<button class="class-tab' + active + '" onclick="switchSetupClass(\'' + c.id + '\')">' + c.name + '</button>';
+  });
+  document.getElementById('setup-class-tabs').innerHTML = html;
+  var cls = classById(activeClassId);
+  document.getElementById('setup-title').textContent = (cls ? cls.name : '') + ' - Lab Setup';
+}
+function switchSetupClass(id) {
+  activeClassId = id; setupActiveGroup = null;
+  renderSetupClassTabs(); renderSetupGroupBtns(); renderStudentAssignGrid();
+}
+
+// DAY OBS
+function renderDayObsGrid() { renderObsGrid('day-obs-grid', dayObs, 'removeDayObs'); }
+function removeDayObs(i) { dayObs.splice(i,1); renderDayObsGrid(); }
+function toggleDayObsForm() {
+  var f = document.getElementById('day-obs-form');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+  if(f.style.display==='block') setTimeout(function() { document.getElementById('day-obs-input').focus(); }, 50);
+}
+function setDayObsType(t) {
+  dayObsType = t;
+  document.getElementById('day-tog-pos').className = t==='positive' ? 'sel-pos' : '';
+  document.getElementById('day-tog-ded').className = t==='deduction' ? 'sel-ded' : '';
+}
+function addDayObsLabel() {
+  var inp = document.getElementById('day-obs-input');
+  var label = inp.value.trim(); if(!label) return;
+  dayObs.push({type:dayObsType,label:label});
+  inp.value=''; document.getElementById('day-obs-form').style.display='none';
+  renderDayObsGrid();
+}
+
+// SHARED OBS CHIP RENDERER
+function renderObsGrid(gridId, obsArray, removeFn) {
+  var grid = document.getElementById(gridId); if (!grid) return;
+  var pos = [], ded = [];
+  obsArray.forEach(function(b,i) {
+    if (b.type==='positive') pos.push({b:b,i:i});
+    else ded.push({b:b,i:i});
+  });
+  var rows = Math.max(pos.length, ded.length, 1);
+  var html = '';
+  for (var r = 0; r < rows; r++) {
+    html += pos[r] ? makeObsChip(pos[r].b, pos[r].i, removeFn) : '<div></div>';
+    html += ded[r] ? makeObsChip(ded[r].b, ded[r].i, removeFn) : '<div></div>';
+  }
+  grid.innerHTML = html || '<p style="font-size:12px;color:#5F5E5A;grid-column:span 2;text-align:center;">No labels yet</p>';
+}
+function makeObsChip(b, i, removeFn) {
+  var bg = b.type==='positive' ? '#EAF3DE' : '#FCEBEB';
+  var tc = b.type==='positive' ? '#27500A' : '#791F1F';
+  var sym = b.type==='positive' ? '+' : '&minus;';
+  return '<div style="background:' + bg + ';border-radius:8px;padding:7px 8px;display:flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:' + tc + ';">'
+    + '<span style="flex-shrink:0;">' + sym + '</span>'
+    + '<span style="flex:1;line-height:1.3;">' + b.label + '</span>'
+    + '<button onclick="' + removeFn + '(' + i + ')" style="background:none;border:none;color:' + tc + ';opacity:0.4;cursor:pointer;font-size:12px;padding:0;line-height:1;">&times;</button>'
+    + '</div>';
+}
+
+// GROUP START OPTIONS
+function startClearGroups() {
+  document.getElementById('random-panel').style.display = 'none';
+  document.getElementById('prev-panel').style.display = 'none';
+  var d = currentLabData();
+  if (!d.groups || !d.groups.length) {
+    d.groups = [];
+    for (var i = 0; i < 8; i++) d.groups.push('Group ' + (i+1));
+  }
+  d.studentGroups = {};
+  setupActiveGroup = null;
+  renderSetupGroupBtns(); renderStudentAssignGrid();
+}
+function showRandomPanel() {
+  document.getElementById('random-panel').style.display = 'block';
+  document.getElementById('prev-panel').style.display = 'none';
+}
+function showPrevPanel() {
+  document.getElementById('prev-panel').style.display = 'block';
+  document.getElementById('random-panel').style.display = 'none';
+  renderPrevGroupList();
+}
+function randomizeGroups() {
+  var count = parseInt(document.getElementById('random-group-count').value);
+  var d = currentLabData();
+  var students = (d.students||[]).slice();
+  if (!students.length) { alert('No students in this class yet.'); return; }
+  var groups = [];
+  for (var i = 0; i < count; i++) groups.push('Group ' + (i+1));
+  d.groups = groups;
+  var shuffled = shuffle(students);
+  d.studentGroups = {};
+  for (var j = 0; j < shuffled.length; j++) d.studentGroups[shuffled[j]] = groups[j % count];
+  setupActiveGroup = null;
+  document.getElementById('random-panel').style.display = 'none';
+  renderSetupGroupBtns(); renderStudentAssignGrid();
+  var sel = document.getElementById('random-group-count');
+  if (sel) sel.value = String(count);
+}
+function renderPrevGroupList() {
+  var el = document.getElementById('prev-group-list'); if (!el) return;
+  var classHistory = history.filter(function(h) { return h.classId === activeClassId; });
+  if (!classHistory.length) {
+    el.innerHTML = '<p style="font-size:12px;color:#888780;">No previous labs saved for this class yet.</p>';
+    return;
+  }
+  // Most recent per lab name
+  var seen = {};
+  var sorted = classHistory.slice().sort(function(a,b) { return b.dateKey.localeCompare(a.dateKey); });
+  var unique = sorted.filter(function(h) {
+    if (seen[h.labName]) return false; seen[h.labName] = true; return true;
+  });
+  var html = '';
+  unique.forEach(function(h) {
+    var activeGroups = h.groups.filter(function(g) {
+      return Object.values(h.studentGroups).indexOf(g) > -1;
+    });
+    var summaryParts = activeGroups.map(function(g) {
+      var members = Object.keys(h.studentGroups).filter(function(s) { return h.studentGroups[s]===g; });
+      return g + ': ' + members.join(', ');
+    });
+    html += '<div class="prev-lab-card" onclick="loadPrevGroups(\'' + h.id + '\')">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+      + '<span style="font-size:12px;font-weight:600;color:#185FA5;">' + h.labName + '</span>'
+      + '<span style="font-size:11px;color:#888780;">' + h.date + '</span>'
+      + '</div>'
+      + '<p style="font-size:11px;color:#5F5E5A;line-height:1.4;">' + summaryParts.join(' | ') + '</p>'
+      + '</div>';
+  });
+  el.innerHTML = html;
+}
+function loadPrevGroups(histId) {
+  var h = null;
+  for (var i = 0; i < history.length; i++) { if (history[i].id === histId) { h = history[i]; break; } }
+  if (!h) return;
+  var d = currentLabData();
+  var currentStudents = {};
+  (d.students||[]).forEach(function(s) { currentStudents[s] = true; });
+  d.groups = h.groups.slice();
+  d.studentGroups = {};
+  Object.keys(h.studentGroups).forEach(function(s) {
+    if (currentStudents[s]) d.studentGroups[s] = h.studentGroups[s];
+  });
+  setupActiveGroup = null;
+  document.getElementById('prev-panel').style.display = 'none';
+  renderSetupGroupBtns(); renderStudentAssignGrid();
+}
+
+// GROUP BUTTONS & STUDENT GRID (SETUP)
+function renderSetupGroupBtns() {
+  var d = currentLabData();
+  var groups = (d.groups||[]).concat(['Absent']);
+  var cols = Math.min(groups.length, 3);
+  var el = document.getElementById('setup-group-btns');
+  el.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+  var html = '';
+  groups.forEach(function(g) {
+    var isActive = g === setupActiveGroup;
+    var color = groupColor(g);
+    var bg = isActive ? color : '#ffffff';
+    var tc = isActive ? '#ffffff' : '#2C2C2A';
+    var bc = isActive ? color : '#888780';
+    html += '<button class="grp-btn" onclick="selectSetupGroup(\'' + g + '\')"'
+      + ' style="background:' + bg + ' !important;color:' + tc + ' !important;border-color:' + bc + ' !important;">'
+      + g + '</button>';
+  });
+  el.innerHTML = html;
+  document.getElementById('setup-group-hint').textContent = setupActiveGroup
+    ? 'Assigning to: ' + setupActiveGroup : 'Choose an option above, or tap a group then tap students';
+}
+function selectSetupGroup(g) { setupActiveGroup = g; renderSetupGroupBtns(); renderStudentAssignGrid(); }
+
+function renderStudentAssignGrid() {
+  var d = currentLabData();
+  var students = d.students||[];
+  var html = '';
+  students.forEach(function(s) {
+    var grp = d.studentGroups[s];
+    var bg = grp ? groupColor(grp) : '#ffffff';
+    var tc = grp ? '#ffffff' : '#2C2C2A';
+    var border = grp ? 'transparent' : '#888780';
+    var safe = s.replace(/'/g, '\\x27');
+    html += '<button class="stu-btn ' + (grp ? 'assigned' : '') + '"'
+      + ' onclick="toggleStudentAssign(\'' + safe + '\')"'
+      + ' style="background:' + bg + ' !important;color:' + tc + ' !important;border-color:' + border + ' !important;">'
+      + s + (grp ? '<br><span style="font-size:9px;opacity:0.85;">' + grp + '</span>' : '')
+      + '</button>';
+  });
+  document.getElementById('student-assign-grid').innerHTML = html;
+  renderSetupSummary(); updateUnassignedHint();
+}
+function toggleStudentAssign(name) {
+  if (!setupActiveGroup) {
+    var h = document.getElementById('setup-group-hint');
+    h.textContent = 'Select a group first!'; h.style.color = '#A32D2D';
+    setTimeout(function() { h.style.color='#185FA5'; h.textContent='Choose an option above, or tap a group then tap students'; }, 1500);
+    return;
+  }
+  var d = currentLabData();
+  if (d.studentGroups[name] === setupActiveGroup) delete d.studentGroups[name];
+  else d.studentGroups[name] = setupActiveGroup;
+  renderStudentAssignGrid();
+}
+function resetAssignments() {
+  var d = currentLabData(); d.studentGroups = {};
+  setupActiveGroup = null; renderSetupGroupBtns(); renderStudentAssignGrid();
+}
+function renderSetupSummary() {
+  var d = currentLabData();
+  var groups = (d.groups||[]).concat(['Absent']);
+  var students = d.students||[];
+  var el = document.getElementById('setup-summary');
+  el.style.gridTemplateColumns = 'repeat(' + Math.min(groups.length,3) + ',1fr)';
+  var html = '';
+  groups.forEach(function(g) {
+    var members = students.filter(function(s) { return d.studentGroups[s]===g; });
+    var color = groupColor(g);
+    var bg = members.length ? color : '#F1EFE8';
+    var tc = members.length ? '#ffffff' : '#888780';
+    html += '<div style="background:' + bg + ';border-radius:8px;padding:6px 8px;font-size:11px;color:' + tc + ';">'
+      + '<strong>' + g + '</strong><br>' + (members.length ? members.join(', ') : 'empty') + '</div>';
+  });
+  el.innerHTML = html;
+}
+function updateUnassignedHint() {
+  var d = currentLabData();
+  var unassigned = (d.students||[]).filter(function(s) { return !d.studentGroups[s]; });
+  var hint = document.getElementById('unassigned-hint');
+  var btn = document.getElementById('start-btn');
+  if (unassigned.length) {
+    hint.textContent = unassigned.length + ' unassigned: ' + unassigned.join(', ');
+    hint.style.color = '#A32D2D';
+    btn.textContent = 'Start Lab (' + unassigned.length + ' unassigned)';
+  } else {
+    hint.textContent = 'All students assigned!'; hint.style.color = '#27500A';
+    btn.textContent = 'Start Lab';
+  }
+}
+
+function startLab() {
+  labName = document.getElementById('lab-name-input').value.trim() || 'Lab ' + new Date().toLocaleDateString();
+  var d = currentLabData();
+  scores = {};
+  (d.students||[]).forEach(function(s) { scores[s] = 0; });
+  log = []; selectedGroups = new Set(); selectedStudents = new Set();
+  showPhase('phase-lab');
+  document.getElementById('lab-name-bar').textContent = labName;
+  renderLabClassTabs(); renderLabGroupBtns(); renderObsButtons();
+  renderScores(); renderStudentObsGrid(); renderLog();
+}
+function goToSetup() { if (currentSession().log && currentSession().log.length > 0) saveToHistory(); launchSetup(); }
+
+// PHASE 5 - LAB
+function renderLabClassTabs() {
+  var html = '';
+  cfg.classes.forEach(function(c) {
+    var active = c.id === activeClassId ? ' active' : '';
+    html += '<button class="class-tab' + active + '" onclick="switchLabClass(\'' + c.id + '\')">' + c.name + '</button>';
+  });
+  document.getElementById('lab-class-tabs').innerHTML = html;
+}
+function switchLabClass(id) {
+  if (currentSession().log && currentSession().log.length > 0) saveToHistory();
+  activeClassId = id;
+  var d = currentLabData();
+  scores = {};
+  (d.students||[]).forEach(function(s) { scores[s] = 0; });
+  log = []; selectedGroups = new Set(); selectedStudents = new Set();
+  renderLabClassTabs(); renderLabGroupBtns(); renderObsButtons();
+  renderScores(); renderStudentObsGrid(); renderLog();
+}
+function renderLabGroupBtns() {
+  var d = currentLabData();
+  var activeGroups = (d.groups||[]).filter(function(g) {
+    return (d.students||[]).some(function(s) { return d.studentGroups[s]===g; });
+  });
+  var cols = Math.min(activeGroups.length, 3);
+  var el = document.getElementById('lab-group-btns');
+  el.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+  var html = '';
+  activeGroups.forEach(function(g) {
+    var color = groupColor(g);
+    var isActive = selectedGroups.has(g);
+    var bg = isActive ? color : '#ffffff';
+    var tc = isActive ? '#ffffff' : '#2C2C2A';
+    var bc = isActive ? color : '#888780';
+    html += '<button class="grp-btn" onclick="toggleLabGroup(\'' + g + '\')"'
+      + ' style="background:' + bg + ' !important;color:' + tc + ' !important;border-color:' + bc + ' !important;">'
+      + g + '</button>';
+  });
+  el.innerHTML = html; updateLabHint();
+}
+function toggleLabGroup(g) {
+  if (selectedGroups.has(g)) selectedGroups.delete(g); else selectedGroups.add(g);
+  renderLabGroupBtns(); renderStudentObsGrid();
+}
+function selectAll() {
+  var d = currentLabData();
+  (d.groups||[]).filter(function(g) {
+    return (d.students||[]).some(function(s) { return d.studentGroups[s]===g; });
+  }).forEach(function(g) { selectedGroups.add(g); });
+  renderLabGroupBtns(); renderStudentObsGrid();
+}
+function selectNone() {
+  selectedGroups = new Set(); selectedStudents = new Set();
+  renderLabGroupBtns(); renderStudentObsGrid();
+}
+function updateLabHint() {
+  var hint = document.getElementById('lab-hint');
+  var arr = [];
+  selectedGroups.forEach(function(g) { arr.push(g); });
+  if (!arr.length) { hint.textContent='No groups selected'; hint.style.color='#A32D2D'; }
+  else { hint.textContent = arr.join(', ') + ' selected'; hint.style.color='#185FA5'; }
+}
+function renderStudentObsGrid() {
+  var d = currentLabData();
+  var grid = document.getElementById('student-obs-grid');
+  var visible = (d.students||[]).filter(function(s) { return selectedGroups.has(d.studentGroups[s]); });
+  if (!visible.length) {
+    grid.innerHTML = '<p style="font-size:13px;color:#5F5E5A;grid-column:span 3;text-align:center;padding:8px 0;">Select a group above</p>';
+    return;
+  }
+  var html = '';
+  visible.forEach(function(s) {
+    var grp = d.studentGroups[s];
+    var color = groupColor(grp);
+    var isSel = selectedStudents.has(s);
+    var bg = isSel ? color : '#ffffff';
+    var tc = isSel ? '#ffffff' : '#2C2C2A';
+    var bc = isSel ? color : '#888780';
+    var sc = scores[s]||0;
+    var scoreTxt = sc !== 0 ? ' (' + (sc>0?'+':'') + sc + ')' : '';
+    var safe = s.replace(/'/g, '\\x27');
+    html += '<button class="stu-btn" onclick="toggleStudentObs(\'' + safe + '\')"'
+      + ' style="background:' + bg + ' !important;color:' + tc + ' !important;border-color:' + bc + ' !important;">'
+      + s + '<span style="font-size:10px;">' + scoreTxt + '</span>'
+      + '</button>';
+  });
+  grid.innerHTML = html; updateStuHint();
+}
+function toggleStudentObs(name) {
+  if (selectedStudents.has(name)) selectedStudents.delete(name); else selectedStudents.add(name);
+  renderStudentObsGrid();
+}
+function selectAllStudents() {
+  var d = currentLabData();
+  (d.students||[]).filter(function(s) { return selectedGroups.has(d.studentGroups[s]); })
+    .forEach(function(s) { selectedStudents.add(s); });
+  renderStudentObsGrid();
+}
+function selectNoStudents() { selectedStudents = new Set(); renderStudentObsGrid(); }
+function updateStuHint() {
+  var hint = document.getElementById('stu-hint');
+  var arr = [];
+  selectedStudents.forEach(function(s) { arr.push(s); });
+  if (!arr.length) { hint.textContent='Tap students to select, then tap an observation'; hint.style.color='#5F5E5A'; }
+  else { hint.textContent = arr.join(', ') + ' selected'; hint.style.color='#185FA5'; }
+}
+function logAction(type, label) {
+  if (!selectedStudents.size) {
+    var h = document.getElementById('stu-hint');
+    h.textContent = 'Select at least one student first!'; h.style.color = '#A32D2D';
+    setTimeout(updateStuHint, 2000); return;
+  }
+  var d = currentLabData();
+  var time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  selectedStudents.forEach(function(s) {
+    scores[s] = (scores[s]||0) + (type==='positive' ? 1 : -1);
+    log.push({student:s, group:d.studentGroups[s], type:type, label:label, time:time});
+  });
+  renderStudentObsGrid(); renderScores(); renderLog();
+}
+
+// OBS BUTTONS IN LAB
+function toggleLabAddForm() {
+  var f = document.getElementById('lab-add-form');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+  if (f.style.display==='block') setTimeout(function() { document.getElementById('lab-new-label').focus(); }, 50);
+}
+function setLabNewType(t) {
+  labNewType = t;
+  document.getElementById('lab-tog-pos').className = t==='positive' ? 'sel-pos' : '';
+  document.getElementById('lab-tog-ded').className = t==='deduction' ? 'sel-ded' : '';
+}
+function addLabCustomLabel() {
+  var inp = document.getElementById('lab-new-label');
+  var label = inp.value.trim(); if (!label) return;
+  dayObs.push({type:labNewType, label:label});
+  inp.value=''; document.getElementById('lab-add-form').style.display='none';
+  renderObsButtons();
+}
+function removeLabObs(i) { dayObs.splice(i,1); renderObsButtons(); }
+function makeLabObsBtn(b, i) {
+  var bg = b.type==='positive' ? '#EAF3DE' : '#FCEBEB';
+  var tc = b.type==='positive' ? '#27500A' : '#791F1F';
+  var sym = b.type==='positive' ? '+' : '&minus;';
+  var safe = b.label.replace(/'/g, '\\x27');
+  return '<div class="obs-btn">'
+    + '<button class="obs-tap" onclick="logAction(\'' + b.type + '\',\'' + safe + '\')" style="background:' + bg + ';color:' + tc + ';">'
+    + '<span style="flex-shrink:0;font-size:13px;">' + sym + '</span><span>' + b.label + '</span>'
+    + '</button>'
+    + '<button class="obs-del" onclick="removeLabObs(' + i + ')" style="color:' + tc + ';">&times;</button>'
+    + '</div>';
+}
+function renderObsButtons() {
+  var grid = document.getElementById('btn-grid');
+  var pos = [], ded = [];
+  dayObs.forEach(function(b,i) { if(b.type==='positive') pos.push({b:b,i:i}); else ded.push({b:b,i:i}); });
+  var rows = Math.max(pos.length, ded.length);
+  if (!rows) {
+    grid.innerHTML = '<p style="font-size:12px;color:#5F5E5A;grid-column:span 2;text-align:center;padding:8px 0;">No labels - add some above</p>';
+    return;
+  }
+  var html = '';
+  for (var r = 0; r < rows; r++) {
+    html += pos[r] ? makeLabObsBtn(pos[r].b, pos[r].i) : '<div></div>';
+    html += ded[r] ? makeLabObsBtn(ded[r].b, ded[r].i) : '<div></div>';
+  }
+  grid.innerHTML = html;
+}
+function renderScores() {
+  var d = currentLabData();
+  var activeGroups = (d.groups||[]).filter(function(g) {
+    return (d.students||[]).some(function(s) { return d.studentGroups[s]===g; });
+  });
+  var cols = Math.min(activeGroups.length, 3);
+  var el = document.getElementById('score-cards');
+  el.style.gridTemplateColumns = 'repeat(' + cols + ',1fr)';
+  var html = '';
+  activeGroups.forEach(function(g) {
+    var members = (d.students||[]).filter(function(s) { return d.studentGroups[s]===g; });
+    var total = members.reduce(function(sum,s) { return sum+(scores[s]||0); }, 0);
+    var color = groupColor(g);
+    var bg = total>0?'#EAF3DE':total<0?'#FCEBEB':'#F1EFE8';
+    var tc = total>0?'#27500A':total<0?'#791F1F':'#2C2C2A';
+    var outline = selectedGroups.has(g) ? 'outline:2px solid '+color+';' : '';
+    html += '<div class="score-card" style="background:' + bg + ';' + outline + '">'
+      + '<div style="font-size:10px;color:' + color + ';font-weight:600;">' + g + '</div>'
+      + '<div style="font-size:18px;font-weight:600;color:' + tc + ';">' + (total>0?'+':'') + total + '</div>'
+      + '</div>';
+  });
+  el.innerHTML = html;
+}
+function renderLog() {
+  var d = currentLabData();
+  var el = document.getElementById('log-list');
+  if (!sess.log || !sess.log.length) {
+    el.innerHTML = '<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No observations yet</p>';
+    return;
+  }
+  var activeGroups = (d.groups||[]).filter(function(g) {
+    return (d.students||[]).some(function(s) { return d.studentGroups[s]===g; });
+  });
+  var html = '';
+  activeGroups.forEach(function(g) {
+    var members = (d.students||[]).filter(function(s) { return d.studentGroups[s]===g; });
+    var entries = log.filter(function(e) { return e.group===g; });
+    if (!entries.length) return;
+    var color = groupColor(g);
+    html += '<div class="group-block">'
+      + '<div style="font-size:12px;font-weight:600;color:' + color + ';margin-bottom:4px;">' + g + '</div>';
+    members.forEach(function(s) {
+      var se = entries.filter(function(e) { return e.student===s; });
+      if (!se.length) return;
+      var sc = scores[s]||0;
+      var tc = sc>0?'#27500A':sc<0?'#791F1F':'#5F5E5A';
+      html += '<div style="margin-left:8px;margin-bottom:6px;">'
+        + '<div style="font-size:12px;font-weight:600;color:' + tc + ';margin-bottom:2px;">'
+        + s + ' (' + (sc>0?'+':'') + sc + ')</div>';
+      se.forEach(function(e) {
+        var cls = e.type==='positive' ? 'badge-pos' : 'badge-ded';
+        var val = e.type==='positive' ? '+1' : '&minus;1';
+        html += '<div class="log-item" style="margin-left:8px;">'
+          + '<span style="font-size:12px;color:#5F5E5A;">' + e.time + ' &middot; ' + e.label + '</span>'
+          + '<span class="badge ' + cls + '">' + val + '</span>'
+          + '</div>';
+      });
+      html += '</div>';
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+}
+
+// HISTORY
+function saveToHistory() {
+  if (!sess.log || !sess.log.length) return;
+  var d = currentLabData();
+  var cls = classById(activeClassId);
+  var entry = {
+    id: uid(),
+    date: new Date().toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'}),
+    dateKey: new Date().toISOString().slice(0,10),
+    labName: labName,
+    className: cls ? cls.name : '',
+    classId: activeClassId,
+    groups: JSON.parse(JSON.stringify(d.groups||[])),
+    studentGroups: JSON.parse(JSON.stringify(d.studentGroups||{})),
+    scores: JSON.parse(JSON.stringify(scores)),
+    log: JSON.parse(JSON.stringify(log)),
+    notes: (document.getElementById('notes')||{}).value || ''
+  };
+  var existIdx = -1;
+  for (var i = 0; i < history.length; i++) {
+    if (history[i].dateKey===entry.dateKey && history[i].classId===entry.classId && history[i].labName===entry.labName) {
+      existIdx = i; break;
+    }
+  }
+  if (existIdx >= 0) history[existIdx] = entry; else history.unshift(entry);
+  save();
+}
+
+function showHistory() {
+  if (currentSession().log && currentSession().log.length > 0) saveToHistory();
+  histActiveClassId = activeClassId;
+  showPhase('phase-history');
+  renderHistClassTabs();
+  renderHistory();
+}
+function renderHistClassTabs() {
+  var el = document.getElementById('hist-class-tabs'); if (!el) return;
+  var html = '';
+  cfg.classes.forEach(function(c) {
+    var active = c.id === histActiveClassId ? ' active' : '';
+    html += '<button class="class-tab' + active + '" onclick="switchHistClass(\'' + c.id + '\')">' + c.name + '</button>';
+  });
+  el.innerHTML = html;
+}
+function switchHistClass(id) {
+  histActiveClassId = id; renderHistClassTabs(); renderHistory();
+}
+function renderHistory() {
+  var el = document.getElementById('history-area');
+  var classHistory = history.filter(function(h) { return h.classId === histActiveClassId; });
+  if (!classHistory.length) {
+    el.innerHTML = '<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet for this class</p>';
+    return;
+  }
+  // Group by date
+  var byDate = {};
+  classHistory.forEach(function(h) {
+    if (!byDate[h.dateKey]) byDate[h.dateKey] = [];
+    byDate[h.dateKey].push(h);
+  });
+  var sortedDates = Object.keys(byDate).sort(function(a,b) { return b.localeCompare(a); });
+  var html = '';
+  sortedDates.forEach(function(dateKey) {
+    byDate[dateKey].forEach(function(h) {
+      var activeGroups = h.groups.filter(function(g) {
+        return Object.values(h.studentGroups).indexOf(g) > -1;
+      });
+      var rows = '';
+      activeGroups.forEach(function(g) {
+        var members = Object.keys(h.studentGroups)
+          .filter(function(s) { return h.studentGroups[s]===g; })
+          .sort(function(a,b) { return a.localeCompare(b); });
+        if (!members.length) return;
+        var color = groupColor(g);
+        rows += '<div style="margin-bottom:6px;">'
+          + '<div style="font-size:11px;font-weight:700;color:' + color + ';margin-bottom:3px;">' + g + '</div>';
+        members.forEach(function(s) {
+          var sc = h.scores[s]||0;
+          var tc = sc>0?'#27500A':sc<0?'#791F1F':'#5F5E5A';
+          var stuEntries = h.log.filter(function(e) { return e.student===s; });
+          var obsText = stuEntries.map(function(e) { return (e.type==='positive'?'+':'-') + ' ' + e.label; }).join('; ');
+          rows += '<div class="hist-row">'
+            + '<span style="font-weight:600;color:' + tc + ';min-width:80px;">' + s + ' (' + (sc>0?'+':'') + sc + ')</span>'
+            + '<span style="color:#5F5E5A;font-size:11px;">' + obsText + '</span>'
+            + '</div>';
+        });
+        rows += '</div>';
+      });
+      html += '<div class="section">'
+        + '<div class="hist-head">' + h.labName + ' &mdash; ' + h.date + '</div>'
+        + (rows || '<p style="font-size:12px;color:#5F5E5A;">No observations recorded</p>')
+        + (h.notes ? '<p style="font-size:11px;color:#5F5E5A;margin-top:6px;font-style:italic;">Notes: ' + h.notes + '</p>' : '')
+        + '</div>';
+    });
+  });
+  el.innerHTML = html;
+}
+
+function exportHistory() {
+  var classHistory = history.filter(function(h) { return h.classId === histActiveClassId; });
+  if (!classHistory.length) { alert('No history to export for this class.'); return; }
+  var cls = classById(histActiveClassId);
+  var out = 'Kitchen Lab History - ' + (cls ? cls.name : '') + '\n' + '='.repeat(40) + '\n\n';
+  classHistory.forEach(function(h) {
+    out += h.labName + ' - ' + h.date + '\n' + '-'.repeat(30) + '\n';
+    var activeGroups = h.groups.filter(function(g) { return Object.values(h.studentGroups).indexOf(g) > -1; });
+    activeGroups.forEach(function(g) {
+      out += '\n' + g + '\n';
+      Object.keys(h.studentGroups)
+        .filter(function(s) { return h.studentGroups[s]===g; })
+        .sort(function(a,b) { return a.localeCompare(b); })
+        .forEach(function(s) {
+          var sc = h.scores[s]||0;
+          out += '  ' + s + ': ' + (sc>0?'+':'') + sc + '\n';
+          h.log.filter(function(e) { return e.student===s; }).forEach(function(e) {
+            out += '    ' + e.time + ' [' + (e.type==='positive'?'+1':'-1') + '] ' + e.label + '\n';
+          });
+        });
+    });
+    if (h.notes) out += '\nNotes: ' + h.notes + '\n';
+    out += '\n';
+  });
+  var blob = new Blob([out],{type:'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'lab-history-' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+
+// EXPORT CURRENT SESSION
+function exportLog() {
+  var d = currentLabData();
+  var cls = classById(activeClassId);
+  var notes = (document.getElementById('notes')||{}).value||'';
+  var date = new Date().toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'});
+  var time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  var out = 'Kitchen Lab Observation Log\n' + labName + '\n'
+    + (cls ? cls.name : '') + ' - ' + date + ' ' + time + '\n' + '='.repeat(40) + '\n\n';
+  var activeGroups = (d.groups||[]).filter(function(g) {
+    return (d.students||[]).some(function(s) { return d.studentGroups[s]===g; });
+  });
+  out += 'GROUP ASSIGNMENTS\n' + '-'.repeat(20) + '\n';
+  activeGroups.forEach(function(g) {
+    out += g + ': ' + (d.students||[]).filter(function(s) { return d.studentGroups[s]===g; }).join(', ') + '\n';
+  });
+  var absent = (d.students||[]).filter(function(s) { return d.studentGroups[s]==='Absent'; });
+  if (absent.length) out += 'Absent: ' + absent.join(', ') + '\n';
+  out += '\nSCORES BY STUDENT\n' + '-'.repeat(20) + '\n';
+  activeGroups.forEach(function(g) {
+    out += '\n' + g + '\n';
+    (d.students||[]).filter(function(s) { return d.studentGroups[s]===g; }).forEach(function(s) {
+      out += '  ' + s + ': ' + ((scores[s]||0)>0?'+':'') + (scores[s]||0) + '\n';
+    });
+  });
+  out += '\nOBSERVATIONS\n' + '-'.repeat(20) + '\n';
+  activeGroups.forEach(function(g) {
+    var entries = log.filter(function(e) { return e.group===g; });
+    if (!entries.length) return;
+    out += '\n' + g + '\n';
+    (d.students||[]).filter(function(s) { return d.studentGroups[s]===g; }).forEach(function(s) {
+      var se = entries.filter(function(e) { return e.student===s; });
+      if (!se.length) return;
+      out += '  ' + s + ':\n';
+      se.forEach(function(e) { out += '    ' + e.time + '  [' + (e.type==='positive'?'+1':'-1') + ']  ' + e.label + '\n'; });
+    });
+  });
+  if (notes) out += '\nNOTES\n' + '-'.repeat(20) + '\n' + notes + '\n';
+  var blob = new Blob([out],{type:'text/plain'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'lab-log-' + new Date().toISOString().slice(0,10) + '.txt';
+  a.click();
+}
+function clearLog() {
+  var d = currentLabData();
+  log = [];
+  (d.students||[]).forEach(function(s) { scores[s] = 0; });
+  document.getElementById('notes').value = '';
+  renderScores(); renderLog(); renderStudentObsGrid();
+}
+
+// SETTINGS
+function goToSettings() {
+  showPhase('phase-settings');
+  renderObsGrid('settings-obs-grid', defaultObs, 'removeDefaultObs');
+  renderRosterInputs('settings-rosters');
+}
+function toggleSettingsObsForm() {
+  var f = document.getElementById('settings-obs-form');
+  f.style.display = f.style.display==='none' ? 'block' : 'none';
+  if (f.style.display==='block') setTimeout(function() { document.getElementById('settings-obs-input').focus(); }, 50);
+}
+function setSettingsObsType(t) {
+  settingsObsType = t;
+  document.getElementById('settings-tog-pos').className = t==='positive' ? 'sel-pos' : '';
+  document.getElementById('settings-tog-ded').className = t==='deduction' ? 'sel-ded' : '';
+}
+function addSettingsObs() {
+  var inp = document.getElementById('settings-obs-input');
+  var label = inp.value.trim(); if (!label) return;
+  if (!defaultObs.find(function(o) { return o.label===label; })) defaultObs.push({type:settingsObsType,label:label});
+  inp.value=''; document.getElementById('settings-obs-form').style.display='none';
+  save(); renderObsGrid('settings-obs-grid', defaultObs, 'removeDefaultObs');
+}
+function saveRosterUpdates() {
+  cfg.classes.forEach(function(c) {
+    var ta = document.getElementById('roster-'+c.id);
+    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},groups:[]};
+    if (ta && ta.value.trim()) labData[c.id].students = parseNames(ta.value.trim());
+    labData[c.id].studentGroups = {};
+  });
+  save(); showPhase('phase-setup');
+  renderSetupClassTabs(); renderSetupGroupBtns(); renderStudentAssignGrid();
+}
+function clearHistory() {
+  if (!confirm('Clear all lab history? Cannot be undone.')) return;
+  history = []; save(); showPhase('phase-setup');
+}
+function resetEverything() {
+  if (!confirm('Full reset - delete all classes, rosters, labels, and history?')) return;
+  ['klt_cfg','klt_labdata','klt_defobs','klt_history'].forEach(function(k) { localStorage.removeItem(k); });
+  cfg = {classes:[],groupCount:8}; labData = {}; defaultObs = []; dayObs = []; history = [];
+  activeClassId = null; histActiveClassId = null; pendingClassCount = 0;
+  document.querySelectorAll('.num-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('class-name-section').style.display = 'none';
+  showPhase('phase-count');
+}
+
+// INIT
+function init() {
+  var hasData = loadStorage();
+  if (hasData && cfg.classes.length > 0) {
+    activeClassId = cfg.classes[0].id;
+    histActiveClassId = activeClassId;
+    launchSetup();
+  } else {
+    showPhase('phase-count');
+  }
+}
+init();
+</script>
+</body>
+</html>
