@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Culinary Gradebook</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F4CA;</text></svg>" />
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; }
+    body { background: #f1efec; margin: 0; padding: 12px; }
+    p { margin: 0; }
+
+    .section { background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .sec-label { font-size: 12px; color: #5F5E5A; margin: 0 0 8px; }
+
+    .period-tab { padding: 9px 14px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 13px; font-weight: 600; color: #2C2C2A; transition: all 0.15s; white-space: nowrap; }
+    .period-tab:hover { background: #e8e6e0; }
+    .period-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+
+    .asgn-btn { padding: 9px 12px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 600; color: #2C2C2A !important; text-align: left; width: 100%; transition: all 0.15s; display: flex; justify-content: space-between; align-items: center; }
+    .asgn-btn:hover { background: #e8e6e0 !important; }
+    .asgn-btn.active { background: #185FA5 !important; border-color: #185FA5 !important; color: #ffffff !important; }
+
+    .score-btn { border: 2.5px solid transparent; border-radius: 10px; padding: 12px 6px; font-size: 18px; font-weight: 700; cursor: pointer; width: 100%; transition: all 0.15s; }
+    .score-btn:active { transform: scale(0.94); }
+    .s4   { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
+    .s3   { background: #E8F0FB; color: #1A3F7A; border-color: #A8C0EE; }
+    .s2   { background: #FFF6DC; color: #7A5500; border-color: #F0D070; }
+    .s1   { background: #FCEBEB; color: #791F1F; border-color: #F7C1C1; }
+    .sAb  { background: #FFF0E0; color: #8B4500; border-color: #F5C080; }
+    .sEx  { background: #F0EAF9; color: #5B2D8E; border-color: #C9A8EE; }
+    .sDec { background: #F5F5F5; color: #444444; border-color: #CCCCCC; }
+    .score-btn.sel { outline: 3px solid #2C2C2A; outline-offset: 2px; }
+
+    .custom-chip { display: flex; align-items: stretch; border: 2.5px solid #80D5D5; border-radius: 10px; background: #E0F5F5; overflow: hidden; transition: all 0.15s; }
+    .custom-chip.sel { outline: 3px solid #2C2C2A; outline-offset: 2px; }
+    .custom-chip .ctap { flex: 1; background: none; border: none; padding: 12px 4px; font-size: 14px; font-weight: 700; color: #0D6B6B; cursor: pointer; }
+    .custom-chip .cdel { background: none; border: none; border-left: 1.5px solid #80D5D5; padding: 0 8px; color: #0D6B6B; opacity: 0.45; cursor: pointer; font-size: 13px; }
+    .custom-chip .cdel:hover { opacity: 0.9; }
+
+    .stu-btn { padding: 9px 8px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 500; color: #2C2C2A !important; text-align: center; transition: all 0.15s; line-height: 1.3; }
+    .stu-btn:hover { background: #e8e6e0 !important; }
+
+    .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
+    .small-btn:hover { background: #F1EFE8; }
+    .export-btn { font-size: 13px; background: #2C2C2A; border: none; border-radius: 8px; padding: 8px 16px; cursor: pointer; color: #ffffff; font-weight: 600; }
+    .export-btn:hover { background: #444441; }
+    .primary-btn { font-size: 14px; background: #185FA5; border: none; border-radius: 8px; padding: 10px 20px; cursor: pointer; color: #ffffff; font-weight: 600; width: 100%; }
+    .primary-btn:hover { background: #144d87; }
+    .add-confirm { padding: 7px 14px; font-size: 13px; font-weight: 600; border: none; border-radius: 8px; cursor: pointer; background: #185FA5; color: #ffffff; white-space: nowrap; }
+
+    .add-row { display: flex; gap: 8px; align-items: center; }
+    .add-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; min-width: 0; font-family: sans-serif; }
+    .add-row input:focus { outline: none; border-color: #185FA5; }
+
+    textarea { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #2C2C2A; background: #F1EFE8; resize: vertical; font-family: sans-serif; }
+    textarea:focus { outline: none; border-color: #185FA5; }
+
+    .hint { font-size: 12px; color: #5F5E5A; text-align: center; margin-top: 6px; min-height: 18px; }
+
+    .log-asgn-block { margin-bottom: 14px; }
+    .log-asgn-head { font-size: 13px; font-weight: 700; color: #185FA5; margin-bottom: 6px; border-bottom: 1.5px solid #B4B2A9; padding-bottom: 4px; }
+    .log-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; padding: 3px 0; border-bottom: 0.5px solid #e8e6e0; }
+    .log-row.entered { opacity: 0.35; }
+    .log-row:last-child { border-bottom: none; }
+    .score-pill { font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 20px; white-space: nowrap; }
+
+    .setup-period-label { font-size: 13px; font-weight: 600; color: #185FA5; margin-bottom: 6px; }
+    .preview-tag { display: inline-block; background: #185FA5; color: #fff; border-radius: 6px; padding: 2px 7px; font-size: 11px; margin: 2px; }
+    .warn-banner { background: #FFF8E0; border: 1.5px solid #C09A20; border-radius: 8px; padding: 8px 12px; margin-bottom: 10px; font-size: 12px; color: #7A5E00; }
+
+    .num-btn { width:44px;height:44px;border:2px solid #888780;border-radius:8px;background:#ffffff;cursor:pointer;font-size:16px;font-weight:600;color:#2C2C2A;transition:all 0.15s; }
+    .num-btn:hover { background:#e8e6e0; }
+    .num-btn.active { background:#185FA5;border-color:#185FA5;color:#ffffff; }
+    .class-name-row { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+    .class-name-row label { font-size:13px;font-weight:600;color:#185FA5;min-width:80px; }
+    .class-name-row input { flex:1;border:1.5px solid #B4B2A9;border-radius:8px;padding:8px 10px;font-size:13px;background:#F1EFE8;color:#2C2C2A;font-family:sans-serif; }
+    .class-name-row input:focus { outline:none;border-color:#185FA5; }
+    .share-group-box { border:2px solid #B4B2A9;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#F9F8F5; }
+    .share-class-chip { display:inline-flex;align-items:center;gap:4px;background:#185FA5;color:#fff;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:600;margin:2px;cursor:pointer; }
+    .share-class-chip.unassigned { background:#ffffff;color:#2C2C2A;border:1.5px solid #888780; }
+    .phase { display: none; }
+    .phase.visible { display: block; }
+  </style>
+</head>
+<body>
+<div style="padding:4px;max-width:540px;margin:0 auto;">
+
+  <!-- SETUP WIZARD -->
+  <div class="phase" id="phase-setup">
+
+    <!-- Step 1: Class count -->
+    <div id="setup-step1">
+      <div class="section">
+        <p style="font-size:16px;font-weight:700;color:#2C2C2A;margin:0 0 4px;">Gradebook Setup</p>
+        <p class="sec-label" style="margin:0;">How many classes do you teach?</p>
+      </div>
+      <div class="section">
+        <p class="sec-label">Number of classes</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;" id="class-count-btns">
+          <button class="num-btn" onclick="pickClassCount(this)">1</button>
+          <button class="num-btn" onclick="pickClassCount(this)">2</button>
+          <button class="num-btn" onclick="pickClassCount(this)">3</button>
+          <button class="num-btn" onclick="pickClassCount(this)">4</button>
+          <button class="num-btn" onclick="pickClassCount(this)">5</button>
+          <button class="num-btn" onclick="pickClassCount(this)">6</button>
+          <button class="num-btn" onclick="pickClassCount(this)">7</button>
+          <button class="num-btn" onclick="pickClassCount(this)">8</button>
+        </div>
+      </div>
+      <div class="section" id="class-names-section" style="display:none;">
+        <p class="sec-label" style="margin-bottom:10px;">Name your classes</p>
+        <div id="class-name-inputs"></div>
+        <button class="primary-btn" style="margin-top:4px;" onclick="goToSharingStep()">Next: Shared assignments &rarr;</button>
+      </div>
+    </div>
+
+    <!-- Step 2: Sharing -->
+    <div id="setup-step2" style="display:none;">
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <p style="font-size:15px;font-weight:700;color:#2C2C2A;margin:0;">Shared assignments</p>
+          <button class="small-btn" onclick="goToStep(1)">&#8617; Back</button>
+        </div>
+        <p class="sec-label" style="margin-top:4px;">Do any classes share the same assignments? If so, adding an assignment to one will add it to all in the group.</p>
+      </div>
+      <div class="section">
+        <p class="sec-label" style="margin-bottom:10px;">Drag classes into groups, or leave separate. Tap a class name then tap a group to assign it.</p>
+        <div id="sharing-ui"></div>
+        <button class="primary-btn" style="margin-top:10px;" onclick="goToRostersStep()">Next: Enter rosters &rarr;</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Rosters -->
+    <div id="setup-step3" style="display:none;">
+      <div class="section">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <p style="font-size:15px;font-weight:700;color:#2C2C2A;margin:0;">Student Rosters</p>
+          <button class="small-btn" onclick="goToStep(2)">&#8617; Back</button>
+        </div>
+        <p class="sec-label" style="margin-top:4px;">One name per line. Duplicates get a last initial automatically.</p>
+      </div>
+      <div id="setup-rosters"></div>
+      <div class="section" style="padding:12px 16px;">
+        <button class="primary-btn" onclick="saveSetup()">Save &amp; Go to Gradebook &rarr;</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- GRADEBOOK -->
+  <div class="phase" id="phase-gradebook">
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">Class period</p>
+        <button class="small-btn" onclick="goToSetup()">&#9881; Edit rosters</button>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="period-tabs"></div>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">1. Select assignment</p>
+        <button class="small-btn" onclick="toggleAddAsgn()">+ Add assignment</button>
+      </div>
+      <div id="add-asgn-form" style="display:none;margin-bottom:10px;">
+        <div class="add-row">
+          <input id="asgn-input" type="text" placeholder="Assignment name" maxlength="60" onkeydown="if(event.key==='Enter')addAssignment()" />
+          <button class="add-confirm" onclick="addAssignment()">Add</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;" id="asgn-list">
+        <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No assignments yet</p>
+      </div>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">2. Select score</p>
+        <button class="small-btn" onclick="toggleAddScore()">+ Custom score</button>
+      </div>
+      <div id="add-score-form" style="display:none;margin-bottom:10px;background:#F1EFE8;border-radius:8px;padding:10px 12px;">
+        <p style="font-size:12px;color:#5F5E5A;margin:0 0 8px;">Enter a point value (e.g. 5, 10, 3.5)</p>
+        <div class="add-row">
+          <input id="score-custom-input" type="number" min="0" max="999" step="0.5" placeholder="e.g. 5" style="max-width:130px;" onkeydown="if(event.key==='Enter')addCustomScore()" />
+          <button class="add-confirm" onclick="addCustomScore()">Add</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px;">
+        <button class="score-btn s4"  id="sbtn-4"   onclick="selectScore('4')">4</button>
+        <button class="score-btn s3"  id="sbtn-3"   onclick="selectScore('3')">3</button>
+        <button class="score-btn s2"  id="sbtn-2"   onclick="selectScore('2')">2</button>
+        <button class="score-btn s1"  id="sbtn-1"   onclick="selectScore('1')">1</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px;">
+        <button class="score-btn sAb"  id="sbtn-Ab"  onclick="selectScore('Ab')">Ab</button>
+        <button class="score-btn sEx"  id="sbtn-Ex"  onclick="selectScore('Ex')">Ex</button>
+        <button class="score-btn sDec" id="sbtn-Dec" onclick="selectScore('Dec')">Dec</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="custom-score-grid"></div>
+      <p class="hint" id="score-hint">No score selected</p>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <p class="sec-label" style="margin:0;">3. Tap students</p>
+        <div style="display:flex;gap:6px;">
+          <button class="small-btn" onclick="gradeAll()">All</button>
+          <button class="small-btn" onclick="clearAsgnGrades()">Clear</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="student-grid"></div>
+      <p class="hint" id="stu-hint">Select an assignment and score first</p>
+    </div>
+
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <p class="sec-label" style="margin:0;">Grade log &mdash; <span id="log-period-label" style="color:#185FA5;font-weight:600;"></span></p>
+        <div style="display:flex;gap:8px;">
+          <button class="export-btn" onclick="exportLog()">Export log</button>
+          <button class="small-btn" onclick="markAllEntered()" style="background:#EAF3DE;border-color:#27500A;color:#27500A;font-weight:600;">Mark all entered</button>
+          <button class="small-btn" onclick="clearPeriodAll()">Clear period</button>
+        </div>
+      </div>
+      <div id="log-area">
+        <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No grades recorded yet</p>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Dynamic — set during setup wizard
+  let PERIODS = [];
+  let SHARE_GROUPS = [];
+  const FIXED_IDS = ['4','3','2','1','Ab','Ex','Dec'];
+
+  function smeta(s) {
+    const m = {
+      '4':  {bg:'#EAF3DE',tc:'#27500A',pb:'#C0DD97'},
+      '3':  {bg:'#E8F0FB',tc:'#1A3F7A',pb:'#A8C0EE'},
+      '2':  {bg:'#FFF6DC',tc:'#7A5500',pb:'#F0D070'},
+      '1':  {bg:'#FCEBEB',tc:'#791F1F',pb:'#F7C1C1'},
+      'Ab': {bg:'#FFF0E0',tc:'#8B4500',pb:'#F5C080'},
+      'Ex': {bg:'#F0EAF9',tc:'#5B2D8E',pb:'#C9A8EE'},
+      'Dec':{bg:'#F5F5F5',tc:'#444444',pb:'#CCCCCC'},
+    };
+    return m[s] || {bg:'#E0F5F5',tc:'#0D6B6B',pb:'#80D5D5'};
+  }
+
+  function scoreOrder(s) {
+    if (s === 'Ab')  return -9998;
+    if (s === 'Ex')  return -9999;
+    if (s === 'Dec') return -10000;
+    return parseFloat(s) || 0;
+  }
+
+  // ── STATE ──
+  let data = {};
+  let customScores = [];
+  let enteredGrades = {}; // enteredGrades[period][asgnName] = true
+  let activePeriod = null;
+  let activeAsgnName = null;
+  let activeScore = null;
+
+  // ── PERSISTENCE ──
+  function save() {
+    try { localStorage.setItem('cg_data', JSON.stringify(data)); } catch(e) {}
+    try { localStorage.setItem('cg_cs', JSON.stringify(customScores)); } catch(e) {}
+    try { localStorage.setItem('cg_entered', JSON.stringify(enteredGrades)); } catch(e) {}
+    try { localStorage.setItem('cg_periods', JSON.stringify(PERIODS)); } catch(e) {}
+    try { localStorage.setItem('cg_sharegroups', JSON.stringify(SHARE_GROUPS)); } catch(e) {}
+  }
+  function loadStorage() {
+    try {
+      const d = localStorage.getItem('cg_data');
+      const cs = localStorage.getItem('cg_cs');
+      const eg = localStorage.getItem('cg_entered');
+      const pp = localStorage.getItem('cg_periods');
+      const sg = localStorage.getItem('cg_sharegroups');
+      if (d) data = JSON.parse(d);
+      if (cs) customScores = JSON.parse(cs);
+      if (eg) enteredGrades = JSON.parse(eg);
+      if (pp) PERIODS = JSON.parse(pp);
+      if (sg) SHARE_GROUPS = JSON.parse(sg);
+      return !!d;
+    } catch(e) { return false; }
+  }
+
+  // ── NAME PARSING ──
+  function parseNames(raw) {
+    const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsed = lines.map(l => {
+      const parts = l.split(/\s+/);
+      return {first: parts[0], last: parts.length > 1 ? parts[parts.length-1] : ''};
+    });
+    const firsts = parsed.map(p => p.first.toLowerCase());
+    const dupes = new Set(firsts.filter((n,i) => firsts.indexOf(n) !== i));
+    return parsed.map(p =>
+      dupes.has(p.first.toLowerCase()) && p.last
+        ? p.first + ' ' + p.last[0].toUpperCase() + '.'
+        : p.first
+    ).sort((a,b) => a.localeCompare(b));
+  }
+
+  // ── ASSIGNMENT HELPERS ──
+  function sortedAsgns(period) {
+    if (!data[period]) return [];
+    return [...data[period].assignments].sort((a,b) => a.name.localeCompare(b.name));
+  }
+  function asgnByName(period, name) {
+    return data[period] ? data[period].assignments.find(a => a.name === name) : null;
+  }
+  function getShareGroup(p) { return SHARE_GROUPS.find(g => g.includes(p)) || null; }
+  function getShareGroupNames(p) { const sg=getShareGroup(p); if(!sg) return ''; return sg.filter(x=>x!==p).map(x=>(data[x]&&data[x].name)||x).join(', '); }
+
+  // ── SETUP WIZARD ──
+  let pendingClassCount = 0;
+  let pendingClassNames = []; // [{id, name}]
+  let pendingShareGroups = []; // [[id,id,...], ...]  group index per class
+  let classShareGroup = {}; // classId -> group index (null = no group)
+
+  function pickClassCount(btn) {
+    document.querySelectorAll('#class-count-btns .num-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pendingClassCount = parseInt(btn.textContent);
+    document.getElementById('class-names-section').style.display = 'block';
+    document.getElementById('class-name-inputs').innerHTML = Array.from({length:pendingClassCount},(_,i) =>
+      '<div class="class-name-row"><label>Class '+(i+1)+'</label>'
+      +'<input type="text" id="cname-'+i+'" placeholder="e.g. Period '+(i+1)+'" maxlength="40" /></div>'
+    ).join('');
+    document.getElementById('cname-0').focus();
+  }
+
+  function goToStep(n) {
+    document.getElementById('setup-step1').style.display = n===1?'block':'none';
+    document.getElementById('setup-step2').style.display = n===2?'block':'none';
+    document.getElementById('setup-step3').style.display = n===3?'block':'none';
+  }
+
+  function goToSharingStep() {
+    if (!pendingClassCount) { alert('Please select how many classes you have.'); return; }
+    pendingClassNames = Array.from({length:pendingClassCount},(_,i) => {
+      const name = (document.getElementById('cname-'+i)||{}).value||'';
+      return { id: i, name: name.trim() || 'Class '+(i+1) };
+    });
+    classShareGroup = {};
+    renderSharingUI();
+    goToStep(2);
+  }
+
+  function renderSharingUI() {
+    const el = document.getElementById('sharing-ui');
+    // Figure out existing groups
+    const groups = [];
+    const getGroup = id => { for(let g=0;g<groups.length;g++) if(groups[g].includes(id)) return g; return null; };
+    el.innerHTML = '';
+
+    // Unassigned pool
+    const poolDiv = document.createElement('div');
+    poolDiv.id = 'share-pool';
+    poolDiv.style.cssText = 'margin-bottom:12px;';
+    poolDiv.innerHTML = '<p style="font-size:11px;font-weight:600;color:#5F5E5A;margin-bottom:6px;">CLASSES (tap one, then tap a group to add)</p>'
+      + pendingClassNames.map(c =>
+          '<span class="share-class-chip unassigned" id="sharechip-'+c.id+'" onclick="selectShareClass('+c.id+')">'+c.name+'</span>'
+        ).join('');
+    el.appendChild(poolDiv);
+
+    // Group area
+    const groupArea = document.createElement('div');
+    groupArea.id = 'share-groups';
+    groupArea.innerHTML = '<p style="font-size:11px;font-weight:600;color:#5F5E5A;margin-bottom:6px;">SHARING GROUPS</p>'
+      + '<button class="small-btn" style="margin-bottom:8px;" onclick="addShareGroup()">+ New group</button>'
+      + '<div id="share-group-list"></div>';
+    el.appendChild(groupArea);
+    renderShareGroupList();
+  }
+
+  let selectedShareClass = null;
+  function selectShareClass(id) {
+    selectedShareClass = id;
+    document.querySelectorAll('.share-class-chip').forEach(c => c.style.outline='');
+    const chip = document.getElementById('sharechip-'+id);
+    if(chip) chip.style.outline='2px solid #185FA5';
+  }
+
+  let shareGroups = []; // array of arrays of class ids
+  function addShareGroup() {
+    shareGroups.push([]);
+    renderShareGroupList();
+  }
+  function addToGroup(gIdx) {
+    if(selectedShareClass===null){alert('Tap a class name first, then tap a group.');return;}
+    // Remove from any existing group
+    shareGroups.forEach(g => { const i=g.indexOf(selectedShareClass); if(i>-1) g.splice(i,1); });
+    shareGroups[gIdx].push(selectedShareClass);
+    shareGroups = shareGroups.filter(g=>g.length>0); // clean empty
+    selectedShareClass=null;
+    document.querySelectorAll('.share-class-chip').forEach(c=>c.style.outline='');
+    renderShareGroupList();
+  }
+  function removeFromGroup(classId) {
+    shareGroups.forEach(g=>{ const i=g.indexOf(classId); if(i>-1) g.splice(i,1); });
+    shareGroups=shareGroups.filter(g=>g.length>0);
+    renderShareGroupList();
+  }
+  function renderShareGroupList() {
+    const el = document.getElementById('share-group-list'); if(!el) return;
+    const assignedIds = shareGroups.flat();
+    // Update chip styles in pool
+    pendingClassNames.forEach(c => {
+      const chip = document.getElementById('sharechip-'+c.id);
+      if(!chip) return;
+      if(assignedIds.includes(c.id)) { chip.style.opacity='0.4'; }
+      else { chip.style.opacity='1'; }
+    });
+    if(!shareGroups.length){
+      el.innerHTML='<p style="font-size:12px;color:#888780;">No groups yet &mdash; classes without a group get their own assignments.</p>';
+      return;
+    }
+    el.innerHTML = shareGroups.map((g,gi) =>
+      '<div class="share-group-box" onclick="addToGroup('+gi+')" style="cursor:pointer;">'
+      +'<p style="font-size:11px;font-weight:600;color:#5F5E5A;margin-bottom:6px;">Group '+(gi+1)+' <span style="font-weight:400;">(tap to add selected class)</span></p>'
+      +g.map(id=>{
+        const cls=pendingClassNames.find(c=>c.id===id);
+        return '<span class="share-class-chip" onclick="event.stopPropagation();removeFromGroup('+id+')" title="Remove">'+(cls?cls.name:'?')+' &times;</span>';
+      }).join('')
+      +'</div>'
+    ).join('');
+  }
+
+  function goToRostersStep() {
+    // Build final PERIODS and SHARE_GROUPS from wizard
+    PERIODS = pendingClassNames.map(c => c.id);
+    SHARE_GROUPS = shareGroups.filter(g=>g.length>1);
+    // Init data for each class
+    pendingClassNames.forEach(c => { if(!data[c.id]) data[c.id]={students:[],assignments:[],name:c.name}; else data[c.id].name=c.name; });
+    // Render roster inputs
+    const el = document.getElementById('setup-rosters');
+    el.innerHTML = pendingClassNames.map(c => {
+      const existing = data[c.id]?data[c.id].students:[];
+      return '<div class="section">'
+        +'<p class="setup-period-label">'+c.name+'</p>'
+        +'<textarea id="roster-'+c.id+'" rows="5" placeholder="Paste names here, one per line...">'+(existing.join('\n'))+'</textarea>'
+        +'<div id="preview-'+c.id+'" style="margin-top:6px;min-height:20px;"></div>'
+        +'<p id="phint-'+c.id+'" style="font-size:11px;color:#27500A;margin-top:4px;"></p>'
+        +'</div>';
+    }).join('');
+    pendingClassNames.forEach(c => {
+      const ta = document.getElementById('roster-'+c.id);
+      if(ta){ ta.addEventListener('input',()=>livePreview(c.id)); livePreview(c.id); }
+    });
+    goToStep(3);
+  }
+
+  function livePreview(classId) {
+    const raw = (document.getElementById('roster-'+classId)||{}).value||'';
+    const prev = document.getElementById('preview-'+classId);
+    const hint = document.getElementById('phint-'+classId);
+    if(!raw.trim()){if(prev)prev.innerHTML='';if(hint)hint.textContent='';return;}
+    const names=parseNames(raw.trim());
+    if(prev) prev.innerHTML=names.map(n=>'<span class="preview-tag">'+n+'</span>').join('');
+    if(hint) hint.textContent=names.length+' students - sorted A-Z';
+  }
+
+  function saveSetup() {
+    pendingClassNames.forEach(c => {
+      const raw=(document.getElementById('roster-'+c.id)||{}).value||'';
+      if(!data[c.id]) data[c.id]={students:[],assignments:[],name:c.name};
+      data[c.id].students=raw.trim()?parseNames(raw.trim()):[];
+      data[c.id].name=c.name;
+    });
+    save();
+    showPhase('phase-gradebook');
+    activePeriod=PERIODS.find(p=>data[p]&&data[p].students.length>0)||PERIODS[0];
+    activeAsgnName=null; activeScore=null;
+    renderAll();
+  }
+
+  function goToSetup() {
+    // Restore wizard state from saved data if returning
+    if(PERIODS.length>0){
+      pendingClassCount=PERIODS.length;
+      pendingClassNames=PERIODS.map(id=>({id,name:(data[id]&&data[id].name)||'Class '+(id+1)}));
+      shareGroups=[...SHARE_GROUPS];
+    }
+    showPhase('phase-setup');
+    goToStep(1);
+    // Pre-fill count button
+    document.querySelectorAll('#class-count-btns .num-btn').forEach(b=>{
+      if(parseInt(b.textContent)===pendingClassCount) b.classList.add('active');
+      else b.classList.remove('active');
+    });
+    if(pendingClassCount>0){
+      document.getElementById('class-names-section').style.display='block';
+      document.getElementById('class-name-inputs').innerHTML=pendingClassNames.map((c,i)=>
+        '<div class="class-name-row"><label>Class '+(i+1)+'</label>'
+        +'<input type="text" id="cname-'+i+'" value="'+c.name+'" maxlength="40" /></div>'
+      ).join('');
+    }
+  }
+
+  // ── PERIOD TABS ──
+  function renderPeriodTabs() {
+    document.getElementById('period-tabs').innerHTML = PERIODS.map(p => {
+      const name = (data[p]&&data[p].name) || 'Class '+(PERIODS.indexOf(p)+1);
+      return '<button class="period-tab '+(p===activePeriod?'active':'')+'" onclick="switchPeriod('+p+')">'+name+'</button>';
+    }).join('');
+    const activeNameLabel = (data[activePeriod]&&data[activePeriod].name)||'Class '+(PERIODS.indexOf(activePeriod)+1);
+    document.getElementById('log-period-label').textContent = activeNameLabel;
+  }
+
+  function switchPeriod(p) {
+    activePeriod = p;
+    activeScore = null;
+    document.getElementById('score-hint').textContent = 'No score selected';
+    document.getElementById('score-hint').style.color = '#5F5E5A';
+    // keep activeAsgnName — if it exists in new period it stays selected
+    renderAll();
+  }
+
+  // ── ASSIGNMENTS ──
+  function toggleAddAsgn() {
+    const f = document.getElementById('add-asgn-form');
+    f.style.display = f.style.display==='none' ? 'block' : 'none';
+    if (f.style.display==='block') setTimeout(() => document.getElementById('asgn-input').focus(), 50);
+  }
+
+  function addAssignment() {
+    const inp = document.getElementById('asgn-input');
+    const name = inp.value.trim();
+    if (!name) return;
+    const group = getShareGroup(activePeriod) || [activePeriod];
+    group.forEach(p => {
+      if (!data[p]) data[p] = {students:[], assignments:[]};
+      if (!data[p].assignments.find(a => a.name===name))
+        data[p].assignments.push({name, grades:{}});
+    });
+    inp.value = '';
+    document.getElementById('add-asgn-form').style.display = 'none';
+    activeAsgnName = name;
+    save(); renderAll();
+  }
+
+  function selectAssignment(name) {
+    activeAsgnName = name;
+    renderAssignments(); renderStudents(); updateStuHint();
+  }
+
+  function renderAssignments() {
+    const el = document.getElementById('asgn-list');
+    const asgns = sortedAsgns(activePeriod);
+    const grp = getShareGroup(activePeriod);
+    if (!asgns.length) {
+      el.innerHTML = '<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No assignments yet \u2014 add one above</p>';
+      return;
+    }
+    el.innerHTML = asgns.map(a => {
+      const isActive = a.name === activeAsgnName;
+      const count = Object.keys(a.grades).length;
+      const bg = isActive ? '#185FA5' : '#ffffff';
+      const tc = isActive ? '#ffffff' : '#2C2C2A';
+      const bc = isActive ? '#185FA5' : '#888780';
+      const tag = grp ? '<span style="font-size:10px;opacity:0.7;margin-left:4px;">shared</span>' : '';
+      const safe = a.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<button class="asgn-btn" onclick="selectAssignment('${safe}')"
+        style="background:${bg} !important;color:${tc} !important;border-color:${bc} !important;">
+        <span>${a.name}${tag}</span>
+        <span style="font-size:11px;opacity:0.8;">${count>0 ? count+' graded' : ''}</span>
+      </button>`;
+    }).join('');
+  }
+
+  // ── SCORES ──
+  function toggleAddScore() {
+    const f = document.getElementById('add-score-form');
+    f.style.display = f.style.display==='none' ? 'block' : 'none';
+    if (f.style.display==='block') setTimeout(() => document.getElementById('score-custom-input').focus(), 50);
+  }
+
+  function addCustomScore() {
+    const inp = document.getElementById('score-custom-input');
+    const val = inp.value.trim();
+    if (!val || isNaN(parseFloat(val))) return;
+    const key = String(parseFloat(val));
+    if (!customScores.includes(key) && !FIXED_IDS.includes(key)) {
+      customScores.push(key);
+      customScores.sort((a,b) => parseFloat(b)-parseFloat(a));
+    }
+    inp.value = '';
+    document.getElementById('add-score-form').style.display = 'none';
+    activeScore = key;
+    save(); renderScoreButtons();
+    const m = smeta(key);
+    document.getElementById('score-hint').textContent = 'Score "' + key + '" selected';
+    document.getElementById('score-hint').style.color = m.tc;
+    renderStudents();
+  }
+
+  function removeCustomScore(key) {
+    customScores = customScores.filter(s => s!==key);
+    if (activeScore===key) activeScore=null;
+    save(); renderScoreButtons(); updateStuHint();
+  }
+
+  function selectScore(s) {
+    activeScore = s;
+    renderScoreButtons();
+    const m = smeta(s);
+    document.getElementById('score-hint').textContent = 'Score "' + s + '" selected';
+    document.getElementById('score-hint').style.color = m.tc;
+    renderStudents();
+  }
+
+  function renderScoreButtons() {
+    // Fixed buttons
+    FIXED_IDS.forEach(s => {
+      const btn = document.getElementById('sbtn-'+s);
+      if (btn) btn.classList.toggle('sel', activeScore===s);
+    });
+    // Custom chips
+    document.getElementById('custom-score-grid').innerHTML = customScores.map(s => {
+      const safe = s.replace('.','_');
+      return `<div class="custom-chip ${activeScore===s?'sel':''}" id="chip-${safe}">
+        <button class="ctap" onclick="selectScore('${s}')">${s}</button>
+        <button class="cdel" onclick="removeCustomScore('${s}')" title="Remove">&times;</button>
+      </div>`;
+    }).join('');
+  }
+
+  // ── STUDENTS ──
+  function renderStudents() {
+    const grid = document.getElementById('student-grid');
+    const students = data[activePeriod] ? data[activePeriod].students : [];
+    if (!students.length) {
+      grid.innerHTML = '<p style="font-size:13px;color:#5F5E5A;grid-column:span 3;text-align:center;padding:8px 0;">No students \u2014 go to Setup to add a roster</p>';
+      return;
+    }
+    const asgn = activeAsgnName ? asgnByName(activePeriod, activeAsgnName) : null;
+    grid.innerHTML = students.map(s => {
+      const score = asgn ? asgn.grades[s] : null;
+      const m = score ? smeta(score) : null;
+      const bg = m ? m.bg : '#ffffff';
+      const tc = m ? m.tc : '#2C2C2A';
+      const bc = m ? 'transparent' : '#888780';
+      const safe = s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<button class="stu-btn"
+        onclick="tapStudent('${safe}')"
+        style="background:${bg} !important;color:${tc} !important;border-color:${bc} !important;">
+        ${s}${score ? '<br><span style="font-size:10px;font-weight:700;">'+score+'</span>' : ''}
+      </button>`;
+    }).join('');
+    updateStuHint();
+  }
+
+  function tapStudent(name) {
+    if (!activeAsgnName) { flashHint('stu-hint','Select an assignment first!','#A32D2D'); return; }
+    if (!activeScore)    { flashHint('stu-hint','Select a score first!','#A32D2D'); return; }
+    const asgn = asgnByName(activePeriod, activeAsgnName);
+    if (!asgn) return;
+    if (asgn.grades[name]===activeScore) { delete asgn.grades[name]; }
+    else { asgn.grades[name] = activeScore; }
+    save(); renderStudents(); renderAssignments(); renderLog();
+  }
+
+  function gradeAll() {
+    if (!activeAsgnName) { flashHint('stu-hint','Select an assignment first!','#A32D2D'); return; }
+    if (!activeScore)    { flashHint('stu-hint','Select a score first!','#A32D2D'); return; }
+    const asgn = asgnByName(activePeriod, activeAsgnName);
+    if (!asgn) return;
+    (data[activePeriod].students||[]).forEach(s => asgn.grades[s]=activeScore);
+    save(); renderStudents(); renderAssignments(); renderLog();
+  }
+
+  function clearAsgnGrades() {
+    if (!activeAsgnName) return;
+    const asgn = asgnByName(activePeriod, activeAsgnName);
+    if (asgn) { asgn.grades={}; save(); renderStudents(); renderAssignments(); renderLog(); }
+  }
+
+  function clearPeriodAll() {
+    if (!confirm('Clear ALL grades for Period '+activePeriod+'? This cannot be undone.')) return;
+    if (enteredGrades[activePeriod]) { delete enteredGrades[activePeriod]; }
+    if (data[activePeriod]) data[activePeriod].assignments.forEach(a => a.grades={});
+    save(); renderAssignments(); renderStudents(); renderLog();
+  }
+
+  function updateStuHint() {
+    const hint = document.getElementById('stu-hint');
+    if (!activeAsgnName) { hint.textContent='Select an assignment and score first'; hint.style.color='#5F5E5A'; return; }
+    if (!activeScore)    { hint.textContent='Select a score, then tap students'; hint.style.color='#5F5E5A'; return; }
+    const asgn = asgnByName(activePeriod, activeAsgnName);
+    const count = asgn ? Object.keys(asgn.grades).length : 0;
+    hint.textContent = count+' student'+(count!==1?'s':'')+' graded \u00b7 "'+activeAsgnName+'"';
+    hint.style.color='#185FA5';
+  }
+
+  function flashHint(id, msg, color) {
+    const el = document.getElementById(id);
+    const prev=el.textContent, pc=el.style.color;
+    el.textContent=msg; el.style.color=color;
+    setTimeout(()=>{ el.textContent=prev; el.style.color=pc; }, 2000);
+  }
+
+  // ── LOG ──
+  function renderLog() {
+    const el = document.getElementById('log-area');
+    const asgns = sortedAsgns(activePeriod).filter(a => Object.keys(a.grades).length>0);
+    if (!asgns.length) {
+      el.innerHTML='<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No grades recorded yet</p>';
+      return;
+    }
+    const periodEntered = enteredGrades[activePeriod] || {};
+    el.innerHTML = asgns.map(a => {
+      const enteredStudents = periodEntered[a.name];
+      const isEntered = !!enteredStudents;
+      const rows = Object.entries(a.grades)
+        .sort(([a],[b]) => a.localeCompare(b))
+        .map(([s,sc]) => {
+          const m = smeta(sc);
+          const studentEntered = isEntered && (enteredStudents === true || (Array.isArray(enteredStudents) && enteredStudents.indexOf(s) > -1));
+          const rowClass = studentEntered ? ' entered' : '';
+          const boldStyle = isEntered && !studentEntered ? ' style="font-weight:700;"' : '';
+          return '<div class="log-row' + rowClass + '"' + boldStyle + '>'
+            + '<span>' + s + '</span>'
+            + '<span class="score-pill" style="background:' + m.pb + ';color:' + m.tc + ';">' + sc + '</span>'
+            + '</div>';
+        }).join('');
+      const count = Object.keys(a.grades).length;
+      const newCount = isEntered && Array.isArray(enteredStudents)
+        ? Object.keys(a.grades).filter(s => enteredStudents.indexOf(s) === -1).length : 0;
+      const enteredBadge = isEntered
+        ? '<span style="font-size:10px;background:#EAF3DE;color:#27500A;border-radius:4px;padding:1px 6px;margin-left:6px;">entered</span>' : '';
+      const newBadge = newCount > 0
+        ? '<span style="font-size:10px;background:#FFF8E0;color:#7A5E00;border:1px solid #C09A20;border-radius:4px;padding:1px 6px;margin-left:4px;">' + newCount + ' new</span>' : '';
+      return '<div class="log-asgn-block">'
+        + '<div class="log-asgn-head">' + a.name + enteredBadge + newBadge
+        + ' <span style="font-weight:400;font-size:11px;color:#5F5E5A;">(' + count + ' graded)</span></div>'
+        + rows
+        + '</div>';
+    }).join('');
+  }
+
+  function markAllEntered() {
+    const asgns = sortedAsgns(activePeriod).filter(a => Object.keys(a.grades).length>0);
+    if (!asgns.length) { alert('No grades to mark as entered.'); return; }
+    if (!enteredGrades[activePeriod]) enteredGrades[activePeriod] = {};
+    asgns.forEach(a => {
+      enteredGrades[activePeriod][a.name] = Object.keys(a.grades);
+    });
+    save(); renderLog();
+  }
+
+  // ── EXPORT ──
+  function exportLog() {
+    const asgns = sortedAsgns(activePeriod).filter(a=>Object.keys(a.grades).length>0);
+    if (!asgns.length) { alert('No grades to export yet.'); return; }
+    const date = new Date().toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'});
+    const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+    let out = 'Grade Log \u2014 Period '+activePeriod+'\n'+date+' '+time+'\n'+'='.repeat(40)+'\n\n';
+    asgns.forEach(a => {
+      out += a.name+'\n'+'-'.repeat(30)+'\n';
+      Object.entries(a.grades)
+        .sort(([a],[b]) => a.localeCompare(b))
+        .forEach(([s,sc]) => { out += '  '+s.padEnd(24)+sc+'\n'; });
+      out += '\n';
+    });
+    const blob = new Blob([out],{type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'grades-period'+activePeriod+'-'+new Date().toISOString().slice(0,10)+'.txt';
+    a.click();
+  }
+
+  // ── RENDER ALL ──
+  function renderAll() {
+    renderPeriodTabs();
+    renderAssignments();
+    renderScoreButtons();
+    renderStudents();
+    renderLog();
+  }
+
+  function showPhase(id) {
+    document.querySelectorAll('.phase').forEach(p=>p.classList.remove('visible'));
+    document.getElementById(id).classList.add('visible');
+  }
+
+  // ── INIT ──
+  function init() {
+    const hasData = loadStorage();
+    if (hasData && PERIODS.length>0 && PERIODS.some(p=>data[p]&&data[p].students.length>0)) {
+      // Restore wizard state from saved config
+      pendingClassCount = PERIODS.length;
+      pendingClassNames = PERIODS.map(id=>({id, name:(data[id]&&data[id].name)||'Class '+(PERIODS.indexOf(id)+1)}));
+      shareGroups = [...SHARE_GROUPS];
+      showPhase('phase-gradebook');
+      activePeriod = PERIODS.find(p=>data[p]&&data[p].students.length>0)||PERIODS[0];
+      renderAll();
+    } else {
+      showPhase('phase-setup');
+      goToStep(1);
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
