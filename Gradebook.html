@@ -714,24 +714,32 @@
     }
     const periodEntered = enteredGrades[activePeriod] || {};
     el.innerHTML = asgns.map(a => {
-      const isEntered = !!periodEntered[a.name];
-      const usedScores = [...new Set(Object.values(a.grades))].sort((x,y)=>scoreOrder(y)-scoreOrder(x));
-      const rows = usedScores.map(sc => {
-        const m = smeta(sc);
-        return Object.entries(a.grades)
-          .filter(([,v])=>v===sc).map(([k])=>k)
-          .sort((x,y)=>x.localeCompare(y))
-          .map(s=>`<div class="log-row${isEntered?' entered':''}">
-            <span>${s}</span>
-            <span class="score-pill" style="background:${m.pb};color:${m.tc};">${sc}</span>
-          </div>`).join('');
-      }).join('');
+      const enteredStudents = periodEntered[a.name];
+      const isEntered = !!enteredStudents;
+      const rows = Object.entries(a.grades)
+        .sort(([a],[b]) => a.localeCompare(b))
+        .map(([s,sc]) => {
+          const m = smeta(sc);
+          const studentEntered = isEntered && (enteredStudents === true || (Array.isArray(enteredStudents) && enteredStudents.indexOf(s) > -1));
+          const rowClass = studentEntered ? ' entered' : '';
+          const boldStyle = isEntered && !studentEntered ? ' style="font-weight:700;"' : '';
+          return '<div class="log-row' + rowClass + '"' + boldStyle + '>'
+            + '<span>' + s + '</span>'
+            + '<span class="score-pill" style="background:' + m.pb + ';color:' + m.tc + ';">' + sc + '</span>'
+            + '</div>';
+        }).join('');
       const count = Object.keys(a.grades).length;
-      const enteredBadge = isEntered ? '<span style="font-size:10px;background:#EAF3DE;color:#27500A;border-radius:4px;padding:1px 6px;margin-left:6px;">entered</span>' : '';
-      return `<div class="log-asgn-block">
-        <div class="log-asgn-head">${a.name}${enteredBadge} <span style="font-weight:400;font-size:11px;color:#5F5E5A;">(${count} graded)</span></div>
-        ${rows}
-      </div>`;
+      const newCount = isEntered && Array.isArray(enteredStudents)
+        ? Object.keys(a.grades).filter(s => enteredStudents.indexOf(s) === -1).length : 0;
+      const enteredBadge = isEntered
+        ? '<span style="font-size:10px;background:#EAF3DE;color:#27500A;border-radius:4px;padding:1px 6px;margin-left:6px;">entered</span>' : '';
+      const newBadge = newCount > 0
+        ? '<span style="font-size:10px;background:#FFF8E0;color:#7A5E00;border:1px solid #C09A20;border-radius:4px;padding:1px 6px;margin-left:4px;">' + newCount + ' new</span>' : '';
+      return '<div class="log-asgn-block">'
+        + '<div class="log-asgn-head">' + a.name + enteredBadge + newBadge
+        + ' <span style="font-weight:400;font-size:11px;color:#5F5E5A;">(' + count + ' graded)</span></div>'
+        + rows
+        + '</div>';
     }).join('');
   }
 
@@ -739,7 +747,9 @@
     const asgns = sortedAsgns(activePeriod).filter(a => Object.keys(a.grades).length>0);
     if (!asgns.length) { alert('No grades to mark as entered.'); return; }
     if (!enteredGrades[activePeriod]) enteredGrades[activePeriod] = {};
-    asgns.forEach(a => { enteredGrades[activePeriod][a.name] = true; });
+    asgns.forEach(a => {
+      enteredGrades[activePeriod][a.name] = Object.keys(a.grades);
+    });
     save(); renderLog();
   }
 
