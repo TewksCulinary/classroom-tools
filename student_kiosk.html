@@ -281,27 +281,28 @@ function renderGrid() {
   document.getElementById('out-count-bar').style.display='block';
 
   // Count bathroom-out students
-  var bathroomOut = students.filter(function(n){ return passState[n]&&passState[n].type==='bathroom'; }).length;
-  var anyOut = students.filter(function(n){ return passState[n]&&passState[n].type==='bathroom'; }).length;
+  var passOut = students.filter(function(n){
+    return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water');
+  }).length;
 
   // Background color
-  if (bathroomOut === 0) {
+  if (passOut === 0) {
     document.body.className = 'green';
-    document.getElementById('status-badge').textContent = 'Bathroom available';
+    document.getElementById('status-badge').textContent = 'Pass available';
     document.getElementById('status-badge').className = 'status-badge badge-green';
-  } else if (bathroomOut === 1) {
+  } else if (passOut === 1) {
     document.body.className = 'green';
     document.getElementById('status-badge').textContent = '1 student out';
     document.getElementById('status-badge').className = 'status-badge badge-green';
   } else {
     document.body.className = 'red';
-    document.getElementById('status-badge').textContent = bathroomOut+' students out - please wait';
+    document.getElementById('status-badge').textContent = passOut+' students out - please wait';
     document.getElementById('status-badge').className = 'status-badge badge-red';
   }
 
-  document.getElementById('out-count-bar').textContent = bathroomOut > 0
-    ? bathroomOut + ' student'+(bathroomOut!==1?'s':'')+' currently out to bathroom'
-    : 'No students currently out to bathroom';
+  document.getElementById('out-count-bar').textContent = passOut > 0
+    ? passOut + ' student'+(passOut!==1?'s':'')+' currently out'
+    : 'No students currently out';
 
   var html = '';
   students.forEach(function(name) {
