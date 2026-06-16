@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Pass Kiosk</title>
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: 0; min-height: 100vh; transition: background-color 0.6s ease; display: flex; flex-direction: column; }
+    body.green { background: #d4edda; }
+    body.red   { background: #f8d7da; }
+    body.neutral { background: #f1efec; }
+
+    .top-bar { padding: 16px 20px 8px; text-align: center; }
+    .top-bar h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2C2C2A; }
+    .top-bar p  { margin: 4px 0 0; font-size: 14px; color: #5F5E5A; }
+    .status-badge { display: inline-block; margin-top: 8px; padding: 6px 18px; border-radius: 20px; font-size: 14px; font-weight: 700; }
+    .badge-green { background: #27500A; color: #ffffff; }
+    .badge-red   { background: #791F1F; color: #ffffff; }
+    .badge-neutral { background: #888780; color: #ffffff; }
+
+    .student-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 12px 16px; flex: 1; }
+    .stu-btn { border-radius: 12px; padding: 16px 8px; cursor: pointer; border: 2px solid transparent; text-align: center; user-select: none; font-size: 15px; font-weight: 600; line-height: 1.3; transition: all 0.15s; }
+    .stu-btn:active { transform: scale(0.94); }
+    .stu-present { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
+    .stu-out     { background: #E8F0FB; color: #1A3F7A; border-color: #A8C0EE; }
+    .stu-out-water { background: #E0F5F5; color: #0D6B6B; border-color: #80D5D5; }
+    .stu-out-other { background: #FFF6DC; color: #7A5500; border-color: #F0D070; }
+    .stu-sub { font-size: 11px; font-weight: 400; margin-top: 3px; opacity: 0.8; }
+
+    /* Action panel */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99; display: none; }
+    .overlay.visible { display: block; }
+    .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; z-index: 100; display: none; max-width: 480px; margin: 0 auto; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); }
+    .panel.visible { display: block; }
+    .panel-name { font-size: 20px; font-weight: 700; color: #2C2C2A; margin-bottom: 4px; }
+    .panel-status { font-size: 13px; color: #5F5E5A; margin-bottom: 16px; }
+    .panel-close { position: absolute; top: 16px; right: 20px; background: none; border: none; font-size: 26px; cursor: pointer; color: #888780; line-height: 1; }
+    .big-btn { width: 100%; border: none; border-radius: 12px; padding: 18px; font-size: 17px; font-weight: 700; cursor: pointer; margin-bottom: 10px; transition: all 0.15s; }
+    .big-btn:active { opacity: 0.8; transform: scale(0.98); }
+    .btn-back     { background: #EAF3DE; color: #27500A; }
+    .btn-bathroom { background: #E8F0FB; color: #1A3F7A; }
+    .btn-water    { background: #E0F5F5; color: #0D6B6B; }
+    .btn-other    { background: #FFF6DC; color: #7A5500; }
+
+    /* Destination picker */
+    .dest-section { display: none; margin-top: 4px; }
+    .dest-section.visible { display: block; }
+    .dest-chip { display: inline-block; background: #FFF6DC; border: 1.5px solid #F0D070; color: #7A5500; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 600; margin: 4px; cursor: pointer; }
+    .dest-chip:active { background: #F0D070; }
+    .dest-skip { width: 100%; background: #F1EFE8; border: 1.5px solid #B4B2A9; color: #5F5E5A; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+
+    /* Loading / error */
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }
+    .loading h2 { color: #2C2C2A; margin-bottom: 8px; }
+    .loading p { color: #5F5E5A; font-size: 14px; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #B4B2A9; border-top-color: #185FA5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .out-count-bar { text-align: center; padding: 8px; font-size: 13px; color: #5F5E5A; }
+  </style>
+</head>
+<body class="neutral">
+
+<div class="top-bar">
+  <h1>&#128712; Hall Pass</h1>
+  <p id="class-name">Loading...</p>
+  <span class="status-badge badge-neutral" id="status-badge">Checking...</span>
+</div>
+
+<div id="main-content">
+  <div class="loading" id="loading-state">
+    <div class="spinner"></div>
+    <h2>Connecting...</h2>
+    <p>Waiting for teacher to set the active class.</p>
+  </div>
+  <div class="out-count-bar" id="out-count-bar" style="display:none;"></div>
+  <div class="student-grid" id="student-grid" style="display:none;"></div>
+</div>
+
+<!-- Action panel -->
+<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="panel" id="panel">
+  <button class="panel-close" onclick="closePanel()">&times;</button>
+  <div class="panel-name" id="panel-name"></div>
+  <div class="panel-status" id="panel-status"></div>
+  <div id="panel-buttons"></div>
+  <div class="dest-section" id="dest-section">
+    <p style="font-size:13px;font-weight:600;color:#7A5500;margin-bottom:8px;">Where are you going? (optional)</p>
+    <div id="dest-chips"></div>
+    <button class="dest-skip" onclick="sendOut(currentStudent,'other',null)">Skip / I'll tell my teacher</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG - must match teacher file
+// ============================================================
+var SHEET_ID = '1yw-jg5nb1mDE_PkRTm7g0U9k-YZ9Zj7KMItOGZRkhQs';
+var CLIENT_ID = '105486082487-tejf9i7nvvr47322470ve7tm6kfpahlq.apps.googleusercontent.com'; // same client ID as teacher file
+var SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+var SHEET_PASSES = 'passes';
+var SHEET_CONFIG = 'config';
+
+// ============================================================
+// STATE
+// ============================================================
+var accessToken = null;
+var tokenClient = null;
+var activeClassId = null;
+var activeClassName = '';
+var students = [];
+var passState = {}; // name -> {type, out, destination} or null
+var destLib = [];
+var currentStudent = null;
+var pollInterval = null;
+
+// ============================================================
+// AUTH
+// ============================================================
+function initAuth() {
+  if (typeof google === 'undefined') { setTimeout(initAuth, 500); return; }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: function(response) {
+      if (response.error) { showError('Sign-in failed. Please reload and try again.'); return; }
+      accessToken = response.access_token;
+      localStorage.setItem('kiosk_token', accessToken);
+      startPolling();
+    }
+  });
+  var saved = localStorage.getItem('kiosk_token');
+  if (saved) {
+    accessToken = saved;
+    startPolling();
+  } else {
+    // Auto-request token (kiosk mode - no user interaction needed for sign in flow)
+    tokenClient.requestAccessToken({prompt:''});
+  }
+}
+
+// ============================================================
+// SHEETS API
+// ============================================================
+function sheetsGet(range) {
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range),{
+    headers:{'Authorization':'Bearer '+accessToken}
+  }).then(function(r){
+    if(r.status===401){ accessToken=null; localStorage.removeItem('kiosk_token'); tokenClient.requestAccessToken({prompt:''}); throw new Error('auth'); }
+    return r.json();
+  });
+}
+function sheetsAppend(values) {
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(SHEET_PASSES)+'!A:J:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},
+    body:JSON.stringify({values:values})
+  }).then(function(r){ return r.json(); });
+}
+function sheetsUpdate(range, values) {
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{
+    method:'PUT',
+    headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},
+    body:JSON.stringify({values:values})
+  }).then(function(r){ return r.json(); });
+}
+
+// ============================================================
+// POLLING
+// ============================================================
+function startPolling() {
+  poll();
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(poll, 5000);
+}
+
+function poll() {
+  if (!accessToken) return;
+  // Read config to get active class and dest lib
+  sheetsGet(SHEET_CONFIG+'!A1:B10').then(function(res) {
+    var rows = res.values || [];
+    var cfg = {};
+    rows.forEach(function(r){ if(r[0]) cfg[r[0]]=r[1]||''; });
+
+    var newClassId = cfg['kioskClassId']||'';
+    if (newClassId && newClassId !== activeClassId) {
+      activeClassId = newClassId;
+      // Parse destLib
+      try { destLib = JSON.parse(cfg['destLib']||'[]'); } catch(e){ destLib=[]; }
+      // Need to get class data from passes sheet to extract student list
+      loadClassData();
+    } else if (!newClassId) {
+      showWaiting();
+    }
+  }).then(function(){
+    // Also read current pass states
+    if (activeClassId) readCurrentPasses();
+  }).catch(function(e){ if(e.message!=='auth') console.log('poll error',e); });
+}
+
+function loadClassData() {
+  sheetsGet(SHEET_CONFIG+'!A1:B10').then(function(res) {
+    var rows = res.values||[];
+    var cfg = {};
+    rows.forEach(function(r){ if(r[0]) cfg[r[0]]=r[1]||''; });
+
+    // Read roster directly from config tab
+    var rosterData = {};
+    try { rosterData = JSON.parse(cfg['rosterData']||'{}'); } catch(e){}
+
+    var classInfo = rosterData[activeClassId];
+    if (classInfo && classInfo.students && classInfo.students.length) {
+      students = classInfo.students.slice().sort(function(a,b){ return a.localeCompare(b); });
+      activeClassName = classInfo.name || 'Current Class';
+    } else {
+      // Fallback: no roster data yet - show helpful message
+      document.getElementById('loading-state').innerHTML =
+        '<div style="padding:20px;text-align:center;">'
+        +'<h2 style="color:#2C2C2A;">Almost ready</h2>'
+        +'<p style="color:#5F5E5A;">Waiting for teacher to sync roster data.<br>Please reload in a moment.</p>'
+        +'</div>';
+      document.getElementById('loading-state').style.display='flex';
+      document.getElementById('student-grid').style.display='none';
+      return;
+    }
+
+    document.getElementById('class-name').textContent = activeClassName;
+    readCurrentPasses();
+  }).catch(function(e){ console.log('loadClassData error',e); });
+}
+
+function readCurrentPasses() {
+  var today = new Date().toISOString().slice(0,10);
+  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+    var rows = res.values||[];
+    var newState = {};
+    students.forEach(function(n){ newState[n]=null; });
+
+    rows.forEach(function(r){
+      var classId=r[2], name=r[4], type=r[5], dest=r[6]||'', out=parseInt(r[7])||0, back=parseInt(r[8])||0;
+      if(classId!==activeClassId||!name) return;
+      var dk = out ? new Date(out).toISOString().slice(0,10) : '';
+      if(dk!==today) return;
+      if(!back) {
+        // Currently out
+        newState[name]={type:type,out:out,destination:dest||null};
+      } else {
+        // Back in
+        if(newState[name]&&newState[name].out===out) newState[name]=null;
+        else newState[name]=null;
+      }
+    });
+
+    passState = newState;
+    renderGrid();
+  }).catch(function(e){ if(e.message!=='auth') console.log('readCurrentPasses error',e); });
+}
+
+// ============================================================
+// UI
+// ============================================================
+function showWaiting() {
+  document.getElementById('loading-state').style.display='flex';
+  document.getElementById('student-grid').style.display='none';
+  document.getElementById('out-count-bar').style.display='none';
+  document.getElementById('class-name').textContent='Waiting for teacher...';
+  document.getElementById('status-badge').textContent='Not active';
+  document.getElementById('status-badge').className='status-badge badge-neutral';
+  document.body.className='neutral';
+}
+
+function showError(msg) {
+  document.getElementById('loading-state').innerHTML='<div><h2>Error</h2><p>'+msg+'</p></div>';
+  document.getElementById('loading-state').style.display='flex';
+}
+
+function renderGrid() {
+  document.getElementById('loading-state').style.display='none';
+  document.getElementById('student-grid').style.display='grid';
+  document.getElementById('out-count-bar').style.display='block';
+
+  // Count bathroom-out students
+  var bathroomOut = students.filter(function(n){ return passState[n]&&passState[n].type==='bathroom'; }).length;
+  var anyOut = students.filter(function(n){ return passState[n]&&passState[n].type==='bathroom'; }).length;
+
+  // Background color
+  if (bathroomOut === 0) {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = 'Bathroom available';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
+  } else if (bathroomOut === 1) {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = '1 student out';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
+  } else {
+    document.body.className = 'red';
+    document.getElementById('status-badge').textContent = bathroomOut+' students out - please wait';
+    document.getElementById('status-badge').className = 'status-badge badge-red';
+  }
+
+  document.getElementById('out-count-bar').textContent = bathroomOut > 0
+    ? bathroomOut + ' student'+(bathroomOut!==1?'s':'')+' currently out to bathroom'
+    : 'No students currently out to bathroom';
+
+  var html = '';
+  students.forEach(function(name) {
+    var state = passState[name];
+    var cls = 'stu-present';
+    var statusText = '';
+    if (state) {
+      if(state.type==='bathroom'){ cls='stu-out'; statusText='Bathroom'; }
+      else if(state.type==='water'){ cls='stu-out-water'; statusText='Water'; }
+      else { cls='stu-out-other'; statusText=state.destination||'Other'; }
+    }
+    var safe = name.replace(/'/g,"\\'");
+    html += '<button class="stu-btn '+cls+'" onclick="openPanel(\''+safe+'\')">'+name
+      +(statusText?'<div class="stu-sub">'+statusText+'</div>':'')
+      +'</button>';
+  });
+  document.getElementById('student-grid').innerHTML = html;
+}
+
+// ============================================================
+// ACTION PANEL
+// ============================================================
+function openPanel(name) {
+  currentStudent = name;
+  var state = passState[name];
+  document.getElementById('panel-name').textContent = name;
+  document.getElementById('dest-section').classList.remove('visible');
+
+  if (state) {
+    // Student is out - show back button
+    document.getElementById('panel-status').textContent = 'Currently out: ' + (state.type==='bathroom'?'Bathroom':state.type==='water'?'Water fountain':state.destination||'Other');
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-back" onclick="signBack()">&#10003; I\'m back</button>';
+  } else {
+    // Student is in - show out options
+    document.getElementById('panel-status').textContent = 'Where are you going?';
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-bathroom" onclick="sendOut(\''+name+'\',\'bathroom\',null)">Bathroom</button>'
+      +'<button class="big-btn btn-water" onclick="sendOut(\''+name+'\',\'water\',null)">Water fountain</button>'
+      +'<button class="big-btn btn-other" onclick="showDestPicker()">Other</button>';
+  }
+
+  document.getElementById('panel').classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+}
+
+function showDestPicker() {
+  var sec = document.getElementById('dest-section');
+  sec.classList.add('visible');
+  // Render dest chips
+  var chips = '';
+  destLib.forEach(function(d) {
+    var safe = d.replace(/'/g,"\\'");
+    chips += '<span class="dest-chip" onclick="sendOut(currentStudent,\'other\',\''+safe+'\')">'+d+'</span>';
+  });
+  document.getElementById('dest-chips').innerHTML = chips || '';
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('visible');
+  document.getElementById('overlay').classList.remove('visible');
+  document.getElementById('dest-section').classList.remove('visible');
+  currentStudent = null;
+}
+
+function sendOut(name, type, destination) {
+  if (!name) return;
+  closePanel();
+  var now = Date.now();
+  var eventId = now.toString(36)+Math.random().toString(36).slice(2,6);
+  var today = new Date().toISOString().slice(0,10);
+  // Optimistic update
+  passState[name] = {type:type, out:now, destination:destination};
+  renderGrid();
+  // Write to sheet
+  sheetsAppend([[
+    new Date().toISOString(),
+    eventId,
+    activeClassId,
+    activeClassName,
+    name,
+    type,
+    destination||'',
+    now,
+    '',
+    ''
+  ]]).catch(function(e){ console.log('write error',e); });
+}
+
+function signBack() {
+  var name = currentStudent;
+  if (!name) return;
+  var state = passState[name];
+  if (!state) { closePanel(); return; }
+  closePanel();
+  var now = Date.now();
+  // Optimistic update
+  passState[name] = null;
+  renderGrid();
+  // Find the row in sheet and update back time
+  // We do this by appending a "back" marker row with same eventId pattern
+  // Teacher's poller will reconcile
+  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+    var rows = res.values||[];
+    var rowIdx = -1;
+    rows.forEach(function(r,i){
+      if(r[2]===activeClassId&&r[4]===name&&parseInt(r[7])===state.out&&!r[8]) rowIdx=i;
+    });
+    if(rowIdx>=0){
+      var sheetRow = rowIdx+2; // +2 for header and 1-indexed
+      return sheetsUpdate(SHEET_PASSES+'!I'+sheetRow+':J'+sheetRow, [[now,'']]);
+    }
+  }).catch(function(e){ console.log('back error',e); });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+window.addEventListener('load', function() {
+  setTimeout(initAuth, 800);
+});
+</script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</body>
+</html>
