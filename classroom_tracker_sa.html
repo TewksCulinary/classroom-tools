@@ -644,8 +644,8 @@ function startSyncInterval() {
 // ============================================================
 // CONSTANTS / STATE
 // ============================================================
-var TYPE_COLOR  = {bathroom:'#1A3F7A',water:'#0D6B6B',other:'#7A5500',absent:'#555555',tardy:'#7A4500',note:'#5B2D8E'};
-var TYPE_LABEL  = {bathroom:'Bathroom',water:'Water fountain',other:'Other',absent:'Absent',tardy:'Tardy arrival',note:'Note',present:'Present'};
+var TYPE_COLOR  = {bathroom:'#1A3F7A',water:'#0D6B6B',other:'#7A5500',absent:'#555555',tardy:'#7A4500',note:'#5B2D8E',clockin:'#27500A'};
+var TYPE_LABEL  = {bathroom:'Bathroom',water:'Water fountain',other:'Other',absent:'Absent',tardy:'Tardy arrival',note:'Note',present:'Present',clockin:'Clocked in'};
 var STATUS_CLASS= {present:'s-present',absent:'s-absent',tardy:'s-tardy',bathroom:'s-bathroom',water:'s-water',other:'s-other',note:'s-note',alert:'s-alert'};
 var STATUS_LBL  = {present:'Present',absent:'Absent',tardy:'Tardy',bathroom:'Bathroom',water:'Water fountain',other:'Other',note:'Note',alert:'Out too long!'};
 
@@ -797,7 +797,7 @@ function getStudentStatus(classId,name){
   var trips=getTodayTrips(classId,name);
   if(trips.some(function(t){return t.type==='absent';}))return'absent';
   if(trips.some(function(t){return t.type==='tardy'&&!t.back;}))return'tardy';
-  var active=trips.find(function(t){return['absent','tardy','note'].indexOf(t.type)===-1&&!t.back;});
+  var active=trips.find(function(t){return['absent','tardy','note','clockin'].indexOf(t.type)===-1&&!t.back;});
   if(!active)return'present';
   if(active.type==='other')return'other';
   var elapsed=(Date.now()-active.out)/1000/60;
@@ -885,9 +885,9 @@ function renderTodayLog(){
   var html='';
   entries.forEach(function(e){
     var tc=TYPE_COLOR[e.type]||'#2C2C2A';var tl=TYPE_LABEL[e.type]||e.type;
-    var notPass=['absent','tardy','note'].indexOf(e.type)>-1;
+    var notPass=['absent','tardy','note','clockin'].indexOf(e.type)>-1;
     var dur=e.backUnknown?'':e.back&&!notPass?Math.round((e.back-e.out)/1000/60)+'m':'';
-    var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):'';
+    var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):e.type==='clockin'?' at '+fmtTime(e.out):'';
     var backStr=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';
     var editBtn='';
     if(e.type==='other'){var safeN=e.name.replace(/'/g,"\\'");var safeId=(e.eventId||'').replace(/'/g,"\\'");editBtn='<button onclick="promptEditDest(\''+safeN+'\',\''+safeId+'\')" style="font-size:10px;background:none;border:1px solid #F0D070;border-radius:4px;padding:1px 6px;cursor:pointer;color:#7A5500;margin-left:4px;">edit dest</button>';}
@@ -1026,7 +1026,7 @@ function renderHistory(){
     var dayData=passData[activeClassId][day];var entries=[];
     cls.students.forEach(function(name){(dayData[name]||[]).forEach(function(t){entries.push(Object.assign({name:name},t));});});
     entries.sort(function(a,b){return a.out-b.out;});if(!entries.length)return'';
-    var rows=entries.map(function(e){var tc=TYPE_COLOR[e.type]||'#2C2C2A';var tl=TYPE_LABEL[e.type]||e.type;var notPass=['absent','tardy','note'].indexOf(e.type)>-1;var dur=e.backUnknown?'':e.back&&!notPass?Math.round((e.back-e.out)/1000/60)+'m':'';var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):'';var backStr=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';return'<div class="hist-row"><span style="font-weight:600;min-width:75px;">'+e.name+'</span><span style="color:'+tc+';">'+tl+extra+'</span><span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(e.out))+backStr+(dur?' ('+dur+')':'')+'</span></div>';}).join('');
+    var rows=entries.map(function(e){var tc=TYPE_COLOR[e.type]||'#2C2C2A';var tl=TYPE_LABEL[e.type]||e.type;var notPass=['absent','tardy','note','clockin'].indexOf(e.type)>-1;var dur=e.backUnknown?'':e.back&&!notPass?Math.round((e.back-e.out)/1000/60)+'m':'';var extra=e.type==='note'?' - "'+e.text+'"':e.type==='other'&&e.destination?' - '+e.destination:e.type==='tardy'?' arrived '+fmtTime(e.out):e.type==='clockin'?' at '+fmtTime(e.out):'';var backStr=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';return'<div class="hist-row"><span style="font-weight:600;min-width:75px;">'+e.name+'</span><span style="color:'+tc+';">'+tl+extra+'</span><span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(e.out))+backStr+(dur?' ('+dur+')':'')+'</span></div>';}).join('');
     return'<div class="section"><div class="hist-head">'+fmtDate(day)+' - '+cls.name+'</div>'+rows+'</div>';
   }).filter(Boolean);
   el.innerHTML=blocks.length?blocks.join(''):'<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p>';
@@ -1040,7 +1040,7 @@ function buildExport(classId,days){
     cls.students.forEach(function(name){(dayData[name]||[]).forEach(function(t){entries.push(Object.assign({name:name},t));});});
     entries.sort(function(a,b){return a.out-b.out;});if(!entries.length)return;
     out+=fmtDate(day)+'\n'+'-'.repeat(30)+'\n';
-    entries.forEach(function(e){var tl=TYPE_LABEL[e.type]||e.type;var notPass=['absent','tardy','note'].indexOf(e.type)>-1;var extra=e.type==='note'?' ('+e.text+')':e.type==='other'&&e.destination?' ('+e.destination+')':e.type==='tardy'?' arrived '+fmtTime(e.out):'';var ts=notPass?'':fmtTime(e.out);var back=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';var dur=e.backUnknown?'':e.back&&!notPass?' ('+Math.round((e.back-e.out)/1000/60)+'m)':'';out+='  '+e.name.padEnd(22)+(tl+extra).padEnd(24)+ts+back+dur+'\n';});
+    entries.forEach(function(e){var tl=TYPE_LABEL[e.type]||e.type;var notPass=['absent','tardy','note','clockin'].indexOf(e.type)>-1;var extra=e.type==='note'?' ('+e.text+')':e.type==='other'&&e.destination?' ('+e.destination+')':e.type==='tardy'?' arrived '+fmtTime(e.out):'';var ts=notPass?'':fmtTime(e.out);var back=e.backUnknown?' (returned, time unknown)':e.back&&!notPass?' -> '+fmtTime(e.back):'';var dur=e.backUnknown?'':e.back&&!notPass?' ('+Math.round((e.back-e.out)/1000/60)+'m)':'';out+='  '+e.name.padEnd(22)+(tl+extra).padEnd(24)+ts+back+dur+'\n';});
     out+='\n';
   });
   return out;

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Pass Kiosk</title>
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { margin: 0; padding: 0; min-height: 100vh; transition: background-color 0.6s ease; display: flex; flex-direction: column; }
+    body.green { background: #d4edda; }
+    body.red   { background: #f8d7da; }
+    body.neutral { background: #f1efec; }
+
+    .top-bar { padding: 16px 20px 8px; text-align: center; }
+    .top-bar h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2C2C2A; }
+    .top-bar p  { margin: 4px 0 0; font-size: 14px; color: #5F5E5A; }
+    .status-badge { display: inline-block; margin-top: 8px; padding: 6px 18px; border-radius: 20px; font-size: 14px; font-weight: 700; }
+    .badge-green { background: #27500A; color: #ffffff; }
+    .badge-red   { background: #791F1F; color: #ffffff; }
+    .badge-neutral { background: #888780; color: #ffffff; }
+
+    .student-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 12px 16px; flex: 1; }
+    .stu-btn { border-radius: 12px; padding: 16px 8px; cursor: pointer; border: 2px solid transparent; text-align: center; user-select: none; font-size: 15px; font-weight: 600; line-height: 1.3; transition: all 0.15s; }
+    .stu-btn:active { transform: scale(0.94); }
+    .stu-not-clocked { background: #f1efec; color: #888780; border-color: #C8C6C0; }
+    .stu-present { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
+    .stu-out     { background: #E8F0FB; color: #1A3F7A; border-color: #A8C0EE; }
+    .stu-out-water { background: #E0F5F5; color: #0D6B6B; border-color: #80D5D5; }
+    .stu-out-other { background: #FFF6DC; color: #7A5500; border-color: #F0D070; }
+    .stu-sub { font-size: 11px; font-weight: 400; margin-top: 3px; opacity: 0.8; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99; display: none; }
+    .overlay.visible { display: block; }
+    .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; z-index: 100; display: none; max-width: 480px; margin: 0 auto; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); }
+    .panel.visible { display: block; }
+    .panel-name { font-size: 20px; font-weight: 700; color: #2C2C2A; margin-bottom: 4px; }
+    .panel-status { font-size: 13px; color: #5F5E5A; margin-bottom: 16px; }
+    .panel-close { position: absolute; top: 16px; right: 20px; background: none; border: none; font-size: 26px; cursor: pointer; color: #888780; line-height: 1; }
+    .big-btn { width: 100%; border: none; border-radius: 12px; padding: 18px; font-size: 17px; font-weight: 700; cursor: pointer; margin-bottom: 10px; transition: all 0.15s; }
+    .big-btn:active { opacity: 0.8; transform: scale(0.98); }
+    .btn-clockin  { background: #EAF3DE; color: #27500A; }
+    .btn-back     { background: #EAF3DE; color: #27500A; }
+    .btn-bathroom { background: #E8F0FB; color: #1A3F7A; }
+    .btn-water    { background: #E0F5F5; color: #0D6B6B; }
+    .btn-other    { background: #FFF6DC; color: #7A5500; }
+
+    .dest-section { display: none; margin-top: 4px; }
+    .dest-section.visible { display: block; }
+    .dest-chip { display: inline-block; background: #FFF6DC; border: 1.5px solid #F0D070; color: #7A5500; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 600; margin: 4px; cursor: pointer; }
+    .dest-chip:active { background: #F0D070; }
+    .dest-skip { width: 100%; background: #F1EFE8; border: 1.5px solid #B4B2A9; color: #5F5E5A; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+
+    .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }
+    .loading h2 { color: #2C2C2A; margin-bottom: 8px; }
+    .loading p { color: #5F5E5A; font-size: 14px; }
+    .spinner { width: 40px; height: 40px; border: 4px solid #B4B2A9; border-top-color: #185FA5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .out-count-bar { text-align: center; padding: 8px; font-size: 13px; color: #5F5E5A; }
+
+    .setup-box { max-width: 480px; margin: 24px auto; padding: 0 16px; }
+    .setup-card { background: #ffffff; border: 1.5px solid #A8C0EE; border-radius: 12px; padding: 18px; }
+    .setup-card input { width: 100%; border: 1.5px solid #A8C0EE; border-radius: 8px; padding: 10px 12px; font-size: 13px; background: #F1EFE8; color: #2C2C2A; font-family: sans-serif; margin-top: 8px; }
+    .setup-card button { width: 100%; background: #185FA5; border: none; border-radius: 8px; padding: 12px; font-size: 14px; font-weight: 600; color: #ffffff; cursor: pointer; margin-top: 10px; }
+  </style>
+</head>
+<body class="neutral">
+
+<div class="top-bar">
+  <h1>&#128712; Hall Pass</h1>
+  <p id="class-name">Loading...</p>
+  <span class="status-badge badge-neutral" id="status-badge">Checking...</span>
+</div>
+
+<div id="setup-screen" class="setup-box" style="display:none;">
+  <div class="setup-card">
+    <p style="font-size:14px;font-weight:700;color:#2C2C2A;margin-bottom:6px;">Connect to your teacher's Sheet</p>
+    <p style="font-size:12px;color:#5F5E5A;">Paste the Sheet ID your teacher gave you (or the full Sheet URL).</p>
+    <input type="text" id="kiosk-sheet-input" placeholder="Sheet ID or URL..." />
+    <button onclick="saveKioskSheetId()">Connect</button>
+    <p id="kiosk-setup-status" style="font-size:12px;color:#5F5E5A;margin-top:8px;"></p>
+  </div>
+</div>
+
+<div id="main-content">
+  <div class="loading" id="loading-state">
+    <div class="spinner"></div>
+    <h2>Connecting...</h2>
+    <p>Waiting for teacher to set the active class.</p>
+  </div>
+  <div class="out-count-bar" id="out-count-bar" style="display:none;"></div>
+  <div class="student-grid" id="student-grid" style="display:none;"></div>
+</div>
+
+<!-- Action panel -->
+<div class="overlay" id="overlay" onclick="closePanel()"></div>
+<div class="panel" id="panel">
+  <button class="panel-close" onclick="closePanel()">&times;</button>
+  <div class="panel-name" id="panel-name"></div>
+  <div class="panel-status" id="panel-status"></div>
+  <div id="panel-buttons"></div>
+  <div class="dest-section" id="dest-section">
+    <p style="font-size:13px;font-weight:600;color:#7A5500;margin-bottom:8px;">Where are you going? (optional)</p>
+    <div id="dest-chips"></div>
+    <button class="dest-skip" onclick="sendOut(currentStudent,'other',null)">Skip / I'll tell my teacher</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SERVICE ACCOUNT CONFIG - must match teacher file
+// ============================================================
+var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.com';
+var SA_KEY_ID = '511e3c09ca7ae435d40bc9e4f6951f61011931c7';
+var SA_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDY1FpHveCJOBiT\nGF5Dp/fh1ITOjVO+69Zd0ZXsL+j8RzuGtYW/FJwLvbVjieFjmLx90YBrIz4AwkyQ\nm317b4uL17vyUDMpwAdbPiXgeIzwtgAjTVrPqh331Df0vEaBJlS+JBu2bOWsaLC+\ndFTmKFKcltzQQtUEPxAeG+2G6WTuMUO1shvvw0fCCpOCT0ht+npGyZwWm+EnlcvU\nQKxY21Cn2errNIo2WUi2vH8wVlwqt+Li4selakJvbHelzF0KOj/pAtSf3sUjwVak\nc9sX6U3oh9hFycY6TepOifm5xRIFBeIedcmA1p73HIjUxgw1f2Js76o02yru5kCW\nMFSs/jnbAgMBAAECggEAVxVKQP/4ewPlksY5rbB7NN7Wi+Jk3Qv452sybE59ozy0\nopCq66hKV8jUXerVc9u28E1A50abM1DV0Uoxpm6RPBPj7xjYw47VJYcbTUD9Ufu2\nqHb73uVy7cL0yj0Hj/0mEcuMucKYp5rQSV2Nb3aIX02T16zPwsnVHlKXHhUErUis\nlWSi162PKFqx0wb30lrQFfLxutUCL6qXpfd5upgyrKUL+emwfcgL4UkmdFgBP8QT\nvyQXMnwsfTTwTOuOUwIiYnwqw6rrpjyMBAUeyzTFkbjajt7f0T0g9vy3Eo4RxR1N\ntO2mi6h9o+cg2h1WEc0QdFI955cMZZ0T+BZLxWB8IQKBgQDyp+XwufjbhlPScLul\nUwanhiXaRLC26ix4Q5LE5gtHq7xemX2GMDgf9AqpG3H2ntGSHSrZ6AIsJqZznaAm\ndJ/M9uPgkVnxj6BCBrDRRrJT3bHvu9NI4iMzmXWUOXK9cF5LuAHaZ1jSBwA0aY4C\nZa/k/l3FG576+XX3NMXs8Wd60QKBgQDkwN8zTxMY/RbRHpAjIF+X9fAyjCB5Mwaw\n9Y6UUa02kA+7JpBF2G5jNgQ1etic1Ot8HA70TKONccZDgXLSd+o1bpv6x28dY2ZR\naI8VXl+dTKXW4QlDlISFtMz8sMGN+3BnS2kxGQO0y0LFA+WgpHNLRVMXacb1hxxz\nsnNiPZ+86wKBgBfoVO5f1FYEqRONyd8jC//LZsVXiTWsYs9CkR5XL/tSv09uvgBP\nlegICljY/GR5B1rnBsbLZhNlh3bSq+m+CdSO6qrAh2UWaoq20Ar+dSlwKUzea5W9\nugwmbYA6HMTvYksBiSU0k3q1994yHCy+ShM8wI5gB0zg8S93Ap0yt6hRAoGAXAaP\nhHeySiI/FJ/EAq2aZ2rEV8FxqvBxJ62Rz29QTJwGCBdKgR7Bwd3QMaebDvTFS2eK\nSJOwVE3KIgwooi0lpps52thyhhMf7W4v6bvOoVxddyWO8YYFDjkfIiUFqNXXcWaw\nCdVzXT9MPDAGJ+sgis53z/p41Pum4ZCPxJzf70MCgYEAzOQfsByiIuf1JUIvxrgX\n6ShfHEzxX9VSITOwswJdyv05PRFR0uJVyp9xQFmoiNqte/CmMpNs/94XWuT05riE\nceLMUL/xFSlrpEh4gHQ2eEomM2zdpcWdWGtFfls2Opxg/b/RF7WrkhWWNqAVBSln\n5dQOPCze+hxP+PnGnY4gpnI=\n-----END PRIVATE KEY-----\n';
+var SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+var SHEET_PASSES = 'passes';
+var SHEET_CONFIG = 'config';
+
+// ============================================================
+// JWT / TOKEN (same approach as teacher file)
+// ============================================================
+var cachedToken = null;
+var tokenExpiry = 0;
+
+function b64url(str) {
+  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+}
+function b64urlUint8(arr) {
+  var bin = '';
+  arr.forEach(function(b){ bin += String.fromCharCode(b); });
+  return b64url(bin);
+}
+
+async function getAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiry - 60000) return cachedToken;
+
+  var now = Math.floor(Date.now()/1000);
+  var header = b64url(JSON.stringify({alg:'RS256',typ:'JWT',kid:SA_KEY_ID}));
+  var claim  = b64url(JSON.stringify({
+    iss: SA_EMAIL, scope: SCOPES,
+    aud: 'https://oauth2.googleapis.com/token',
+    iat: now, exp: now + 3600
+  }));
+  var sigInput = header + '.' + claim;
+
+  var pemBody = SA_PRIVATE_KEY.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
+  var derBuf = Uint8Array.from(atob(pemBody), function(c){ return c.charCodeAt(0); });
+  var key = await crypto.subtle.importKey(
+    'pkcs8', derBuf.buffer,
+    {name:'RSASSA-PKCS1-v1_5', hash:'SHA-256'},
+    false, ['sign']
+  );
+  var sig = await crypto.subtle.sign(
+    'RSASSA-PKCS1-v1_5', key,
+    new TextEncoder().encode(sigInput)
+  );
+  var jwt = sigInput + '.' + b64urlUint8(new Uint8Array(sig));
+
+  var resp = await fetch('https://oauth2.googleapis.com/token', {
+    method:'POST',
+    headers:{'Content-Type':'application/x-www-form-urlencoded'},
+    body:'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion='+jwt
+  });
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error+': '+data.error_description);
+  cachedToken = data.access_token;
+  tokenExpiry = Date.now() + (data.expires_in||3600)*1000;
+  return cachedToken;
+}
+
+// ============================================================
+// SHEETS API
+// ============================================================
+var SHEET_ID = '';
+
+async function sheetsGet(range) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range),
+    {headers:{'Authorization':'Bearer '+token}});
+  return r.json();
+}
+async function sheetsUpdate(range, values) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',
+    {method:'PUT', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+     body:JSON.stringify({values:values})});
+  return r.json();
+}
+async function sheetsAppend(values) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(SHEET_PASSES)+'!A:J:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+    {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+     body:JSON.stringify({values:values})});
+  return r.json();
+}
+
+// ============================================================
+// STATE
+// ============================================================
+var activeClassId = null;
+var activeClassName = '';
+var students = [];
+var passState = {};
+var clockInState = {}; // name -> {ts: timestamp}
+var destLib = [];
+var currentStudent = null;
+var pollInterval = null;
+
+// ============================================================
+// SHEET ID SETUP (first time only)
+// ============================================================
+function saveKioskSheetId() {
+  var inp = document.getElementById('kiosk-sheet-input');
+  var id = inp.value.trim();
+  var match = id.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) id = match[1];
+  if (!id) { alert('Please paste the Sheet ID or URL.'); return; }
+
+  var status = document.getElementById('kiosk-setup-status');
+  status.textContent = 'Connecting...';
+  SHEET_ID = id;
+
+  getAccessToken().then(function(){
+    return sheetsGet(SHEET_CONFIG+'!A1:B1');
+  }).then(function(){
+    localStorage.setItem('kiosk_sheet_id', id);
+    status.textContent = 'Connected!';
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    startPolling();
+  }).catch(function(e){
+    status.textContent = 'Connection failed: '+e.message+'. Check the Sheet ID and that it has been shared with the service account.';
+    SHEET_ID = '';
+  });
+}
+
+// ============================================================
+// POLLING
+// ============================================================
+function startPolling() {
+  poll();
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(poll, 5000);
+}
+
+function poll() {
+  if (!SHEET_ID) return;
+  sheetsGet(SHEET_CONFIG+'!A1:B10').then(function(res) {
+    var rows = res.values || [];
+    var cfg = {};
+    rows.forEach(function(r){ if(r[0]) cfg[r[0]]=r[1]||''; });
+
+    var newClassId = cfg['kioskClassId']||'';
+    var rosterData = {};
+    try { rosterData = JSON.parse(cfg['rosterData']||'{}'); } catch(e){}
+
+    try { destLib = JSON.parse(cfg['destLib']||'[]'); } catch(e){ destLib=[]; }
+
+    if (!newClassId) { showWaiting(); return; }
+
+    var classInfo = rosterData[newClassId];
+    if (!classInfo || !classInfo.students || !classInfo.students.length) {
+      document.getElementById('loading-state').innerHTML =
+        '<div style="padding:20px;text-align:center;"><h2 style="color:#2C2C2A;">Almost ready</h2><p style="color:#5F5E5A;">Waiting for teacher to sync roster data.<br>Please wait a moment.</p></div>';
+      document.getElementById('loading-state').style.display='flex';
+      document.getElementById('student-grid').style.display='none';
+      return;
+    }
+
+    activeClassId = newClassId;
+    students = classInfo.students.slice().sort(function(a,b){ return a.localeCompare(b); });
+    activeClassName = classInfo.name || 'Current Class';
+    document.getElementById('class-name').textContent = activeClassName;
+
+    readCurrentPasses();
+  }).catch(function(e){ console.log('poll error',e); });
+}
+
+function readCurrentPasses() {
+  var today = new Date().toISOString().slice(0,10);
+  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+    var rows = res.values||[];
+    var newState = {};
+    var newClockIn = {};
+    students.forEach(function(n){ newState[n]=null; newClockIn[n]=null; });
+
+    rows.forEach(function(r){
+      var classId=r[2], name=r[4], type=r[5], dest=r[6]||'', out=parseInt(r[7])||0, back=parseInt(r[8])||0;
+      if(classId!==activeClassId||!name) return;
+      var dk = out ? new Date(out).toISOString().slice(0,10) : '';
+      if(dk!==today) return;
+      if(type==='clockin') {
+        newClockIn[name] = {ts: out};
+      } else {
+        if(!back) newState[name]={type:type,out:out,destination:dest||null};
+        else newState[name]=null;
+      }
+    });
+
+    passState = newState;
+    clockInState = newClockIn;
+    renderGrid();
+  }).catch(function(e){ console.log('readCurrentPasses error',e); });
+}
+
+// ============================================================
+// UI
+// ============================================================
+function showWaiting() {
+  document.getElementById('loading-state').style.display='flex';
+  document.getElementById('student-grid').style.display='none';
+  document.getElementById('out-count-bar').style.display='none';
+  document.getElementById('class-name').textContent='Waiting for teacher...';
+  document.getElementById('status-badge').textContent='Not active';
+  document.getElementById('status-badge').className='status-badge badge-neutral';
+  document.body.className='neutral';
+}
+
+function renderGrid() {
+  document.getElementById('loading-state').style.display='none';
+  document.getElementById('student-grid').style.display='grid';
+  document.getElementById('out-count-bar').style.display='block';
+
+  var passOut = students.filter(function(n){
+    return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water');
+  }).length;
+
+  if (passOut === 0) {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = 'Pass available';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
+  } else if (passOut === 1) {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = '1 student out';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
+  } else {
+    document.body.className = 'red';
+    document.getElementById('status-badge').textContent = passOut+' students out - please wait';
+    document.getElementById('status-badge').className = 'status-badge badge-red';
+  }
+
+  document.getElementById('out-count-bar').textContent = passOut > 0
+    ? passOut + ' student'+(passOut!==1?'s':'')+' currently out'
+    : 'No students currently out';
+
+  var html = '';
+  students.forEach(function(name) {
+    var state = passState[name];
+    var clocked = clockInState[name];
+    var cls = clocked ? 'stu-present' : 'stu-not-clocked';
+    var statusText = clocked ? '' : 'Tap to clock in';
+    if (state) {
+      if(state.type==='bathroom'){ cls='stu-out'; statusText='Bathroom'; }
+      else if(state.type==='water'){ cls='stu-out-water'; statusText='Water'; }
+      else { cls='stu-out-other'; statusText=state.destination||'Other'; }
+    }
+    var safe = name.replace(/'/g,"\\'");
+    html += '<button class="stu-btn '+cls+'" onclick="openPanel(\''+safe+'\')">'+ name
+      +(statusText?'<div class="stu-sub">'+statusText+'</div>':'')
+      +'</button>';
+  });
+  document.getElementById('student-grid').innerHTML = html;
+}
+
+// ============================================================
+// ACTION PANEL
+// ============================================================
+function openPanel(name) {
+  currentStudent = name;
+  var state = passState[name];
+  document.getElementById('panel-name').textContent = name;
+  document.getElementById('dest-section').classList.remove('visible');
+
+  var clocked = clockInState[name];
+  if (state) {
+    document.getElementById('panel-status').textContent = 'Currently out: ' + (state.type==='bathroom'?'Bathroom':state.type==='water'?'Water fountain':state.destination||'Other');
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-back" onclick="signBack()">&#10003; I\'m back</button>';
+  } else if (!clocked) {
+    document.getElementById('panel-status').textContent = 'Welcome! Clock in to start your day.';
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-clockin" onclick="clockIn(\''+name+'\')">&#9989; Clock In</button>';
+  } else {
+    document.getElementById('panel-status').textContent = 'Where are you going?';
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-bathroom" onclick="sendOut(\''+name+'\',\'bathroom\',null)">Bathroom</button>'
+      +'<button class="big-btn btn-water" onclick="sendOut(\''+name+'\',\'water\',null)">Water fountain</button>'
+      +'<button class="big-btn btn-other" onclick="showDestPicker()">Other</button>';
+  }
+
+  document.getElementById('panel').classList.add('visible');
+  document.getElementById('overlay').classList.add('visible');
+}
+
+function showDestPicker() {
+  var sec = document.getElementById('dest-section');
+  sec.classList.add('visible');
+  var chips = '';
+  destLib.forEach(function(d) {
+    var safe = d.replace(/'/g,"\\'");
+    chips += '<span class="dest-chip" onclick="sendOut(currentStudent,\'other\',\''+safe+'\')">'+d+'</span>';
+  });
+  document.getElementById('dest-chips').innerHTML = chips || '';
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.remove('visible');
+  document.getElementById('overlay').classList.remove('visible');
+  document.getElementById('dest-section').classList.remove('visible');
+  currentStudent = null;
+}
+
+function sendOut(name, type, destination) {
+  if (!name) return;
+  closePanel();
+  var now = Date.now();
+  var eventId = now.toString(36)+Math.random().toString(36).slice(2,6);
+  passState[name] = {type:type, out:now, destination:destination};
+  renderGrid();
+  sheetsAppend([[
+    new Date().toISOString(), eventId, activeClassId, activeClassName,
+    name, type, destination||'', now, '', ''
+  ]]).catch(function(e){ console.log('write error',e); });
+}
+
+
+function clockIn(name) {
+  if (!name) return;
+  closePanel();
+  var now = Date.now();
+  var eventId = now.toString(36)+Math.random().toString(36).slice(2,6);
+  clockInState[name] = {ts: now};
+  renderGrid();
+  sheetsAppend([[
+    new Date().toISOString(), eventId, activeClassId, activeClassName,
+    name, 'clockin', '', now, now, ''
+  ]]).catch(function(e){ console.log('clockin error',e); });
+}
+function signBack() {
+  var name = currentStudent;
+  if (!name) return;
+  var state = passState[name];
+  if (!state) { closePanel(); return; }
+  closePanel();
+  var now = Date.now();
+  passState[name] = null;
+  renderGrid();
+
+  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+    var rows = res.values||[];
+    var rowIdx = -1;
+    rows.forEach(function(r,i){
+      if(r[2]===activeClassId&&r[4]===name&&parseInt(r[7])===state.out&&!r[8]) rowIdx=i;
+    });
+    if(rowIdx>=0){
+      var sheetRow = rowIdx+2;
+      return sheetsUpdate(SHEET_PASSES+'!I'+sheetRow+':J'+sheetRow, [[now,'']]);
+    }
+  }).catch(function(e){ console.log('back error',e); });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  var savedSheet = localStorage.getItem('kiosk_sheet_id');
+  if (savedSheet) {
+    SHEET_ID = savedSheet;
+    document.getElementById('setup-screen').style.display = 'none';
+    document.getElementById('main-content').style.display = 'block';
+    startPolling();
+  } else {
+    document.getElementById('setup-screen').style.display = 'block';
+    document.getElementById('main-content').style.display = 'none';
+  }
+}
+init();
+</script>
+</body>
+</html>
