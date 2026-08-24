@@ -296,13 +296,29 @@
       const parts = l.split(/\s+/);
       return {first: parts[0], last: parts.length > 1 ? parts[parts.length-1] : ''};
     });
+    // Pass 1: build display names - duplicates get last initial
     const firsts = parsed.map(p => p.first.toLowerCase());
-    const dupes = new Set(firsts.filter((n,i) => firsts.indexOf(n) !== i));
-    return parsed.map(p =>
-      dupes.has(p.first.toLowerCase()) && p.last
+    const dupeFirsts = new Set(firsts.filter((n,i) => firsts.indexOf(n) !== i));
+    let names = parsed.map(p =>
+      dupeFirsts.has(p.first.toLowerCase()) && p.last
         ? p.first + ' ' + p.last[0].toUpperCase() + '.'
         : p.first
-    ).sort((a,b) => a.localeCompare(b));
+    );
+    // Pass 2: if still duplicates (same first name AND last initial), use first 3 letters of last name
+    const dupeNames = new Set(names.filter((n,i) => names.indexOf(n) !== i));
+    names = names.map((n, i) =>
+      dupeNames.has(n) && parsed[i].last
+        ? parsed[i].first + ' ' + parsed[i].last.slice(0,3) + '.'
+        : n
+    );
+    // Pass 3: if still duplicates, use full last name
+    const dupeNames2 = new Set(names.filter((n,i) => names.indexOf(n) !== i));
+    names = names.map((n, i) =>
+      dupeNames2.has(n) && parsed[i].last
+        ? parsed[i].first + ' ' + parsed[i].last
+        : n
+    );
+    return names.sort((a,b) => a.localeCompare(b));
   }
 
   // ── ASSIGNMENT HELPERS ──
