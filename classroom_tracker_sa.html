@@ -705,12 +705,32 @@ function fmtDate(key){var p=key.split('-');return new Date(p[0],p[1]-1,p[2]).toL
 function fmtTime(ts){return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 function showPhase(id){document.querySelectorAll('.phase').forEach(function(p){p.classList.remove('visible');});document.getElementById(id).classList.add('visible');}
 function classById(id){return cfg.classes.find(function(c){return c.id===id;});}
-function parseNames(raw){
-  var lines=raw.split('\n').map(function(l){return l.trim();}).filter(Boolean);
-  var parsed=lines.map(function(l){var p=l.split(/\s+/);return{first:p[0],last:p.length>1?p[p.length-1]:''}; });
-  var firsts=parsed.map(function(p){return p.first.toLowerCase();});
-  var dupes=new Set(firsts.filter(function(n,i){return firsts.indexOf(n)!==i;}));
-  return parsed.map(function(p){return dupes.has(p.first.toLowerCase())&&p.last?p.first+' '+p.last[0].toUpperCase()+'.':p.first;}).sort(function(a,b){return a.localeCompare(b);});
+function parseNames(raw) {
+  var lines = raw.split('\n').map(function(l) { return l.trim(); }).filter(Boolean);
+  var parsed = lines.map(function(l) {
+    var p = l.split(/\s+/);
+    return {first: p[0], last: p.length > 1 ? p[p.length-1] : ''};
+  });
+  // Pass 1: duplicates get last initial
+  var firsts = parsed.map(function(p) { return p.first.toLowerCase(); });
+  var dupeFirsts = new Set(firsts.filter(function(n,i) { return firsts.indexOf(n) !== i; }));
+  var names = parsed.map(function(p) {
+    return dupeFirsts.has(p.first.toLowerCase()) && p.last
+      ? p.first + ' ' + p.last[0].toUpperCase() + '.' : p.first;
+  });
+  // Pass 2: still duplicates (same first + last initial) -> first 3 letters of last name
+  var dupeNames = new Set(names.filter(function(n,i) { return names.indexOf(n) !== i; }));
+  names = names.map(function(n, i) {
+    return dupeNames.has(n) && parsed[i].last
+      ? parsed[i].first + ' ' + parsed[i].last.slice(0,3) + '.' : n;
+  });
+  // Pass 3: still duplicates -> full last name
+  var dupeNames2 = new Set(names.filter(function(n,i) { return names.indexOf(n) !== i; }));
+  names = names.map(function(n, i) {
+    return dupeNames2.has(n) && parsed[i].last
+      ? parsed[i].first + ' ' + parsed[i].last : n;
+  });
+  return names.sort(function(a,b) { return a.localeCompare(b); });
 }
 function getWatchList(id){if(!watchList[id])watchList[id]=new Set();return watchList[id];}
 function isWatched(id,name){return getWatchList(id).has(name);}

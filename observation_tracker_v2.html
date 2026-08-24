@@ -495,12 +495,26 @@ function parseNames(raw) {
     var p = l.split(/\s+/);
     return {first: p[0], last: p.length > 1 ? p[p.length-1] : ''};
   });
+  // Pass 1: duplicates get last initial
   var firsts = parsed.map(function(p) { return p.first.toLowerCase(); });
-  var dupes = new Set(firsts.filter(function(n,i) { return firsts.indexOf(n) !== i; }));
-  return parsed.map(function(p) {
-    return dupes.has(p.first.toLowerCase()) && p.last
+  var dupeFirsts = new Set(firsts.filter(function(n,i) { return firsts.indexOf(n) !== i; }));
+  var names = parsed.map(function(p) {
+    return dupeFirsts.has(p.first.toLowerCase()) && p.last
       ? p.first + ' ' + p.last[0].toUpperCase() + '.' : p.first;
-  }).sort(function(a,b) { return a.localeCompare(b); });
+  });
+  // Pass 2: still duplicates (same first + last initial) -> first 3 letters of last name
+  var dupeNames = new Set(names.filter(function(n,i) { return names.indexOf(n) !== i; }));
+  names = names.map(function(n, i) {
+    return dupeNames.has(n) && parsed[i].last
+      ? parsed[i].first + ' ' + parsed[i].last.slice(0,3) + '.' : n;
+  });
+  // Pass 3: still duplicates -> full last name
+  var dupeNames2 = new Set(names.filter(function(n,i) { return names.indexOf(n) !== i; }));
+  names = names.map(function(n, i) {
+    return dupeNames2.has(n) && parsed[i].last
+      ? parsed[i].first + ' ' + parsed[i].last : n;
+  });
+  return names.sort(function(a,b) { return a.localeCompare(b); });
 }
 function shuffle(arr) {
   var a = arr.slice();
