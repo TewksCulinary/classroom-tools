@@ -382,7 +382,7 @@
     </div>
 
     <div class="section">
-      <p class="sec-label" style="margin-bottom:10px;">Update rosters</p>
+      <p class="sec-label" style="margin-bottom:10px;">Update class names &amp; rosters</p>
       <div id="settings-rosters"></div>
       <button class="primary-btn" style="margin-top:8px;" onclick="saveRosterUpdates()">Save roster changes</button>
     </div>
@@ -624,7 +624,11 @@ function renderRosterInputs(containerId) {
   cfg.classes.forEach(function(c) {
     var existing = labData[c.id] ? labData[c.id].students : [];
     html += '<div class="section">'
-      + '<p style="font-size:13px;font-weight:600;color:#185FA5;margin:0 0 6px;">' + c.name + '</p>'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
+      + '<label style="font-size:12px;font-weight:600;color:#5F5E5A;white-space:nowrap;">Class name</label>'
+      + '<input type="text" id="cname-edit-' + c.id + '" value="' + c.name + '" maxlength="40" '
+      + 'style="flex:1;border:1.5px solid #B4B2A9;border-radius:8px;padding:6px 10px;font-size:13px;background:#F1EFE8;color:#2C2C2A;font-family:sans-serif;" />'
+      + '</div>'
       + '<textarea id="roster-' + c.id + '" rows="5" placeholder="Paste names here, one per line...">'
       + existing.join('\n') + '</textarea>'
       + '<div id="preview-' + c.id + '" style="margin-top:6px;min-height:18px;"></div>'
@@ -1368,6 +1372,8 @@ function addSettingsCategory() {
 }
 function saveRosterUpdates() {
   cfg.classes.forEach(function(c) {
+    var nameEl = document.getElementById('cname-edit-'+c.id);
+    if (nameEl && nameEl.value.trim()) c.name = nameEl.value.trim();
     var ta = document.getElementById('roster-'+c.id);
     if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},groups:[]};
     if (ta && ta.value.trim()) labData[c.id].students = parseNames(ta.value.trim());
