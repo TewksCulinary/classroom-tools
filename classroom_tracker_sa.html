@@ -33,6 +33,7 @@
     .stu-timer { font-size: 10px; font-weight: 700; margin-top: 2px; }
     .stu-snip { font-size: 9px; opacity: 0.8; margin-top: 1px; font-style: italic; }
     .watch-flag { position: absolute; top: 3px; right: 4px; font-size: 10px; line-height: 1; }
+    .s-notclockedin { background: #f1efec; color: #888780; border-color: #C8C6C0; }
     .s-present  { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
     .s-absent   { background: #F0F0F0; color: #555555; border-color: #BBBBBB; }
     .s-tardy    { background: #FFF0D0; color: #7A4500; border-color: #F5C060; }
@@ -202,6 +203,7 @@
     </div>
     <div class="section" style="padding:10px 16px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;font-size:10px;color:#5F5E5A;">
+        <span><span class="legend-dot" style="background:#888780;"></span>Not clocked in</span>
         <span><span class="legend-dot" style="background:#27500A;"></span>Present</span>
         <span><span class="legend-dot" style="background:#555555;"></span>Absent</span>
         <span><span class="legend-dot" style="background:#7A4500;"></span>Tardy</span>
@@ -646,8 +648,8 @@ function startSyncInterval() {
 // ============================================================
 var TYPE_COLOR  = {bathroom:'#1A3F7A',water:'#0D6B6B',other:'#7A5500',absent:'#555555',tardy:'#7A4500',note:'#5B2D8E',clockin:'#27500A'};
 var TYPE_LABEL  = {bathroom:'Bathroom',water:'Water fountain',other:'Other',absent:'Absent',tardy:'Tardy arrival',note:'Note',present:'Present',clockin:'Clocked in'};
-var STATUS_CLASS= {present:'s-present',absent:'s-absent',tardy:'s-tardy',bathroom:'s-bathroom',water:'s-water',other:'s-other',note:'s-note',alert:'s-alert'};
-var STATUS_LBL  = {present:'Present',absent:'Absent',tardy:'Tardy',bathroom:'Bathroom',water:'Water fountain',other:'Other',note:'Note',alert:'Out too long!'};
+var STATUS_CLASS= {notclockedin:'s-notclockedin',present:'s-present',absent:'s-absent',tardy:'s-tardy',bathroom:'s-bathroom',water:'s-water',other:'s-other',note:'s-note',alert:'s-alert'};
+var STATUS_LBL  = {notclockedin:'Not clocked in',present:'Present',absent:'Absent',tardy:'Tardy',bathroom:'Bathroom',water:'Water fountain',other:'Other',note:'Note',alert:'Out too long!'};
 
 var cfg = {classes:[],timeoutMins:7,passThreshold:5,passWindowDays:7};
 var noteLib = [];
@@ -818,7 +820,10 @@ function getStudentStatus(classId,name){
   if(trips.some(function(t){return t.type==='absent';}))return'absent';
   if(trips.some(function(t){return t.type==='tardy'&&!t.back;}))return'tardy';
   var active=trips.find(function(t){return['absent','tardy','note','clockin'].indexOf(t.type)===-1&&!t.back;});
-  if(!active)return'present';
+  if(!active){
+    var hasClockedIn=trips.some(function(t){return t.type==='clockin';});
+    return hasClockedIn?'present':'notclockedin';
+  }
   if(active.type==='other')return'other';
   var elapsed=(Date.now()-active.out)/1000/60;
   return elapsed>=cfg.timeoutMins?'alert':active.type;
