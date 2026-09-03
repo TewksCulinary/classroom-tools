@@ -13,7 +13,7 @@
 
     .top-bar { padding: 16px 20px 8px; text-align: center; }
     .top-bar h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2C2C2A; }
-    .top-bar p  { margin: 4px 0 0; font-size: 14px; color: #5F5E5A; }
+    .top-bar p  { margin: 4px 0 0; font-size: 14px; color: #000000; }
     .status-badge { display: inline-block; margin-top: 8px; padding: 6px 18px; border-radius: 20px; font-size: 14px; font-weight: 700; }
     .badge-green { background: #27500A; color: #ffffff; }
     .badge-red   { background: #791F1F; color: #ffffff; }
@@ -34,7 +34,7 @@
     .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-radius: 20px 20px 0 0; padding: 20px 20px 32px; z-index: 100; display: none; max-width: 480px; margin: 0 auto; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); }
     .panel.visible { display: block; }
     .panel-name { font-size: 20px; font-weight: 700; color: #2C2C2A; margin-bottom: 4px; }
-    .panel-status { font-size: 13px; color: #5F5E5A; margin-bottom: 16px; }
+    .panel-status { font-size: 13px; color: #000000; margin-bottom: 16px; }
     .panel-close { position: absolute; top: 16px; right: 20px; background: none; border: none; font-size: 26px; cursor: pointer; color: #888780; line-height: 1; }
     .big-btn { width: 100%; border: none; border-radius: 12px; padding: 18px; font-size: 17px; font-weight: 700; cursor: pointer; margin-bottom: 10px; transition: all 0.15s; }
     .big-btn:active { opacity: 0.8; transform: scale(0.98); }
@@ -48,15 +48,15 @@
     .dest-section.visible { display: block; }
     .dest-chip { display: inline-block; background: #FFF6DC; border: 1.5px solid #F0D070; color: #7A5500; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 600; margin: 4px; cursor: pointer; }
     .dest-chip:active { background: #F0D070; }
-    .dest-skip { width: 100%; background: #F1EFE8; border: 1.5px solid #B4B2A9; color: #5F5E5A; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+    .dest-skip { width: 100%; background: #F1EFE8; border: 1.5px solid #B4B2A9; color: #000000; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
 
     .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }
     .loading h2 { color: #2C2C2A; margin-bottom: 8px; }
-    .loading p { color: #5F5E5A; font-size: 14px; }
+    .loading p { color: #000000; font-size: 14px; }
     .spinner { width: 40px; height: 40px; border: 4px solid #B4B2A9; border-top-color: #185FA5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    .out-count-bar { text-align: center; padding: 8px; font-size: 13px; color: #5F5E5A; }
+    .out-count-bar { text-align: center; padding: 8px; font-size: 13px; color: #000000; }
 
     .setup-box { max-width: 480px; margin: 24px auto; padding: 0 16px; }
     .setup-card { background: #ffffff; border: 1.5px solid #A8C0EE; border-radius: 12px; padding: 18px; }
@@ -75,10 +75,10 @@
 <div id="setup-screen" class="setup-box" style="display:none;">
   <div class="setup-card">
     <p style="font-size:14px;font-weight:700;color:#2C2C2A;margin-bottom:6px;">Connect to your teacher's Sheet</p>
-    <p style="font-size:12px;color:#5F5E5A;">Paste the Sheet ID your teacher gave you (or the full Sheet URL).</p>
+    <p style="font-size:12px;color:#000000;">Paste the Sheet ID your teacher gave you (or the full Sheet URL).</p>
     <input type="text" id="kiosk-sheet-input" placeholder="Sheet ID or URL..." />
     <button onclick="saveKioskSheetId()">Connect</button>
-    <p id="kiosk-setup-status" style="font-size:12px;color:#5F5E5A;margin-top:8px;"></p>
+    <p id="kiosk-setup-status" style="font-size:12px;color:#000000;margin-top:8px;"></p>
   </div>
 </div>
 
@@ -262,7 +262,7 @@ function poll() {
     var classInfo = rosterData[newClassId];
     if (!classInfo || !classInfo.students || !classInfo.students.length) {
       document.getElementById('loading-state').innerHTML =
-        '<div style="padding:20px;text-align:center;"><h2 style="color:#2C2C2A;">Almost ready</h2><p style="color:#5F5E5A;">Waiting for teacher to sync roster data.<br>Please wait a moment.</p></div>';
+        '<div style="padding:20px;text-align:center;"><h2 style="color:#2C2C2A;">Almost ready</h2><p style="color:#000000;">Waiting for teacher to sync roster data.<br>Please wait a moment.</p></div>';
       document.getElementById('loading-state').style.display='flex';
       document.getElementById('student-grid').style.display='none';
       return;
