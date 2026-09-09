@@ -220,11 +220,15 @@
         <p class="sec-label" style="margin:0;" id="grid-label">Tap a student to update status</p>
         <div style="display:flex;gap:6px;">
           <button class="absent-toggle" id="absent-toggle-btn" onclick="toggleAbsentMode()">Mark Absent</button>
+          <button class="absent-toggle" id="clockin-toggle-btn" onclick="toggleClockInMode()" style="background:#EAF3DE;color:#27500A;border-color:#C0DD97;">Mark Present</button>
           <button class="small-btn" onclick="newDay()">New day</button>
         </div>
       </div>
       <p id="absent-hint" style="font-size:12px;color:#555555;margin-bottom:8px;display:none;">
         Absent mode &mdash; tap to mark/unmark. Tap <strong>Done</strong> when finished.
+      </p>
+      <p id="clockin-hint" style="font-size:12px;color:#27500A;margin-bottom:8px;display:none;">
+        Mark present mode &mdash; tap to clock in. Tap <strong>Done</strong> when finished.
       </p>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="student-grid"></div>
     </div>
@@ -659,6 +663,7 @@ var labHistory = {};
 var watchList = {};
 var activeClassId = null;
 var absentMode = false;
+var clockInMode = false;
 var tickerInterval = null;
 var pendingCount = 0;
 var actionStudent = null;
@@ -801,6 +806,7 @@ function renderClassTabs(){
 function switchClass(id){activeClassId=id;renderAll();}
 
 function toggleAbsentMode(){
+  if(clockInMode) toggleClockInMode();
   absentMode=!absentMode;
   var btn=document.getElementById('absent-toggle-btn');var hint=document.getElementById('absent-hint');var lbl=document.getElementById('grid-label');
   if(absentMode){btn.textContent='Done';btn.classList.add('on');hint.style.display='block';lbl.textContent='Tap students to mark / unmark absent';}
@@ -808,6 +814,29 @@ function toggleAbsentMode(){
   renderGrid();
 }
 function tapAbsentMode(name){toggleAbsent(activeClassId,name);renderGrid();renderSummary();renderTodayLog();}
+
+function toggleClockInMode(){
+  if(absentMode) toggleAbsentMode();
+  clockInMode=!clockInMode;
+  var btn=document.getElementById('clockin-toggle-btn');
+  var hint=document.getElementById('clockin-hint');
+  var lbl=document.getElementById('grid-label');
+  if(clockInMode){btn.textContent='Done';btn.classList.add('on');hint.style.display='block';lbl.textContent='Tap students to clock in';}
+  else{btn.textContent='Mark Present';btn.classList.remove('on');hint.style.display='none';lbl.textContent='Tap a student to update status';}
+  renderGrid();
+}
+
+function tapClockInMode(name){
+  ensureData(activeClassId,name);
+  var t=todayKey();
+  var trips=passData[activeClassId][t][name];
+  var alreadyClockedIn=trips.some(function(x){return x.type==='clockin';});
+  if(!alreadyClockedIn){
+    trips.push({eventId:uid(),type:'clockin',out:Date.now(),back:Date.now()});
+    save();
+  }
+  renderGrid();renderSummary();renderTodayLog();
+}
 
 function ensureData(classId,name){
   if(!passData[classId])passData[classId]={};
@@ -877,7 +906,7 @@ function renderGrid(){
     var elapsed=['bathroom','water','alert'].indexOf(status)>-1?elapsedLabel(activeClassId,name):'';
     var isAlert=status==='alert';var watched=isWatched(activeClassId,name);
     var safe=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    var fn=absentMode?'tapAbsentMode(\''+safe+'\')':'openPanel(\''+safe+'\')';
+    var fn=absentMode?'tapAbsentMode(\''+safe+'\')':clockInMode?'tapClockInMode(\''+safe+'\')' :'openPanel(\''+safe+'\')';
     var snip='';
     if(status==='other'){var active=getActiveTrip(activeClassId,name);if(active&&active.destination){var dest=active.destination.slice(0,14)+(active.destination.length>14?'...':'');snip='<div class="stu-snip">'+dest+'</div>';}}
     if(status==='tardy'){var tardyTrip=getTodayTrips(activeClassId,name).find(function(t){return t.type==='tardy';});if(tardyTrip)snip='<div class="stu-snip">arrived '+fmtTime(tardyTrip.out)+'</div>';}
