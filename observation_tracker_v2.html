@@ -693,11 +693,18 @@ function setSetupMode(mode) {
 
 function renderSetupClassTabs() {
   var html = '';
-  cfg.classes.forEach(function(c) {
+  cfg.classes.forEach(function(c, idx) {
     var active = c.id === activeClassId ? ' active' : '';
-    html += '<button class="class-tab' + active + '" onclick="switchSetupClass(\'' + c.id + '\')">' + c.name + '</button>';
+    html += '<button class="class-tab' + active + '" data-setup-class-idx="' + idx + '">' + c.name + '</button>';
   });
-  document.getElementById('setup-class-tabs').innerHTML = html;
+  var el = document.getElementById('setup-class-tabs');
+  el.innerHTML = html;
+  el.querySelectorAll('.class-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-setup-class-idx'));
+      switchSetupClass(cfg.classes[idx].id);
+    });
+  });
   var cls = classById(activeClassId);
   document.getElementById('setup-title').textContent = (cls ? cls.name : '') + ' - Lesson Setup';
 }
@@ -951,11 +958,18 @@ function renderLabAll() {
 
 function renderLabClassTabs() {
   var html = '';
-  cfg.classes.forEach(function(c) {
+  cfg.classes.forEach(function(c, idx) {
     var active = c.id === activeClassId ? ' active' : '';
-    html += '<button class="class-tab' + active + '" onclick="switchLabClass(\'' + c.id + '\')">' + c.name + '</button>';
+    html += '<button class="class-tab' + active + '" data-lab-class-idx="' + idx + '">' + c.name + '</button>';
   });
-  document.getElementById('lab-class-tabs').innerHTML = html;
+  var el = document.getElementById('lab-class-tabs');
+  el.innerHTML = html;
+  el.querySelectorAll('.class-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-lab-class-idx'));
+      switchLabClass(cfg.classes[idx].id);
+    });
+  });
 }
 function switchLabClass(id) {
   activeClassId = id;
@@ -1075,17 +1089,23 @@ function renderLabCategoryBtns() {
   }
   if (!activeLabCategoryId || !categoryById(activeLabCategoryId)) activeLabCategoryId = cfg.categories[0].id;
   var html = '';
-  cfg.categories.forEach(function(cat) {
+  cfg.categories.forEach(function(cat, idx) {
     var color = categoryColor(cat.id);
     var isActive = cat.id === activeLabCategoryId;
     var bg = isActive ? color : '#ffffff';
     var tc = isActive ? '#ffffff' : '#2C2C2A';
-    html += '<button class="cat-btn' + (isActive?' active':'') + '" onclick="selectLabCategory(\'' + cat.id + '\')"'
+    html += '<button class="cat-btn' + (isActive?' active':'') + '" data-cat-idx="' + idx + '"'
       + ' style="background:' + bg + ';border-color:' + color + ';color:' + tc + ';">'
       + '<span class="category-color-dot" style="background:' + (isActive?'#ffffff':color) + ';"></span>' + cat.name
       + '</button>';
   });
   el.innerHTML = html;
+  el.querySelectorAll('.cat-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-cat-idx'));
+      selectLabCategory(cfg.categories[idx].id);
+    });
+  });
 }
 function selectLabCategory(catId) {
   activeLabCategoryId = catId;
@@ -1204,11 +1224,18 @@ function openLogReview() {
 }
 function renderReviewClassTabs() {
   var html = '';
-  cfg.classes.forEach(function(c) {
+  cfg.classes.forEach(function(c, idx) {
     var active = c.id === reviewActiveClassId ? ' active' : '';
-    html += '<button class="class-tab' + active + '" onclick="switchReviewClass(\'' + c.id + '\')">' + c.name + '</button>';
+    html += '<button class="class-tab' + active + '" data-class-idx="' + idx + '">' + c.name + '</button>';
   });
-  document.getElementById('review-class-tabs').innerHTML = html;
+  var el = document.getElementById('review-class-tabs');
+  el.innerHTML = html;
+  el.querySelectorAll('.class-tab').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-class-idx'));
+      switchReviewClass(cfg.classes[idx].id);
+    });
+  });
 }
 function switchReviewClass(id) {
   reviewActiveClassId = id;
@@ -1216,11 +1243,20 @@ function switchReviewClass(id) {
 }
 function renderReviewCategoryFilters() {
   var el = document.getElementById('review-category-filters');
-  var html = '<button class="filter-chip' + (reviewCategoryFilter===null?' active':'') + '" onclick="setReviewFilter(null)">All categories</button>';
-  cfg.categories.forEach(function(cat) {
-    html += '<button class="filter-chip' + (reviewCategoryFilter===cat.id?' active':'') + '" onclick="setReviewFilter(\'' + cat.id + '\')">' + cat.name + '</button>';
+  var html = '<button class="filter-chip' + (reviewCategoryFilter===null?' active':'') + '" data-cat-filter="__all__">All categories</button>';
+  cfg.categories.forEach(function(cat, idx) {
+    html += '<button class="filter-chip' + (reviewCategoryFilter===cat.id?' active':'') + '" data-cat-filter-idx="' + idx + '">' + cat.name + '</button>';
   });
   el.innerHTML = html;
+  el.querySelectorAll('[data-cat-filter]').forEach(function(btn) {
+    btn.addEventListener('click', function() { setReviewFilter(null); });
+  });
+  el.querySelectorAll('[data-cat-filter-idx]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-cat-filter-idx'));
+      setReviewFilter(cfg.categories[idx].id);
+    });
+  });
 }
 function setReviewFilter(catId) {
   reviewCategoryFilter = catId;
