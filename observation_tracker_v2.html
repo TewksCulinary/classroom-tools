@@ -1095,17 +1095,32 @@ function renderLabObsGrid() {
     return;
   }
   var color = categoryColor(cat.id);
+  // Store labels on the category for lookup by index - avoids all string escaping issues
   var html = '';
   cat.labels.forEach(function(lbl, i) {
-    var safe = lbl.label.replace(/'/g, '\\x27');
     html += '<div class="obs-btn">'
-      + '<button class="obs-tap" onclick="logAction(\'' + cat.id + '\',\'' + safe + '\')" style="background:' + color + '18;color:' + color + ';">'
+      + '<button class="obs-tap" data-cat-id="' + cat.id + '" data-label-idx="' + i + '" style="background:' + color + '18;color:' + color + ';">'
       + lbl.label
       + '</button>'
-      + '<button class="obs-del" onclick="removeCatLabelLive(' + i + ')" style="color:' + color + ';">&times;</button>'
+      + '<button class="obs-del" data-del-idx="' + i + '" style="color:' + color + ';">&times;</button>'
       + '</div>';
   });
   grid.innerHTML = html;
+  // Attach event listeners cleanly - no inline onclick, no escaping needed
+  grid.querySelectorAll('.obs-tap').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var catId = btn.getAttribute('data-cat-id');
+      var labelIdx = parseInt(btn.getAttribute('data-label-idx'));
+      var cat = categoryById(catId);
+      if (cat && cat.labels[labelIdx]) logAction(catId, cat.labels[labelIdx].label);
+    });
+  });
+  grid.querySelectorAll('.obs-del').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-del-idx'));
+      removeCatLabelLive(idx);
+    });
+  });
 }
 function removeCatLabelLive(i) {
   var cat = categoryById(activeLabCategoryId);
