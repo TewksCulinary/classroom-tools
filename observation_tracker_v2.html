@@ -1022,19 +1022,25 @@ function renderStudentObsGrid() {
     return;
   }
   var html = '';
-  visible.forEach(function(s) {
+  visible.forEach(function(s, idx) {
     var grp = d.studentGroups[s];
     var color = labMode==='individual' ? '#185FA5' : groupColor(grp);
     var isSel = selectedStudents.has(s);
     var bg = isSel ? color : '#ffffff';
     var tc = isSel ? '#ffffff' : '#2C2C2A';
     var bc = isSel ? color : '#888780';
-    var safe = s.replace(/'/g, '\\x27');
-    html += '<button class="stu-btn" onclick="toggleStudentObs(\'' + safe + '\')"'
+    html += '<button class="stu-btn" data-stu-idx="' + idx + '"'
       + ' style="background:' + bg + ' !important;color:' + tc + ' !important;border-color:' + bc + ' !important;">'
       + s + '</button>';
   });
   grid.innerHTML = html; updateStuHint();
+  // Attach event listeners cleanly - no inline onclick, no escaping issues
+  grid.querySelectorAll('.stu-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = parseInt(btn.getAttribute('data-stu-idx'));
+      toggleStudentObs(visible[idx]);
+    });
+  });
 }
 function toggleStudentObs(name) {
   if (selectedStudents.has(name)) selectedStudents.delete(name); else selectedStudents.add(name);
