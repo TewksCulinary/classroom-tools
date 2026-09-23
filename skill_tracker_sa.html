@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Lab Skills Tracker</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x1F52A;</text></svg>" />
+  <style>
+    * { box-sizing: border-box; font-family: sans-serif; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+    input, textarea { -webkit-user-select: text; user-select: text; }
+    body { background: #f1efec; margin: 0; padding: 12px; color: #2C2C2A; }
+    p { margin: 0; }
+    .wrap { max-width: 560px; margin: 0 auto; padding-bottom: 40px; }
+    .phase { display: none; }
+    .phase.visible { display: block; }
+    .section { background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; }
+    .sec-label { font-size: 12px; color: #5F5E5A; margin: 0 0 8px; }
+    .page-title { font-size: 17px; font-weight: 700; color: #2C2C2A; margin: 0 0 4px; }
+    .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #737B8C; border-radius: 8px; padding: 6px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
+    .small-btn:hover { background: #F1EFE8; }
+    .primary-btn { font-size: 14px; background: #185FA5; border: none; border-radius: 8px; padding: 12px 20px; cursor: pointer; color: #ffffff; font-weight: 700; width: 100%; }
+    .primary-btn:hover { background: #144d87; }
+    .primary-btn:active { transform: scale(0.98); }
+    .primary-btn:disabled { background: #B4B2A9; cursor: default; }
+    .ghost-btn { font-size: 13px; background: none; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 9px 14px; cursor: pointer; color: #5F5E5A; font-weight: 600; }
+    .ghost-btn:hover { background: #F1EFE8; }
+
+    /* first time setup */
+    .first-time-setup { background: #EAF3F9; border: 1.5px solid #A8C0EE; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+
+    /* tabs */
+    .tab-row { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; -ms-overflow-style: none; scrollbar-width: none; }
+    .tab-row::-webkit-scrollbar { display: none; }
+    .period-tab { padding: 9px 14px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 13px; font-weight: 600; color: #2C2C2A; white-space: nowrap; flex-shrink: 0; }
+    .period-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+    .skill-tab { padding: 8px 14px; border: 2px solid #3E8B18; border-radius: 20px; background: #ffffff; cursor: pointer; font-size: 13px; font-weight: 600; color: #2E6B10; white-space: nowrap; flex-shrink: 0; }
+    .skill-tab.active { background: #3E8B18; border-color: #3E8B18; color: #ffffff; }
+    .skill-tab-add { padding: 8px 14px; border: 2px dashed #B4B2A9; border-radius: 20px; background: none; cursor: pointer; font-size: 13px; font-weight: 600; color: #5F5E5A; white-space: nowrap; flex-shrink: 0; }
+
+    /* sync bar */
+    .sync-bar { background: #EAF3DE; border: 1.5px solid #3E8B18; border-radius: 8px; padding: 6px 12px; font-size: 12px; color: #2E6B10; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .sync-bar.warn { background: #FFF8E0; border-color: #C09A20; color: #7A5E00; }
+    .sync-bar.err  { background: #FCEBEB; border-color: #C0392B; color: #791F1F; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { display: inline-block; animation: spin 1s linear infinite; }
+
+    /* session toolbar */
+    .session-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+    .session-info { font-size: 12px; color: #5F5E5A; }
+    .session-info b { color: #2C2C2A; }
+
+    /* rubric legend */
+    .legend { display: flex; gap: 10px; flex-wrap: wrap; font-size: 11px; color: #5F5E5A; margin-bottom: 10px; }
+    .legend-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+
+    /* student grid */
+    .student-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    @media (min-width: 420px) { .student-grid { grid-template-columns: repeat(4, 1fr); } }
+    .stu-card { border-radius: 12px; padding: 12px 8px 10px; cursor: pointer; border: 2px solid transparent; text-align: center; transition: all 0.12s; position: relative; min-height: 74px; display: flex; flex-direction: column; justify-content: center; }
+    .stu-card:active { transform: scale(0.95); }
+    .stu-name { font-size: 12px; font-weight: 700; line-height: 1.25; margin-bottom: 4px; }
+    .stu-tally { font-size: 10px; font-weight: 600; opacity: 0.85; }
+    .score-none { background: #ffffff; color: #5F5E5A; border-color: #D8D6D0; }
+    .score-4 { background: #EAF3DE; color: #2E6B10; border-color: #B7DDA0; }
+    .score-3 { background: #E8F0FB; color: #185FA5; border-color: #A8C0EE; }
+    .score-2 { background: #FFF8E0; color: #7A5E00; border-color: #E3C468; }
+    .score-1 { background: #FCEBEB; color: #C0392B; border-color: #E9A9A0; }
+    .note-flag { position: absolute; top: 4px; right: 6px; font-size: 10px; }
+
+    .empty-state { text-align: center; padding: 30px 10px; color: #5F5E5A; font-size: 13px; }
+
+    /* independent accordion */
+    .indep-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; padding: 10px 4px; }
+    .indep-toggle b { font-size: 13px; color: #2E6B10; }
+    .indep-count { background: #3E8B18; color: #fff; border-radius: 12px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
+    .indep-body { display: none; padding-top: 6px; }
+    .indep-body.visible { display: block; }
+    .indep-chip { display: inline-flex; align-items: center; gap: 6px; background: #EAF3DE; color: #2E6B10; border: 1.5px solid #B7DDA0; border-radius: 16px; padding: 6px 12px; font-size: 12px; font-weight: 600; margin: 3px; cursor: pointer; }
+    .indep-chip:hover { background: #D8EAC4; }
+
+    /* action overlay/panel */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 99; display: none; }
+    .overlay.visible { display: block; }
+    .panel { position: fixed; bottom: 0; left: 0; right: 0; background: #ffffff; border-radius: 18px 18px 0 0; padding: 18px 18px 26px; z-index: 100; display: none; max-width: 540px; margin: 0 auto; box-shadow: 0 -4px 24px rgba(0,0,0,0.15); max-height: 88vh; overflow-y: auto; }
+    .panel.visible { display: block; }
+    .panel-close { position: absolute; top: 14px; right: 18px; background: none; border: none; font-size: 24px; cursor: pointer; color: #888780; line-height: 1; }
+    .panel-name { font-size: 18px; font-weight: 700; color: #2C2C2A; margin-bottom: 2px; }
+    .panel-sub { font-size: 12px; color: #5F5E5A; margin-bottom: 14px; }
+    .score-pill { display: inline-block; border-radius: 20px; padding: 3px 12px; font-size: 12px; font-weight: 700; margin-left: 6px; }
+    .action-btn { border: none; border-radius: 10px; padding: 16px 10px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; margin-bottom: 8px; transition: opacity 0.12s; }
+    .action-btn:hover { opacity: 0.88; }
+    .action-btn:active { transform: scale(0.98); }
+    .ab-prompt { background: #FFF8E0; color: #7A5E00; border: 1.5px solid #E3C468 !important; }
+    .ab-indep  { background: #3E8B18; color: #ffffff; }
+    .ab-help   { background: #FCEBEB; color: #C0392B; border: 1.5px solid #E9A9A0 !important; }
+    .ab-undo   { background: #F1EFE8; color: #5F5E5A; border: 1.5px solid #B4B2A9 !important; font-weight: 600; font-size: 13px; padding: 10px; }
+    textarea.note-input { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #2C2C2A; background: #F1EFE8; resize: vertical; font-family: sans-serif; margin-top: 4px; min-height: 60px; }
+    textarea.note-input:focus { outline: none; border-color: #185FA5; }
+    .note-save-btn { margin-top: 8px; font-size: 13px; font-weight: 600; padding: 9px 14px; border-radius: 8px; border: none; background: #5B2D8E; color: #fff; cursor: pointer; }
+    .hist-list { margin-top: 4px; }
+    .hist-row { font-size: 11px; padding: 5px 0; border-bottom: 0.5px solid #e8e6e0; color: #5F5E5A; }
+    .hist-row b { color: #2C2C2A; }
+
+    /* manage skills modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 199; display: none; align-items: center; justify-content: center; padding: 16px; }
+    .modal-overlay.visible { display: flex; }
+    .modal { background: #fff; border-radius: 14px; padding: 18px; width: 100%; max-width: 400px; max-height: 80vh; overflow-y: auto; }
+    .modal h3 { margin: 0 0 12px; font-size: 15px; color: #2C2C2A; }
+    .skill-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .skill-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: sans-serif; }
+    .skill-del { background: none; border: none; color: #C0392B; font-size: 18px; cursor: pointer; padding: 0 4px; }
+    .add-row { display: flex; gap: 8px; margin-top: 10px; }
+    .add-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: sans-serif; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- SHEET SETUP -->
+  <div class="phase" id="phase-sheet-setup">
+    <div class="section">
+      <p class="page-title">Lab Skills Tracker</p>
+      <p class="sec-label" style="margin:0 0 12px;">Connect your Google Sheet to load your classes.</p>
+      <div class="first-time-setup">
+        <p style="font-size:13px;font-weight:600;color:#1A3F7A;margin-bottom:8px;">Step 1 - Share your Sheet</p>
+        <p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">Use the same Sheet your Classroom Tracker uses. Make sure it's shared with:</p>
+        <div style="background:#ffffff;border:1.5px solid #A8C0EE;border-radius:8px;padding:8px 12px;font-size:12px;font-family:monospace;color:#1A3F7A;margin-bottom:10px;word-break:break-all;" id="sa-email-display"></div>
+        <button onclick="copyEmail()" class="small-btn" style="margin-bottom:14px;">Copy email address</button>
+        <p style="font-size:13px;font-weight:600;color:#1A3F7A;margin-bottom:8px;">Step 2 - Paste your Sheet ID</p>
+        <p style="font-size:12px;color:#5F5E5A;margin-bottom:8px;">The Sheet ID is the long string in your Sheet's URL between /d/ and /edit</p>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="sheet-id-input" placeholder="Paste Sheet ID here..."
+            style="flex:1;border:1.5px solid #A8C0EE;border-radius:8px;padding:8px 10px;font-size:13px;background:#ffffff;color:#2C2C2A;font-family:sans-serif;min-width:0;" />
+          <button onclick="saveSheetId()" class="small-btn" style="background:#185FA5;border-color:#185FA5;color:#fff;">Connect</button>
+        </div>
+        <p id="sheet-connect-status" style="font-size:12px;color:#5F5E5A;margin-top:8px;"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="phase" id="phase-main">
+    <div class="section" style="padding-bottom:6px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+        <div>
+          <p class="page-title">Lab Skills Tracker</p>
+          <p class="sec-label" id="class-name-label">&nbsp;</p>
+        </div>
+        <button class="small-btn" onclick="openSkillManager()">Manage skills</button>
+      </div>
+
+      <div id="sync-bar-wrap"></div>
+
+      <div class="tab-row" id="period-tabs"></div>
+      <div class="tab-row" id="skill-tabs"></div>
+
+      <div class="legend">
+        <span><span class="legend-dot" style="background:#3E8B18;"></span>4 &middot; Independent</span>
+        <span><span class="legend-dot" style="background:#185FA5;"></span>3 &middot; Proficient</span>
+        <span><span class="legend-dot" style="background:#C09A20;"></span>2 &middot; Emerging</span>
+        <span><span class="legend-dot" style="background:#C0392B;"></span>1 &middot; Beginning</span>
+      </div>
+
+      <div class="session-bar">
+        <div class="session-info" id="session-info">&nbsp;</div>
+        <button class="primary-btn" style="width:auto;padding:10px 16px;" onclick="startNewSession()">Start New Lab Session</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div id="student-grid-wrap"></div>
+    </div>
+
+    <div class="section" id="indep-section" style="display:none;">
+      <div class="indep-toggle" onclick="toggleIndepList()">
+        <b>&#10003; Independent on this skill</b>
+        <span class="indep-count" id="indep-count">0</span>
+      </div>
+      <div class="indep-body" id="indep-body"></div>
+    </div>
+  </div>
+
+  <!-- ACTION PANEL -->
+  <div class="overlay" id="action-overlay" onclick="closePanel()"></div>
+  <div class="panel" id="action-panel">
+    <button class="panel-close" onclick="closePanel()">&times;</button>
+    <p class="panel-name" id="ap-name">Student</p>
+    <p class="panel-sub"><span id="ap-skill"></span> &middot; this session: <b id="ap-tally">0</b> prompt(s) <span class="score-pill" id="ap-score-pill"></span></p>
+
+    <button class="action-btn ab-prompt" onclick="tapPrompt()">+1 Prompt</button>
+    <button class="action-btn ab-indep" onclick="tapMarkIndependent()">Mark Independent (Score 4)</button>
+    <button class="action-btn ab-help" onclick="tapNeededHelp()">Needed Hands-On Help (Score 1)</button>
+    <button class="action-btn ab-undo" id="ap-undo-btn" onclick="tapUndoIndependent()" style="display:none;">Move back to active list</button>
+
+    <textarea class="note-input" id="ap-note-input" placeholder="Add a note (optional)..."></textarea>
+    <button class="note-save-btn" onclick="tapSaveNote()">Save Note</button>
+
+    <div class="hist-list" id="ap-hist"></div>
+  </div>
+
+  <!-- SKILL MANAGER MODAL -->
+  <div class="modal-overlay" id="skill-modal-overlay" onclick="if(event.target===this)closeSkillManager()">
+    <div class="modal">
+      <h3>Manage lab skills</h3>
+      <div id="skill-manage-list"></div>
+      <div class="add-row">
+        <input type="text" id="new-skill-input" placeholder="New skill name..." onkeydown="if(event.key==='Enter')addSkill()" />
+        <button class="small-btn" onclick="addSkill()">Add</button>
+      </div>
+      <button class="ghost-btn" style="width:100%;margin-top:14px;" onclick="closeSkillManager()">Done</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// SERVICE ACCOUNT CONFIG (same account/Sheet as Classroom Tracker)
+// ============================================================
+var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.com';
+var SA_KEY_ID = '511e3c09ca7ae435d40bc9e4f6951f61011931c7';
+var SA_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDY1FpHveCJOBiT\nGF5Dp/fh1ITOjVO+69Zd0ZXsL+j8RzuGtYW/FJwLvbVjieFjmLx90YBrIz4AwkyQ\nm317b4uL17vyUDMpwAdbPiXgeIzwtgAjTVrPqh331Df0vEaBJlS+JBu2bOWsaLC+\ndFTmKFKcltzQQtUEPxAeG+2G6WTuMUO1shvvw0fCCpOCT0ht+npGyZwWm+EnlcvU\nQKxY21Cn2errNIo2WUi2vH8wVlwqt+Li4selakJvbHelzF0KOj/pAtSf3sUjwVak\nc9sX6U3oh9hFycY6TepOifm5xRIFBeIedcmA1p73HIjUxgw1f2Js76o02yru5kCW\nMFSs/jnbAgMBAAECggEAVxVKQP/4ewPlksY5rbB7NN7Wi+Jk3Qv452sybE59ozy0\nopCq66hKV8jUXerVc9u28E1A50abM1DV0Uoxpm6RPBPj7xjYw47VJYcbTUD9Ufu2\nqHb73uVy7cL0yj0Hj/0mEcuMucKYp5rQSV2Nb3aIX02T16zPwsnVHlKXHhUErUis\nlWSi162PKFqx0wb30lrQFfLxutUCL6qXpfd5upgyrKUL+emwfcgL4UkmdFgBP8QT\nvyQXMnwsfTTwTOuOUwIiYnwqw6rrpjyMBAUeyzTFkbjajt7f0T0g9vy3Eo4RxR1N\ntO2mi6h9o+cg2h1WEc0QdFI955cMZZ0T+BZLxWB8IQKBgQDyp+XwufjbhlPScLul\nUwanhiXaRLC26ix4Q5LE5gtHq7xemX2GMDgf9AqpG3H2ntGSHSrZ6AIsJqZznaAm\ndJ/M9uPgkVnxj6BCBrDRRrJT3bHvu9NI4iMzmXWUOXK9cF5LuAHaZ1jSBwA0aY4C\nZa/k/l3FG576+XX3NMXs8Wd60QKBgQDkwN8zTxMY/RbRHpAjIF+X9fAyjCB5Mwaw\n9Y6UUa02kA+7JpBF2G5jNgQ1etic1Ot8HA70TKONccZDgXLSd+o1bpv6x28dY2ZR\naI8VXl+dTKXW4QlDlISFtMz8sMGN+3BnS2kxGQO0y0LFA+WgpHNLRVMXacb1hxxz\nsnNiPZ+86wKBgBfoVO5f1FYEqRONyd8jC//LZsVXiTWsYs9CkR5XL/tSv09uvgBP\nlegICljY/GR5B1rnBsbLZhNlh3bSq+m+CdSO6qrAh2UWaoq20Ar+dSlwKUzea5W9\nugwmbYA6HMTvYksBiSU0k3q1994yHCy+ShM8wI5gB0zg8S93Ap0yt6hRAoGAXAaP\nhHeySiI/FJ/EAq2aZ2rEV8FxqvBxJ62Rz29QTJwGCBdKgR7Bwd3QMaebDvTFS2eK\nSJOwVE3KIgwooi0lpps52thyhhMf7W4v6bvOoVxddyWO8YYFDjkfIiUFqNXXcWaw\nCdVzXT9MPDAGJ+sgis53z/p41Pum4ZCPxJzf70MCgYEAzOQfsByiIuf1JUIvxrgX\n6ShfHEzxX9VSITOwswJdyv05PRFR0uJVyp9xQFmoiNqte/CmMpNs/94XWuT05riE\nceLMUL/xFSlrpEh4gHQ2eEomM2zdpcWdWGtFfls2Opxg/b/RF7WrkhWWNqAVBSln\n5dQOPCze+hxP+PnGnY4gpnI=\n-----END PRIVATE KEY-----\n';
+var SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+var SHEET_CONFIG = 'config';
+var SHEET_SKILL_STATUS = 'skillStatus';
+var SHEET_SKILL_LOG = 'skillLog';
+
+// ============================================================
+// JWT / TOKEN  (identical pattern to Classroom Tracker / Kiosk)
+// ============================================================
+var cachedToken = null;
+var tokenExpiry = 0;
+
+function b64url(str) { return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,''); }
+function b64urlUint8(arr) { var bin=''; arr.forEach(function(b){ bin+=String.fromCharCode(b); }); return b64url(bin); }
+
+async function getAccessToken() {
+  if (cachedToken && Date.now() < tokenExpiry - 60000) return cachedToken;
+  var now = Math.floor(Date.now()/1000);
+  var header = b64url(JSON.stringify({alg:'RS256',typ:'JWT',kid:SA_KEY_ID}));
+  var claim  = b64url(JSON.stringify({iss:SA_EMAIL, scope:SCOPES, aud:'https://oauth2.googleapis.com/token', iat:now, exp:now+3600}));
+  var sigInput = header+'.'+claim;
+  var pemBody = SA_PRIVATE_KEY.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
+  var derBuf = Uint8Array.from(atob(pemBody), function(c){ return c.charCodeAt(0); });
+  var key = await crypto.subtle.importKey('pkcs8', derBuf.buffer, {name:'RSASSA-PKCS1-v1_5', hash:'SHA-256'}, false, ['sign']);
+  var sig = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(sigInput));
+  var jwt = sigInput+'.'+b64urlUint8(new Uint8Array(sig));
+  var resp = await fetch('https://oauth2.googleapis.com/token', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion='+jwt});
+  var data = await resp.json();
+  if (data.error) throw new Error(data.error+': '+data.error_description);
+  cachedToken = data.access_token;
+  tokenExpiry = Date.now() + (data.expires_in||3600)*1000;
+  return cachedToken;
+}
+
+// ============================================================
+// SHEETS API
+// ============================================================
+var SHEET_ID = '';
+
+async function sheetsGet(range) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range), {headers:{'Authorization':'Bearer '+token}});
+  return r.json();
+}
+async function sheetsUpdate(range, values) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range)+'?valueInputOption=RAW', {method:'PUT', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify({values:values})});
+  return r.json();
+}
+async function sheetsAppend(tab, values) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(tab)+'!A:I:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS', {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify({values:values})});
+  return r.json();
+}
+async function sheetsMeta() {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'?fields=sheets.properties.title', {headers:{'Authorization':'Bearer '+token}});
+  return r.json();
+}
+async function sheetsAddTabs(titles) {
+  var token = await getAccessToken();
+  var requests = titles.map(function(t){ return {addSheet:{properties:{title:t}}}; });
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+':batchUpdate', {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}, body:JSON.stringify({requests:requests})});
+  return r.json();
+}
+
+async function ensureTabsExist() {
+  var meta = await sheetsMeta();
+  var have = (meta.sheets||[]).map(function(s){ return s.properties.title; });
+  var need = [];
+  if (have.indexOf(SHEET_SKILL_STATUS) === -1) need.push(SHEET_SKILL_STATUS);
+  if (have.indexOf(SHEET_SKILL_LOG) === -1) need.push(SHEET_SKILL_LOG);
+  if (need.length) await sheetsAddTabs(need);
+  if (need.indexOf(SHEET_SKILL_STATUS) > -1) {
+    await sheetsUpdate(SHEET_SKILL_STATUS+'!A1:I1', [['classId','className','skill','student','score','tally','sessionsCount','lastSessionDate','firstMasteryDate']]);
+  }
+  if (need.indexOf(SHEET_SKILL_LOG) > -1) {
+    await sheetsUpdate(SHEET_SKILL_LOG+'!A1:I1', [['timestamp','classId','className','skill','student','event','tally','score','notes']]);
+  }
+}
+
+// ============================================================
+// SHEET SETUP
+// ============================================================
+function copyEmail() { navigator.clipboard.writeText(SA_EMAIL).then(function(){ alert('Copied: '+SA_EMAIL); }); }
+
+async function saveSheetId(silent) {
+  var inp = document.getElementById('sheet-id-input');
+  var id = (silent ? silent : inp.value.trim());
+  var match = id.match(/\/d\/([a-zA-Z0-9_-]+)/);
+  if (match) id = match[1];
+  if (!id) { if(!silent) alert('Please paste your Sheet ID or URL.'); return; }
+
+  var statusEl = document.getElementById('sheet-connect-status');
+  if(statusEl) statusEl.textContent = 'Connecting...';
+  SHEET_ID = id;
+  try {
+    await ensureTabsExist();
+    localStorage.setItem('skl_sheet_id', id);
+    if(statusEl) statusEl.textContent = 'Connected!';
+    await loadSkillsConfig();
+    await loadRoster();
+    showPhase('phase-main');
+    startPolling();
+  } catch(e) {
+    if(statusEl) statusEl.textContent = 'Connection failed: '+e.message+'. Make sure the Sheet is shared with the service account.';
+    SHEET_ID = '';
+  }
+}
+
+function changeSheet() {
+  localStorage.removeItem('skl_sheet_id');
+  SHEET_ID = '';
+  showPhase('phase-sheet-setup');
+}
+
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(function(p){ p.classList.remove('visible'); });
+  document.getElementById(id).classList.add('visible');
+}
+
+// ============================================================
+// STATE
+// ============================================================
+var classes = [];              // [{id,name,students:[names]}]
+var activeClassId = null;
+var skills = ['Knife Skills', 'Sanitation', 'Equipment Use'];
+var activeSkill = null;
+var skillStatus = {};          // skillStatus[classId][skill][student] = {score,tally,sessionsCount,lastSessionDate,firstMasteryDate,helpFlag}
+var logQueue = [];             // events waiting to be pushed to Sheets
+var actionStudent = null;
+var indepExpanded = false;
+
+function statusKey(classId, skill) { return classId+'||'+skill; }
+function ensureStatusBucket(classId, skill) {
+  if (!skillStatus[classId]) skillStatus[classId] = {};
+  if (!skillStatus[classId][skill]) skillStatus[classId][skill] = {};
+  return skillStatus[classId][skill];
+}
+function ensureStudentEntry(classId, skill, name) {
+  var bucket = ensureStatusBucket(classId, skill);
+  if (!bucket[name]) bucket[name] = {score:null, tally:0, sessionsCount:0, lastSessionDate:'', firstMasteryDate:'', helpFlag:false};
+  return bucket[name];
+}
+
+function saveLocal() {
+  try {
+    localStorage.setItem('skl_skills', JSON.stringify(skills));
+    localStorage.setItem('skl_status', JSON.stringify(skillStatus));
+    localStorage.setItem('skl_logqueue', JSON.stringify(logQueue));
+    localStorage.setItem('skl_active', JSON.stringify({classId:activeClassId, skill:activeSkill}));
+  } catch(e) {}
+}
+function loadLocal() {
+  try {
+    var s = localStorage.getItem('skl_status'); if (s) skillStatus = JSON.parse(s);
+    var q = localStorage.getItem('skl_logqueue'); if (q) logQueue = JSON.parse(q);
+    var a = localStorage.getItem('skl_active'); if (a) { var ao=JSON.parse(a); activeClassId=ao.classId; activeSkill=ao.skill; }
+  } catch(e) {}
+}
+
+// ============================================================
+// ROSTER / SKILLS CONFIG (read from the same Sheet as Classroom Tracker)
+// ============================================================
+async function loadRoster() {
+  var res = await sheetsGet(SHEET_CONFIG+'!A1:B10');
+  var rows = res.values || [];
+  var cfg = {};
+  rows.forEach(function(r){ if(r[0]) cfg[r[0]] = r[1] || ''; });
+  var rosterData = {};
+  try { rosterData = JSON.parse(cfg['rosterData']||'{}'); } catch(e){}
+  classes = Object.keys(rosterData).map(function(id){ return {id:id, name:rosterData[id].name, students:(rosterData[id].students||[]).slice().sort(function(a,b){return a.localeCompare(b);})}; });
+  if (!activeClassId || !classes.find(function(c){return c.id===activeClassId;})) {
+    activeClassId = classes.length ? classes[0].id : null;
+  }
+}
+
+async function loadSkillsConfig() {
+  try {
+    var res = await sheetsGet(SHEET_SKILL_STATUS+'!A1:I1');
+    // config for skills list is stored locally + mirrored into row 1 comment isn't reliable; keep skills local + sync via config tab custom row.
+  } catch(e){}
+  try {
+    var res2 = await sheetsGet(SHEET_CONFIG+'!A6:B6');
+    var row = (res2.values||[])[0];
+    if (row && row[0]==='skillList' && row[1]) {
+      var parsed = JSON.parse(row[1]);
+      if (Array.isArray(parsed) && parsed.length) skills = parsed;
+    }
+  } catch(e){}
+  if (!activeSkill || skills.indexOf(activeSkill) === -1) activeSkill = skills[0];
+}
+
+async function saveSkillsConfig() {
+  try { await sheetsUpdate(SHEET_CONFIG+'!A6:B6', [['skillList', JSON.stringify(skills)]]); } catch(e){}
+}
+
+// ============================================================
+// SYNC (status = full overwrite, log = append queued events)
+// ============================================================
+var pollInterval = null;
+function startPolling() {
+  syncNow();
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(syncNow, 15000);
+}
+
+function setSyncStatus(type, msg) {
+  var wrap = document.getElementById('sync-bar-wrap'); if(!wrap) return;
+  var cls = type==='error'?'err':type==='local'?'warn':'';
+  var icon = type==='syncing'?'<span class="spinning">&#8635;</span> ':type==='synced'?'&#10003; ':'&#9888; ';
+  wrap.innerHTML = '<div class="sync-bar '+cls+'">'+icon+msg+'</div>';
+}
+
+async function syncNow() {
+  if (!SHEET_ID) return;
+  setSyncStatus('syncing', 'Syncing...');
+  try {
+    // push queued log events (append-only)
+    if (logQueue.length) {
+      var rows = logQueue.map(function(e){ return [e.ts, e.classId, e.className, e.skill, e.student, e.event, e.tally, e.score||'', e.notes||'']; });
+      await sheetsAppend(SHEET_SKILL_LOG, rows);
+      logQueue = [];
+      saveLocal();
+    }
+    // overwrite full current-status snapshot
+    var rows2 = [];
+    classes.forEach(function(c){
+      skills.forEach(function(sk){
+        (c.students||[]).forEach(function(name){
+          var st = (skillStatus[c.id] && skillStatus[c.id][sk] && skillStatus[c.id][sk][name]) || null;
+          if (!st) return;
+          rows2.push([c.id, c.name, sk, name, st.score||'', st.tally||0, st.sessionsCount||0, st.lastSessionDate||'', st.firstMasteryDate||'']);
+        });
+      });
+    });
+    await sheetsUpdate(SHEET_SKILL_STATUS+'!A2:I'+(Math.max(rows2.length,1)+1), rows2.length ? rows2 : [['']]);
+    setSyncStatus('synced', 'Synced ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+  } catch(e) {
+    setSyncStatus('error', 'Will retry - ' + e.message);
+  }
+}
+
+function queueLog(classId, className, skill, student, event, tally, score, notes) {
+  logQueue.push({ts:new Date().toISOString(), classId:classId, className:className, skill:skill, student:student, event:event, tally:tally, score:score, notes:notes||''});
+  saveLocal();
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function activeClass() { return classes.find(function(c){ return c.id===activeClassId; }); }
+
+function renderPeriodTabs() {
+  var el = document.getElementById('period-tabs');
+  el.innerHTML = classes.map(function(c){
+    return '<button class="period-tab '+(c.id===activeClassId?'active':'')+'" onclick="switchClass(\''+c.id+'\')">'+c.name+'</button>';
+  }).join('');
+  var cls = activeClass();
+  document.getElementById('class-name-label').textContent = cls ? cls.name+' \u00b7 '+cls.students.length+' students' : 'No classes found in your Sheet yet.';
+}
+function switchClass(id) { activeClassId = id; indepExpanded=false; saveLocal(); renderAll(); }
+
+function renderSkillTabs() {
+  var el = document.getElementById('skill-tabs');
+  el.innerHTML = skills.map(function(sk){
+    return '<button class="skill-tab '+(sk===activeSkill?'active':'')+'" onclick="switchSkill(\''+sk.replace(/'/g,"\\'")+'\')">'+sk+'</button>';
+  }).join('') + '<button class="skill-tab-add" onclick="openSkillManager()">+ Skill</button>';
+}
+function switchSkill(sk) { activeSkill = sk; indepExpanded=false; saveLocal(); renderAll(); }
+
+function scoreClass(score) { return 'score-'+(score||3); }
+function scoreLabel(score) { return score===4?'Independent':score===3?'Proficient':score===2?'Emerging':score===1?'Beginning':'Not yet assessed'; }
+
+function renderGrid() {
+  var cls = activeClass();
+  var wrap = document.getElementById('student-grid-wrap');
+  var indepSection = document.getElementById('indep-section');
+  if (!cls || !activeSkill) {
+    wrap.innerHTML = '<div class="empty-state">Connect a Sheet with at least one class to get started.</div>';
+    indepSection.style.display = 'none';
+    return;
+  }
+  var bucket = ensureStatusBucket(cls.id, activeSkill);
+  var active = [], indep = [];
+  cls.students.forEach(function(name){
+    var st = bucket[name];
+    if (st && st.score === 4) indep.push(name); else active.push(name);
+  });
+
+  if (!active.length) {
+    wrap.innerHTML = '<div class="empty-state">Everyone here has reached Independent on '+activeSkill+'. &#127881;</div>';
+  } else {
+    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+      var st = bucket[name] || {tally:0, score:null};
+      var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag;
+      var cardClass = notYetInSession ? 'score-none' : scoreClass(st.helpFlag ? 1 : (st.tally===0 ? 4 : st.tally<=2 ? 3 : 2));
+      var tallyTxt = notYetInSession ? 'Not yet assessed' : (st.tally ? st.tally+' prompt'+(st.tally!==1?'s':'') : 'No prompts yet');
+      return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
+        + '<div class="stu-name">'+name+'</div>'
+        + '<div class="stu-tally">'+tallyTxt+'</div>'
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
+  if (indep.length) {
+    indepSection.style.display = 'block';
+    document.getElementById('indep-count').textContent = indep.length;
+    document.getElementById('indep-body').innerHTML = indep.map(function(name){
+      return '<span class="indep-chip" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">&#10003; '+name+'</span>';
+    }).join('');
+  } else {
+    indepSection.style.display = 'none';
+  }
+}
+
+function renderSessionInfo() {
+  var cls = activeClass();
+  var el = document.getElementById('session-info');
+  if (!cls || !activeSkill) { el.innerHTML = '&nbsp;'; return; }
+  var bucket = ensureStatusBucket(cls.id, activeSkill);
+  var lastDate = '';
+  cls.students.forEach(function(n){ var st=bucket[n]; if (st && st.lastSessionDate && st.lastSessionDate>lastDate) lastDate=st.lastSessionDate; });
+  el.innerHTML = 'Last session: <b>' + (lastDate || 'none yet') + '</b>';
+}
+
+function renderAll() {
+  renderPeriodTabs();
+  renderSkillTabs();
+  renderSessionInfo();
+  renderGrid();
+}
+
+function toggleIndepList() {
+  indepExpanded = !indepExpanded;
+  document.getElementById('indep-body').classList.toggle('visible', indepExpanded);
+}
+
+// ============================================================
+// SESSION
+// ============================================================
+function finalizeOpenSession(cls) {
+  // Close out whatever session was already in progress for this class+skill before
+  // starting a new one, so a quiet (0-prompt) session actually gets recorded as a
+  // Score 4 rather than silently disappearing when tallies reset.
+  var bucket = ensureStatusBucket(cls.id, activeSkill);
+  cls.students.forEach(function(name){
+    var st = bucket[name];
+    if (!st || st.score === 4 || !st.lastSessionDate) return; // already independent, or never in a session
+    var finalScore = st.helpFlag ? 1 : (st.tally===0 ? 4 : st.tally<=2 ? 3 : 2);
+    st.sessionsCount = (st.sessionsCount||0) + 1;
+    if (finalScore === 4) {
+      st.score = 4;
+      if (!st.firstMasteryDate) st.firstMasteryDate = st.lastSessionDate;
+    }
+    queueLog(cls.id, cls.name, activeSkill, name, 'session_end', st.tally, finalScore, '');
+  });
+}
+
+function startNewSession() {
+  var cls = activeClass(); if (!cls || !activeSkill) return;
+  if (!confirm('Start a new lab session for '+activeSkill+' \u2014 '+cls.name+'?\nThis finalizes today\u2019s scores and resets prompt tallies for students still being monitored.')) return;
+  finalizeOpenSession(cls);
+  var today = new Date().toISOString().slice(0,10);
+  cls.students.forEach(function(name){
+    var st = ensureStudentEntry(cls.id, activeSkill, name);
+    if (st.score !== 4) { st.tally = 0; st.helpFlag = false; }
+    st.lastSessionDate = today;
+  });
+  queueLog(cls.id, cls.name, activeSkill, '(all students)', 'session_start', 0, '', '');
+  saveLocal();
+  renderAll();
+  syncNow();
+}
+
+// ============================================================
+// ACTION PANEL
+// ============================================================
+function openPanel(name) {
+  actionStudent = name;
+  var cls = activeClass();
+  var st = ensureStudentEntry(cls.id, activeSkill, name);
+  document.getElementById('ap-name').textContent = name;
+  document.getElementById('ap-skill').textContent = activeSkill;
+  document.getElementById('ap-tally').textContent = st.tally || 0;
+  var pill = document.getElementById('ap-score-pill');
+  var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag && st.score !== 4;
+  if (notYetInSession) {
+    pill.textContent = 'Not yet assessed';
+    pill.className = 'score-pill score-none';
+  } else {
+    var displayScore = st.score || (st.helpFlag ? 1 : (st.tally===0?4:st.tally<=2?3:2));
+    pill.textContent = scoreLabel(displayScore) + ' (' + displayScore + ')';
+    pill.className = 'score-pill ' + scoreClass(displayScore);
+  }
+  document.getElementById('ap-note-input').value = '';
+  document.getElementById('ap-undo-btn').style.display = st.score===4 ? 'block' : 'none';
+  document.getElementById('action-overlay').classList.add('visible');
+  document.getElementById('action-panel').classList.add('visible');
+}
+function closePanel() {
+  document.getElementById('action-overlay').classList.remove('visible');
+  document.getElementById('action-panel').classList.remove('visible');
+  actionStudent = null;
+}
+
+function currentStudentEntry() {
+  var cls = activeClass();
+  return ensureStudentEntry(cls.id, activeSkill, actionStudent);
+}
+
+function tapPrompt() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.tally = (st.tally||0) + 1;
+  st.helpFlag = false;
+  st.score = null; // not finalized until independent / session end
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'prompt', st.tally, '', '');
+  openPanel(actionStudent);
+  renderGrid();
+  syncNow();
+}
+
+function tapMarkIndependent() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.score = 4;
+  st.helpFlag = false;
+  st.sessionsCount = (st.sessionsCount||0) + 1;
+  if (!st.firstMasteryDate) st.firstMasteryDate = new Date().toISOString().slice(0,10);
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'mark4', st.tally, 4, '');
+  closePanel();
+  renderAll();
+  syncNow();
+}
+
+function tapUndoIndependent() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.score = null;
+  st.tally = 0;
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'undo_mark4', 0, '', '');
+  closePanel();
+  renderAll();
+  syncNow();
+}
+
+function tapNeededHelp() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.helpFlag = true;
+  st.score = null;
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'mark1', st.tally, 1, '');
+  openPanel(actionStudent);
+  renderGrid();
+  syncNow();
+}
+
+function tapSaveNote() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var text = document.getElementById('ap-note-input').value.trim();
+  if (!text) return;
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'note', 0, '', text);
+  document.getElementById('ap-note-input').value = '';
+  syncNow();
+  alert('Note saved.');
+}
+
+// ============================================================
+// SKILL MANAGER
+// ============================================================
+function openSkillManager() {
+  renderSkillManageList();
+  document.getElementById('skill-modal-overlay').classList.add('visible');
+}
+function closeSkillManager() {
+  document.getElementById('skill-modal-overlay').classList.remove('visible');
+  saveSkillsConfig();
+  saveLocal();
+  renderAll();
+}
+function renderSkillManageList() {
+  var el = document.getElementById('skill-manage-list');
+  el.innerHTML = skills.map(function(sk, i){
+    return '<div class="skill-row"><input value="'+sk.replace(/"/g,'&quot;')+'" onchange="renameSkill('+i+',this.value)"/><button class="skill-del" onclick="deleteSkill('+i+')">&times;</button></div>';
+  }).join('');
+}
+function renameSkill(i, val) {
+  val = val.trim(); if (!val) return;
+  var old = skills[i];
+  skills[i] = val;
+  Object.keys(skillStatus).forEach(function(cid){ if (skillStatus[cid][old]) { skillStatus[cid][val] = skillStatus[cid][old]; delete skillStatus[cid][old]; } });
+  if (activeSkill === old) activeSkill = val;
+  saveLocal();
+}
+function deleteSkill(i) {
+  if (skills.length <= 1) { alert('You need at least one skill.'); return; }
+  var sk = skills[i];
+  if (!confirm('Remove "'+sk+'"? Its saved scores will stay in your Sheet\u2019s skillLog but will disappear from the app.')) return;
+  skills.splice(i,1);
+  if (activeSkill === sk) activeSkill = skills[0];
+  renderSkillManageList();
+  saveLocal();
+}
+function addSkill() {
+  var inp = document.getElementById('new-skill-input');
+  var val = inp.value.trim();
+  if (!val) return;
+  if (skills.indexOf(val) > -1) { alert('That skill already exists.'); return; }
+  skills.push(val);
+  inp.value = '';
+  renderSkillManageList();
+  saveLocal();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function init() {
+  document.getElementById('sa-email-display').textContent = SA_EMAIL;
+  loadLocal();
+  var saved = localStorage.getItem('skl_sheet_id') || localStorage.getItem('ct_sheet_id');
+  if (saved) {
+    showPhase('phase-main');
+    saveSheetId(saved);
+  } else {
+    showPhase('phase-sheet-setup');
+  }
+}
+init();
+</script>
+</body>
+</html>
