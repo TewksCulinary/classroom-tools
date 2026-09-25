@@ -199,7 +199,7 @@
         <button class="score-btn sDec" id="sbtn-Dec" onclick="selectScore('Dec')">Dec</button>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;" id="custom-score-grid"></div>
-      <p class="hint" id="score-hint">No score selected</p>
+      <p class="hint" id="score-hint">No score selected — tapping a student cycles 4→3→2→1→ungraded</p>
     </div>
 
     <div class="section">
@@ -557,11 +557,16 @@
     inp.value = '';
     document.getElementById('add-asgn-form').style.display = 'none';
     activeAsgnName = name;
+    activeScore = null;
     save(); renderAll();
   }
 
   function selectAssignment(name) {
     activeAsgnName = name;
+    activeScore = null;
+    renderScoreButtons();
+    document.getElementById('score-hint').textContent = 'No score selected — tapping a student cycles 4→3→2→1→ungraded';
+    document.getElementById('score-hint').style.color = '#5F5E5A';
     renderAssignments(); renderStudents(); updateStuHint();
   }
 
@@ -622,11 +627,16 @@
   }
 
   function selectScore(s) {
-    activeScore = s;
+    activeScore = (activeScore === s) ? null : s;
     renderScoreButtons();
-    const m = smeta(s);
-    document.getElementById('score-hint').textContent = 'Score "' + s + '" selected';
-    document.getElementById('score-hint').style.color = m.tc;
+    if (activeScore) {
+      const m = smeta(activeScore);
+      document.getElementById('score-hint').textContent = 'Score "' + activeScore + '" selected — tapping a student sets that exact score';
+      document.getElementById('score-hint').style.color = m.tc;
+    } else {
+      document.getElementById('score-hint').textContent = 'No score selected — tapping a student cycles 4→3→2→1→ungraded';
+      document.getElementById('score-hint').style.color = '#5F5E5A';
+    }
     renderStudents();
   }
 
@@ -673,11 +683,31 @@
 
   function tapStudent(name) {
     if (!activeAsgnName) { flashHint('stu-hint','Select an assignment first!','#A32D2D'); return; }
-    if (!activeScore)    { flashHint('stu-hint','Select a score first!','#A32D2D'); return; }
     const asgn = asgnByName(activePeriod, activeAsgnName);
     if (!asgn) return;
-    if (asgn.grades[name]===activeScore) { delete asgn.grades[name]; }
-    else { asgn.grades[name] = activeScore; }
+
+    if (activeScore) {
+      // A specific score button is selected (stamp mode) — tapping sets/clears exactly that score.
+      // Used for exceptions: Ab / Ex / Dec, a custom score, or batch-stamping via Grade All.
+      if (asgn.grades[name]===activeScore) { delete asgn.grades[name]; }
+      else { asgn.grades[name] = activeScore; }
+    } else {
+      // No score selected (the normal papers-in-a-pile flow) — tapping the SAME student repeatedly
+      // walks their grade down the ladder: ungraded -> 4 -> 3 -> 2 -> 1 -> ungraded -> 4 -> ...
+      // Custom numeric scores slot in by value; Ab/Ex/Dec are stamp-only, not part of this cycle.
+      const ladder = ['4','3','2','1']
+        .concat(customScores.filter(s => !isNaN(parseFloat(s))))
+        .sort((a,b) => scoreOrder(b)-scoreOrder(a));
+      const cur = asgn.grades[name];
+      const idx = ladder.indexOf(cur);
+      if (cur == null || idx === -1) {
+        asgn.grades[name] = ladder[0];               // ungraded, or an Ab/Ex/Dec status -> start at the top (4)
+      } else if (idx === ladder.length - 1) {
+        delete asgn.grades[name];                     // was at the bottom of the ladder -> back to ungraded
+      } else {
+        asgn.grades[name] = ladder[idx+1];             // one step down
+      }
+    }
     save(); renderStudents(); renderAssignments(); renderLog();
   }
 
@@ -705,11 +735,11 @@
 
   function updateStuHint() {
     const hint = document.getElementById('stu-hint');
-    if (!activeAsgnName) { hint.textContent='Select an assignment and score first'; hint.style.color='#5F5E5A'; return; }
-    if (!activeScore)    { hint.textContent='Select a score, then tap students'; hint.style.color='#5F5E5A'; return; }
+    if (!activeAsgnName) { hint.textContent='Select an assignment first, then tap students to grade'; hint.style.color='#5F5E5A'; return; }
     const asgn = asgnByName(activePeriod, activeAsgnName);
     const count = asgn ? Object.keys(asgn.grades).length : 0;
-    hint.textContent = count+' student'+(count!==1?'s':'')+' graded \u00b7 "'+activeAsgnName+'"';
+    const mode = activeScore ? ' \u00b7 stamping "'+activeScore+'"' : ' \u00b7 tap a student to grade, tap again to step down';
+    hint.textContent = count+' student'+(count!==1?'s':'')+' graded \u00b7 "'+activeAsgnName+'"'+mode;
     hint.style.color='#185FA5';
   }
 
