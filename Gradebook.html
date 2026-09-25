@@ -38,8 +38,10 @@
     .custom-chip .cdel { background: none; border: none; border-left: 1.5px solid #80D5D5; padding: 0 8px; color: #0D6B6B; opacity: 0.45; cursor: pointer; font-size: 13px; }
     .custom-chip .cdel:hover { opacity: 0.9; }
 
-    .stu-btn { padding: 9px 8px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 500; color: #2C2C2A !important; text-align: center; transition: all 0.15s; line-height: 1.3; }
+    .stu-btn { padding: 9px 8px; border: 2px solid #888780 !important; border-radius: 8px; background: #ffffff !important; cursor: pointer; font-size: 12px; font-weight: 500; color: #2C2C2A !important; text-align: center; transition: all 0.15s; line-height: 1.3; width: 100%; height: 100%; }
     .stu-btn:hover { background: #e8e6e0 !important; }
+    .stu-card { position: relative; }
+    .power-pill { position: absolute; bottom: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%; border: 2px solid #ffffff !important; font-size: 11px; font-weight: 800; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,0.2); padding: 0; }
 
     .small-btn { font-size: 12px; background: #ffffff; border: 1.5px solid #888780; border-radius: 8px; padding: 5px 12px; cursor: pointer; color: #2C2C2A; font-weight: 500; }
     .small-btn:hover { background: #F1EFE8; }
@@ -169,6 +171,10 @@
           <input id="asgn-input" type="text" placeholder="Assignment name" maxlength="60" onkeydown="if(event.key==='Enter')addAssignment()" />
           <button class="add-confirm" onclick="addAssignment()">Add</button>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#5F5E5A;margin-top:8px;">
+          <input type="checkbox" id="asgn-power-checkbox" style="width:16px;height:16px;" />
+          Has a Power grade component (Learning Log, first-five, exit ticket)
+        </label>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;" id="asgn-list">
         <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No assignments yet</p>
@@ -248,6 +254,16 @@
       'Dec':{bg:'#F5F5F5',tc:'#444444',pb:'#CCCCCC'},
     };
     return m[s] || {bg:'#E0F5F5',tc:'#0D6B6B',pb:'#80D5D5'};
+  }
+
+  const POWER_LADDER = ['Done', 'Partial', 'Missing'];
+  function powerMeta(s) {
+    const m = {
+      'Done':    {bg:'#EAF3DE',tc:'#27500A',pb:'#C0DD97'},
+      'Partial': {bg:'#FFF6DC',tc:'#7A5500',pb:'#F0D070'},
+      'Missing': {bg:'#FCEBEB',tc:'#791F1F',pb:'#F7C1C1'},
+    };
+    return m[s] || {bg:'#ffffff',tc:'#B4B2A9',pb:'#DDD9D3'};
   }
 
   function scoreOrder(s) {
@@ -548,17 +564,29 @@
     const inp = document.getElementById('asgn-input');
     const name = inp.value.trim();
     if (!name) return;
+    const powerCb = document.getElementById('asgn-power-checkbox');
+    const hasPower = !!(powerCb && powerCb.checked);
     const group = getShareGroup(activePeriod) || [activePeriod];
     group.forEach(p => {
       if (!data[p]) data[p] = {students:[], assignments:[]};
       if (!data[p].assignments.find(a => a.name===name))
-        data[p].assignments.push({name, grades:{}});
+        data[p].assignments.push({name, grades:{}, power:{}, hasPower});
     });
     inp.value = '';
+    if (powerCb) powerCb.checked = false;
     document.getElementById('add-asgn-form').style.display = 'none';
     activeAsgnName = name;
     activeScore = null;
     save(); renderAll();
+  }
+
+  function togglePowerFlag(name) {
+    const group = getShareGroup(activePeriod) || [activePeriod];
+    group.forEach(p => {
+      const a = asgnByName(p, name);
+      if (a) { a.hasPower = !a.hasPower; if (!a.power) a.power = {}; }
+    });
+    save(); renderAssignments(); renderStudents(); renderLog();
   }
 
   function selectAssignment(name) {
@@ -586,9 +614,12 @@
       const bc = isActive ? '#185FA5' : '#888780';
       const tag = grp ? '<span style="font-size:10px;opacity:0.7;margin-left:4px;">shared</span>' : '';
       const safe = a.name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      const powerTag = a.hasPower
+        ? `<span onclick="event.stopPropagation();togglePowerFlag('${safe}')" style="font-size:10px;background:#FFF6DC;color:#7A5500;border-radius:4px;padding:1px 5px;margin-left:4px;cursor:pointer;" title="Has a Power grade — tap to remove">&#9889; Power</span>`
+        : `<span onclick="event.stopPropagation();togglePowerFlag('${safe}')" style="font-size:10px;color:#B4B2A9;border:1px dashed #B4B2A9;border-radius:4px;padding:1px 5px;margin-left:4px;cursor:pointer;" title="Tap to add a Power grade to this assignment">+ Power</span>`;
       return `<button class="asgn-btn" onclick="selectAssignment('${safe}')"
         style="background:${bg} !important;color:${tc} !important;border-color:${bc} !important;">
-        <span>${a.name}${tag}</span>
+        <span>${a.name}${tag}${powerTag}</span>
         <span style="font-size:11px;opacity:0.8;">${count>0 ? count+' graded' : ''}</span>
       </button>`;
     }).join('');
@@ -672,13 +703,42 @@
       const tc = m ? m.tc : '#2C2C2A';
       const bc = m ? 'transparent' : '#888780';
       const safe = s.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-      return `<button class="stu-btn"
-        onclick="tapStudent('${safe}')"
-        style="background:${bg} !important;color:${tc} !important;border-color:${bc} !important;">
-        ${s}${score ? '<br><span style="font-size:10px;font-weight:700;">'+score+'</span>' : ''}
-      </button>`;
+      let powerBadge = '';
+      if (asgn && asgn.hasPower) {
+        const ps = (asgn.power||{})[s];
+        const pm = ps ? powerMeta(ps) : powerMeta(null);
+        const letter = ps ? ps[0] : '+';
+        powerBadge = `<button class="power-pill"
+          onclick="event.stopPropagation();tapPower('${safe}')"
+          style="background:${pm.bg} !important;color:${pm.tc} !important;border-color:${pm.pb} !important;"
+          title="Power grade: ${ps||'not set'} — tap to cycle">${letter}</button>`;
+      }
+      return `<div class="stu-card">
+        <button class="stu-btn"
+          onclick="tapStudent('${safe}')"
+          style="background:${bg} !important;color:${tc} !important;border-color:${bc} !important;">
+          ${s}${score ? '<br><span style="font-size:10px;font-weight:700;">'+score+'</span>' : ''}
+        </button>${powerBadge}
+      </div>`;
     }).join('');
     updateStuHint();
+  }
+
+  function tapPower(name) {
+    if (!activeAsgnName) return;
+    const asgn = asgnByName(activePeriod, activeAsgnName);
+    if (!asgn || !asgn.hasPower) return;
+    if (!asgn.power) asgn.power = {};
+    const cur = asgn.power[name];
+    const idx = POWER_LADDER.indexOf(cur);
+    if (cur == null || idx === -1) {
+      asgn.power[name] = POWER_LADDER[0];
+    } else if (idx === POWER_LADDER.length - 1) {
+      delete asgn.power[name];
+    } else {
+      asgn.power[name] = POWER_LADDER[idx+1];
+    }
+    save(); renderStudents(); renderLog();
   }
 
   function tapStudent(name) {
@@ -723,13 +783,13 @@
   function clearAsgnGrades() {
     if (!activeAsgnName) return;
     const asgn = asgnByName(activePeriod, activeAsgnName);
-    if (asgn) { asgn.grades={}; save(); renderStudents(); renderAssignments(); renderLog(); }
+    if (asgn) { asgn.grades={}; asgn.power={}; save(); renderStudents(); renderAssignments(); renderLog(); }
   }
 
   function clearPeriodAll() {
     if (!confirm('Clear ALL grades for Period '+activePeriod+'? This cannot be undone.')) return;
     if (enteredGrades[activePeriod]) { delete enteredGrades[activePeriod]; }
-    if (data[activePeriod]) data[activePeriod].assignments.forEach(a => a.grades={});
+    if (data[activePeriod]) data[activePeriod].assignments.forEach(a => { a.grades={}; a.power={}; });
     save(); renderAssignments(); renderStudents(); renderLog();
   }
 
@@ -739,7 +799,9 @@
     const asgn = asgnByName(activePeriod, activeAsgnName);
     const count = asgn ? Object.keys(asgn.grades).length : 0;
     const mode = activeScore ? ' \u00b7 stamping "'+activeScore+'"' : ' \u00b7 tap a student to grade, tap again to step down';
-    hint.textContent = count+' student'+(count!==1?'s':'')+' graded \u00b7 "'+activeAsgnName+'"'+mode;
+    let text = count+' student'+(count!==1?'s':'')+' graded \u00b7 "'+activeAsgnName+'"'+mode;
+    if (asgn && asgn.hasPower) text += ' \u00b7 tap the small circle for the Power grade';
+    hint.textContent = text;
     hint.style.color='#185FA5';
   }
 
@@ -769,9 +831,15 @@
           const studentEntered = isEntered && (enteredStudents === true || (Array.isArray(enteredStudents) && enteredStudents.indexOf(s) > -1));
           const rowClass = studentEntered ? ' entered' : '';
           const boldStyle = isEntered && !studentEntered ? ' style="font-weight:700;"' : '';
+          let powerPill = '';
+          if (a.hasPower) {
+            const ps = (a.power||{})[s];
+            const pm = powerMeta(ps);
+            powerPill = '<span class="score-pill" style="margin-left:6px;background:' + pm.pb + ';color:' + pm.tc + ';">' + (ps||'—') + '</span>';
+          }
           return '<div class="log-row' + rowClass + '"' + boldStyle + '>'
             + '<span>' + s + '</span>'
-            + '<span class="score-pill" style="background:' + m.pb + ';color:' + m.tc + ';">' + sc + '</span>'
+            + '<span><span class="score-pill" style="background:' + m.pb + ';color:' + m.tc + ';">' + sc + '</span>' + powerPill + '</span>'
             + '</div>';
         }).join('');
       const count = Object.keys(a.grades).length;
@@ -807,10 +875,14 @@
     const time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     let out = 'Grade Log \u2014 Period '+activePeriod+'\n'+date+' '+time+'\n'+'='.repeat(40)+'\n\n';
     asgns.forEach(a => {
-      out += a.name+'\n'+'-'.repeat(30)+'\n';
+      out += a.name+(a.hasPower?' (+ Power grade)':'')+'\n'+'-'.repeat(30)+'\n';
       Object.entries(a.grades)
         .sort(([a],[b]) => a.localeCompare(b))
-        .forEach(([s,sc]) => { out += '  '+s.padEnd(24)+sc+'\n'; });
+        .forEach(([s,sc]) => {
+          let line = '  '+s.padEnd(24)+sc;
+          if (a.hasPower) { const ps=(a.power||{})[s]; line += '   Power: '+(ps||'—'); }
+          out += line+'\n';
+        });
       out += '\n';
     });
     const blob = new Blob([out],{type:'text/plain'});
