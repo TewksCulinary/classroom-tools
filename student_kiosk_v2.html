@@ -111,59 +111,24 @@
 // SERVICE ACCOUNT CONFIG - must match teacher file
 // ============================================================
 var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.com';
-var SA_KEY_ID = '511e3c09ca7ae435d40bc9e4f6951f61011931c7';
-var SA_PRIVATE_KEY = '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDY1FpHveCJOBiT\nGF5Dp/fh1ITOjVO+69Zd0ZXsL+j8RzuGtYW/FJwLvbVjieFjmLx90YBrIz4AwkyQ\nm317b4uL17vyUDMpwAdbPiXgeIzwtgAjTVrPqh331Df0vEaBJlS+JBu2bOWsaLC+\ndFTmKFKcltzQQtUEPxAeG+2G6WTuMUO1shvvw0fCCpOCT0ht+npGyZwWm+EnlcvU\nQKxY21Cn2errNIo2WUi2vH8wVlwqt+Li4selakJvbHelzF0KOj/pAtSf3sUjwVak\nc9sX6U3oh9hFycY6TepOifm5xRIFBeIedcmA1p73HIjUxgw1f2Js76o02yru5kCW\nMFSs/jnbAgMBAAECggEAVxVKQP/4ewPlksY5rbB7NN7Wi+Jk3Qv452sybE59ozy0\nopCq66hKV8jUXerVc9u28E1A50abM1DV0Uoxpm6RPBPj7xjYw47VJYcbTUD9Ufu2\nqHb73uVy7cL0yj0Hj/0mEcuMucKYp5rQSV2Nb3aIX02T16zPwsnVHlKXHhUErUis\nlWSi162PKFqx0wb30lrQFfLxutUCL6qXpfd5upgyrKUL+emwfcgL4UkmdFgBP8QT\nvyQXMnwsfTTwTOuOUwIiYnwqw6rrpjyMBAUeyzTFkbjajt7f0T0g9vy3Eo4RxR1N\ntO2mi6h9o+cg2h1WEc0QdFI955cMZZ0T+BZLxWB8IQKBgQDyp+XwufjbhlPScLul\nUwanhiXaRLC26ix4Q5LE5gtHq7xemX2GMDgf9AqpG3H2ntGSHSrZ6AIsJqZznaAm\ndJ/M9uPgkVnxj6BCBrDRRrJT3bHvu9NI4iMzmXWUOXK9cF5LuAHaZ1jSBwA0aY4C\nZa/k/l3FG576+XX3NMXs8Wd60QKBgQDkwN8zTxMY/RbRHpAjIF+X9fAyjCB5Mwaw\n9Y6UUa02kA+7JpBF2G5jNgQ1etic1Ot8HA70TKONccZDgXLSd+o1bpv6x28dY2ZR\naI8VXl+dTKXW4QlDlISFtMz8sMGN+3BnS2kxGQO0y0LFA+WgpHNLRVMXacb1hxxz\nsnNiPZ+86wKBgBfoVO5f1FYEqRONyd8jC//LZsVXiTWsYs9CkR5XL/tSv09uvgBP\nlegICljY/GR5B1rnBsbLZhNlh3bSq+m+CdSO6qrAh2UWaoq20Ar+dSlwKUzea5W9\nugwmbYA6HMTvYksBiSU0k3q1994yHCy+ShM8wI5gB0zg8S93Ap0yt6hRAoGAXAaP\nhHeySiI/FJ/EAq2aZ2rEV8FxqvBxJ62Rz29QTJwGCBdKgR7Bwd3QMaebDvTFS2eK\nSJOwVE3KIgwooi0lpps52thyhhMf7W4v6bvOoVxddyWO8YYFDjkfIiUFqNXXcWaw\nCdVzXT9MPDAGJ+sgis53z/p41Pum4ZCPxJzf70MCgYEAzOQfsByiIuf1JUIvxrgX\n6ShfHEzxX9VSITOwswJdyv05PRFR0uJVyp9xQFmoiNqte/CmMpNs/94XWuT05riE\nceLMUL/xFSlrpEh4gHQ2eEomM2zdpcWdWGtFfls2Opxg/b/RF7WrkhWWNqAVBSln\n5dQOPCze+hxP+PnGnY4gpnI=\n-----END PRIVATE KEY-----\n';
-var SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 var SHEET_PASSES = 'passes';
 var SHEET_CONFIG = 'config';
 
 // ============================================================
-// JWT / TOKEN (same approach as teacher file)
+// SHEETS RELAY — a small server holds the signing key now, instead
+// of this public page. See classroom-tools-relay-worker.js.
 // ============================================================
+var RELAY_URL = 'https://classroom-tools-relay.vtewksbury.workers.dev/';
+var RELAY_CLIENT_KEY = '65f0d9015473b68471cc9426e42a029a008d88d68144a9e5';
+
 var cachedToken = null;
 var tokenExpiry = 0;
 
-function b64url(str) {
-  return btoa(str).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-}
-function b64urlUint8(arr) {
-  var bin = '';
-  arr.forEach(function(b){ bin += String.fromCharCode(b); });
-  return b64url(bin);
-}
-
 async function getAccessToken() {
   if (cachedToken && Date.now() < tokenExpiry - 60000) return cachedToken;
-
-  var now = Math.floor(Date.now()/1000);
-  var header = b64url(JSON.stringify({alg:'RS256',typ:'JWT',kid:SA_KEY_ID}));
-  var claim  = b64url(JSON.stringify({
-    iss: SA_EMAIL, scope: SCOPES,
-    aud: 'https://oauth2.googleapis.com/token',
-    iat: now, exp: now + 3600
-  }));
-  var sigInput = header + '.' + claim;
-
-  var pemBody = SA_PRIVATE_KEY.replace(/-----[^-]+-----/g,'').replace(/\s/g,'');
-  var derBuf = Uint8Array.from(atob(pemBody), function(c){ return c.charCodeAt(0); });
-  var key = await crypto.subtle.importKey(
-    'pkcs8', derBuf.buffer,
-    {name:'RSASSA-PKCS1-v1_5', hash:'SHA-256'},
-    false, ['sign']
-  );
-  var sig = await crypto.subtle.sign(
-    'RSASSA-PKCS1-v1_5', key,
-    new TextEncoder().encode(sigInput)
-  );
-  var jwt = sigInput + '.' + b64urlUint8(new Uint8Array(sig));
-
-  var resp = await fetch('https://oauth2.googleapis.com/token', {
-    method:'POST',
-    headers:{'Content-Type':'application/x-www-form-urlencoded'},
-    body:'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion='+jwt
-  });
+  var resp = await fetch(RELAY_URL, { headers: { 'X-Relay-Key': RELAY_CLIENT_KEY } });
   var data = await resp.json();
-  if (data.error) throw new Error(data.error+': '+data.error_description);
+  if (data.error) throw new Error('Relay error: ' + data.error);
   cachedToken = data.access_token;
   tokenExpiry = Date.now() + (data.expires_in||3600)*1000;
   return cachedToken;
