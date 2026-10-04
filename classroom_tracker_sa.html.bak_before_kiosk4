@@ -308,16 +308,6 @@
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="event-grid"></div>
     </div>
-    <div class="section" id="event-kiosk-section">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <p class="sec-label" style="margin:0;">Student kiosk</p>
-          <p style="font-size:11px;color:#5F5E5A;margin-top:2px;">Show this event on the kiosk screen</p>
-        </div>
-        <button class="small-btn" onclick="setKioskEvent()" style="background:#185FA5;color:#ffffff;border-color:#185FA5;">Set active</button>
-      </div>
-      <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Kiosk shows: <strong id="kiosk-active-label-events">not set</strong></div>
-    </div>
     <div class="section">
       <p class="sec-label">Recent activity</p>
       <div id="event-log"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No activity yet</p></div>
@@ -604,15 +594,13 @@ async function syncToSheets() {
     ['noteLib', JSON.stringify(noteLib)],
     ['watchList', JSON.stringify(Object.keys(watchList).reduce(function(o,k){ o[k]=Array.from(watchList[k]); return o; },{}) )],
     ['rosterData', JSON.stringify(rosterData)],
-    ['eventsData', JSON.stringify(cfg.events||[])],
-    ['kioskMode', kioskMode||'class'],
-    ['kioskEventId', kioskEventId||'']
+    ['eventsData', JSON.stringify(cfg.events||[])]
   ];
 
   try {
     await Promise.all([
       sheetsUpdate(SHEET_PASSES+'!A2:J'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
-      sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData)
+      sheetsUpdate(SHEET_CONFIG+'!A1:B6', configData)
     ]);
     lastSync = Date.now();
     setSyncStatus('synced','Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
@@ -672,48 +660,14 @@ async function pollKioskEvents() {
   } catch(e) { /* silent */ }
 }
 
-async function pollKioskEventHours() {
-  if (!SHEET_ID || !(cfg.events||[]).length) return;
-  try {
-    var res = await sheetsGet(SHEET_EVENTS+'!A2:G5000');
-    if (!res.values||!res.values.length) return;
-    var changed = false;
-    res.values.forEach(function(row) {
-      var sessionId=row[1],eventId=row[2],name=row[4],inMs=parseInt(row[5])||0,outMs=parseInt(row[6])||0;
-      if(!sessionId||!eventId||!name||!inMs) return;
-      var ev = eventById(eventId);
-      if(!ev) return;
-      var exists=(ev.students||[]).some(function(n){return n.toLowerCase()===name.toLowerCase();});
-      if(!exists){ ev.students=ev.students||[]; ev.students.push(name); changed=true; }
-      ensureEventData(ev.id,name);
-      var sessions=eventData[ev.id][name];
-      var existingSession=sessions.find(function(s){return s.sessionId===sessionId;});
-      if(!existingSession){
-        sessions.push({sessionId:sessionId,in:inMs,out:outMs||null});
-        changed=true;
-      } else if(outMs && !existingSession.out){
-        existingSession.out=outMs;
-        changed=true;
-      }
-    });
-    if(changed){
-      try{localStorage.setItem('ct_cfg',JSON.stringify(cfg));}catch(e){}
-      try{localStorage.setItem('ct_event_data',JSON.stringify(eventData));}catch(e){}
-      renderEventAll();
-    }
-  } catch(e) { /* silent */ }
-}
-
 function startSyncInterval() {
   if(syncInterval) clearInterval(syncInterval);
   syncInterval = setInterval(function(){
     syncToSheets();
     pollKioskEvents();
-    pollKioskEventHours();
   }, 15000);
   // Also poll kiosk more frequently
   setInterval(pollKioskEvents, 5000);
-  setInterval(pollKioskEventHours, 5000);
 }
 
 // ============================================================
@@ -742,8 +696,6 @@ var kioskActiveClassId = null;
 var eventData = {};
 var activeEventId = null;
 var eventSyncError = '';
-var kioskMode = 'class';
-var kioskEventId = null;
 
 // ============================================================
 // LOCAL STORAGE
@@ -826,18 +778,7 @@ function getBathroomCount(classId,name){
   return count;
 }
 function checkAutoWatch(classId,name){if(getBathroomCount(classId,name)>=cfg.passThreshold)getWatchList(classId).add(name);}
-function updateKioskLabel(){
-  var text='not set';
-  if(kioskMode==='event'){
-    var ev=eventById(kioskEventId);
-    text=ev?ev.name+' (Event Hours)':'not set';
-  } else {
-    var cls=kioskActiveClassId?classById(kioskActiveClassId):null;
-    text=cls?cls.name:'not set';
-  }
-  var lbl=document.getElementById('kiosk-active-label');if(lbl)lbl.textContent=text;
-  var lbl2=document.getElementById('kiosk-active-label-events');if(lbl2)lbl2.textContent=text;
-}
+function updateKioskLabel(){var lbl=document.getElementById('kiosk-active-label');if(!lbl)return;var cls=kioskActiveClassId?classById(kioskActiveClassId):null;lbl.textContent=cls?cls.name:'not set';}
 
 // ============================================================
 // SETUP
@@ -984,8 +925,7 @@ function editDestination(classId,name,eventId,dest){
   var trips=getTodayTrips(classId,name);var trip=trips.find(function(t){return t.eventId===eventId;});
   if(trip){trip.destination=dest;save();renderAll();}
 }
-function setKioskClass(){kioskMode='class';kioskActiveClassId=activeClassId;save();updateKioskLabel();var cls=classById(activeClassId);alert('Kiosk set to: '+(cls?cls.name:'this class'));}
-function setKioskEvent(){var ev=eventById(activeEventId);if(!ev){alert('Create or select an event first.');return;}kioskMode='event';kioskEventId=ev.id;save();updateKioskLabel();alert('Kiosk set to: '+ev.name+' (Event Hours)');}
+function setKioskClass(){kioskActiveClassId=activeClassId;save();updateKioskLabel();var cls=classById(activeClassId);alert('Kiosk set to: '+(cls?cls.name:'this class'));}
 
 function renderGrid(){
   var cls=classById(activeClassId);if(!cls)return;
@@ -1257,7 +1197,7 @@ function renderEventSyncWarn(){
   if(eventSyncError){el.style.display='block';el.textContent='Not syncing to your Google Sheet yet: add a tab named "event_hours" to the Sheet. (Nothing is lost locally - this will catch up once the tab exists.)';}
   else el.style.display='none';
 }
-function renderEventAll(){renderEventTabs();renderEventGrid();renderEventSummary();renderEventLog();renderEventSyncWarn();updateKioskLabel();}
+function renderEventAll(){renderEventTabs();renderEventGrid();renderEventSummary();renderEventLog();renderEventSyncWarn();}
 
 function buildEventStudentCard(eventId,eventName,name){
   var sessions=eventSessions(eventId,name).slice().sort(function(a,b){return b.in-a.in;});
@@ -1375,7 +1315,7 @@ function resetEverything(){
   if(!confirm('Full reset - delete all data?'))return;
   ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data'].forEach(function(k){localStorage.removeItem(k);});
   cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};
-  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;
+  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;
   document.querySelectorAll('.num-btn').forEach(function(b){b.classList.remove('active');});
   ['s-names','s-rosters','s-thresholds'].forEach(function(id){document.getElementById(id).style.display='none';});
   if(tickerInterval)clearInterval(tickerInterval);if(syncInterval)clearInterval(syncInterval);

@@ -672,48 +672,14 @@ async function pollKioskEvents() {
   } catch(e) { /* silent */ }
 }
 
-async function pollKioskEventHours() {
-  if (!SHEET_ID || !(cfg.events||[]).length) return;
-  try {
-    var res = await sheetsGet(SHEET_EVENTS+'!A2:G5000');
-    if (!res.values||!res.values.length) return;
-    var changed = false;
-    res.values.forEach(function(row) {
-      var sessionId=row[1],eventId=row[2],name=row[4],inMs=parseInt(row[5])||0,outMs=parseInt(row[6])||0;
-      if(!sessionId||!eventId||!name||!inMs) return;
-      var ev = eventById(eventId);
-      if(!ev) return;
-      var exists=(ev.students||[]).some(function(n){return n.toLowerCase()===name.toLowerCase();});
-      if(!exists){ ev.students=ev.students||[]; ev.students.push(name); changed=true; }
-      ensureEventData(ev.id,name);
-      var sessions=eventData[ev.id][name];
-      var existingSession=sessions.find(function(s){return s.sessionId===sessionId;});
-      if(!existingSession){
-        sessions.push({sessionId:sessionId,in:inMs,out:outMs||null});
-        changed=true;
-      } else if(outMs && !existingSession.out){
-        existingSession.out=outMs;
-        changed=true;
-      }
-    });
-    if(changed){
-      try{localStorage.setItem('ct_cfg',JSON.stringify(cfg));}catch(e){}
-      try{localStorage.setItem('ct_event_data',JSON.stringify(eventData));}catch(e){}
-      renderEventAll();
-    }
-  } catch(e) { /* silent */ }
-}
-
 function startSyncInterval() {
   if(syncInterval) clearInterval(syncInterval);
   syncInterval = setInterval(function(){
     syncToSheets();
     pollKioskEvents();
-    pollKioskEventHours();
   }, 15000);
   // Also poll kiosk more frequently
   setInterval(pollKioskEvents, 5000);
-  setInterval(pollKioskEventHours, 5000);
 }
 
 // ============================================================

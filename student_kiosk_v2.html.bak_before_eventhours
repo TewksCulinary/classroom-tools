@@ -57,9 +57,6 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .out-count-bar { text-align: center; padding: 8px; font-size: 13px; color: #000000; }
-    .event-entry-row { display:none; padding:4px 16px 10px; gap:8px; }
-    .event-entry-row input { flex:1; border:1.5px solid #A8C0EE; border-radius:8px; padding:10px 12px; font-size:14px; min-width:0; }
-    .event-entry-row button { background:#185FA5; color:#ffffff; border:none; border-radius:8px; padding:10px 16px; font-size:14px; font-weight:600; cursor:pointer; white-space:nowrap; }
 
     .setup-box { max-width: 480px; margin: 24px auto; padding: 0 16px; }
     .setup-card { background: #ffffff; border: 1.5px solid #A8C0EE; border-radius: 12px; padding: 18px; }
@@ -92,10 +89,6 @@
     <p>Waiting for teacher to set the active class.</p>
   </div>
   <div class="out-count-bar" id="out-count-bar" style="display:none;"></div>
-  <div class="event-entry-row" id="event-new-row">
-    <input type="text" id="event-new-name-kiosk" placeholder="Type your full name..." />
-    <button onclick="eventClockInNew()">Clock In</button>
-  </div>
   <div class="student-grid" id="student-grid" style="display:none;"></div>
 </div>
 
@@ -120,7 +113,6 @@
 var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.com';
 var SHEET_PASSES = 'passes';
 var SHEET_CONFIG = 'config';
-var SHEET_EVENTS = 'event_hours';
 
 // ============================================================
 // SHEETS RELAY — a small server holds the signing key now, instead
@@ -167,13 +159,6 @@ async function sheetsAppend(values) {
      body:JSON.stringify({values:values})});
   return r.json();
 }
-async function sheetsAppendEvent(values) {
-  var token = await getAccessToken();
-  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(SHEET_EVENTS)+'!A:G:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
-    {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
-     body:JSON.stringify({values:values})});
-  return r.json();
-}
 
 // ============================================================
 // STATE
@@ -186,14 +171,6 @@ var clockInState = {}; // name -> {ts: timestamp}
 var destLib = [];
 var currentStudent = null;
 var pollInterval = null;
-
-// Event Hours (kiosk self-service) state
-var kioskMode = 'class';
-var kioskEventId = null;
-var kioskEventName = '';
-var eventStudents = [];
-var eventActiveSessions = {}; // name -> {sessionId, in}
-var eventTotalsMs = {};       // name -> accumulated ms from CLOSED sessions
 
 // ============================================================
 // SHEET ID SETUP (first time only)
@@ -239,23 +216,11 @@ function poll() {
     var cfg = {};
     rows.forEach(function(r){ if(r[0]) cfg[r[0]]=r[1]||''; });
 
-    try { destLib = JSON.parse(cfg['destLib']||'[]'); } catch(e){ destLib=[]; }
-
-    kioskMode = cfg['kioskMode'] || 'class';
-
-    if (kioskMode === 'event') {
-      kioskEventId = cfg['kioskEventId']||'';
-      var eventsData = [];
-      try { eventsData = JSON.parse(cfg['eventsData']||'[]'); } catch(e){}
-      var ev = eventsData.find(function(e){ return e.id===kioskEventId; });
-      if (!kioskEventId || !ev) { showWaiting(); return; }
-      readEventHours(ev);
-      return;
-    }
-
     var newClassId = cfg['kioskClassId']||'';
     var rosterData = {};
     try { rosterData = JSON.parse(cfg['rosterData']||'{}'); } catch(e){}
+
+    try { destLib = JSON.parse(cfg['destLib']||'[]'); } catch(e){ destLib=[]; }
 
     if (!newClassId) { showWaiting(); return; }
 
@@ -265,7 +230,6 @@ function poll() {
         '<div style="padding:20px;text-align:center;"><h2 style="color:#2C2C2A;">Almost ready</h2><p style="color:#000000;">Waiting for teacher to sync roster data.<br>Please wait a moment.</p></div>';
       document.getElementById('loading-state').style.display='flex';
       document.getElementById('student-grid').style.display='none';
-      var newRow0=document.getElementById('event-new-row'); if(newRow0) newRow0.style.display='none';
       return;
     }
 
@@ -276,29 +240,6 @@ function poll() {
 
     readCurrentPasses();
   }).catch(function(e){ console.log('poll error',e); });
-}
-
-function readEventHours(ev) {
-  kioskEventName = ev.name || 'Event';
-  document.getElementById('class-name').textContent = kioskEventName + ' (Event Hours)';
-  sheetsGet(SHEET_EVENTS+'!A2:G5000').then(function(res){
-    var rows = res.values||[];
-    var namesSet = {};
-    (ev.students||[]).forEach(function(n){ namesSet[n]=true; });
-    var totals = {};
-    var active = {};
-    rows.forEach(function(r){
-      var sessionId=r[1], eventId=r[2], name=r[4], inMs=parseInt(r[5])||0, outMs=parseInt(r[6])||0;
-      if(eventId!==kioskEventId || !name || !inMs) return;
-      namesSet[name]=true;
-      if(outMs){ totals[name]=(totals[name]||0)+(outMs-inMs); }
-      else { active[name]={sessionId:sessionId,in:inMs}; }
-    });
-    eventStudents = Object.keys(namesSet).sort(function(a,b){ return a.localeCompare(b); });
-    eventTotalsMs = totals;
-    eventActiveSessions = active;
-    renderKioskEventGrid();
-  }).catch(function(e){ console.log('readEventHours error',e); });
 }
 
 function readCurrentPasses() {
@@ -335,7 +276,6 @@ function showWaiting() {
   document.getElementById('loading-state').style.display='flex';
   document.getElementById('student-grid').style.display='none';
   document.getElementById('out-count-bar').style.display='none';
-  var newRow=document.getElementById('event-new-row'); if(newRow) newRow.style.display='none';
   document.getElementById('class-name').textContent='Waiting for teacher...';
   document.getElementById('status-badge').textContent='Not active';
   document.getElementById('status-badge').className='status-badge badge-neutral';
@@ -346,7 +286,6 @@ function renderGrid() {
   document.getElementById('loading-state').style.display='none';
   document.getElementById('student-grid').style.display='grid';
   document.getElementById('out-count-bar').style.display='block';
-  var newRow=document.getElementById('event-new-row'); if(newRow) newRow.style.display='none';
 
   var passOut = students.filter(function(n){
     return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water');
@@ -389,38 +328,10 @@ function renderGrid() {
   document.getElementById('student-grid').innerHTML = html;
 }
 
-function renderKioskEventGrid() {
-  document.getElementById('loading-state').style.display='none';
-  document.getElementById('student-grid').style.display='grid';
-  document.getElementById('out-count-bar').style.display='block';
-  var newRow=document.getElementById('event-new-row'); if(newRow) newRow.style.display='flex';
-
-  var clockedInCount = eventStudents.filter(function(n){ return !!eventActiveSessions[n]; }).length;
-  document.body.className = 'neutral';
-  document.getElementById('status-badge').textContent = clockedInCount + ' clocked in now';
-  document.getElementById('status-badge').className = 'status-badge badge-green';
-  document.getElementById('out-count-bar').textContent = clockedInCount > 0
-    ? clockedInCount + ' student'+(clockedInCount!==1?'s':'')+' currently clocked in'
-    : 'No one currently clocked in';
-
-  var html = '';
-  eventStudents.forEach(function(name) {
-    var active = eventActiveSessions[name];
-    var cls = active ? 'stu-present' : 'stu-not-clocked';
-    var statusText = active ? 'Clocked in' : 'Tap to clock in';
-    var safe = name.replace(/'/g,"\\'");
-    html += '<button class="stu-btn '+cls+'" onclick="openPanel(\''+safe+'\')">'+ name
-      +'<div class="stu-sub">'+statusText+'</div>'
-      +'</button>';
-  });
-  document.getElementById('student-grid').innerHTML = html || '<p style="grid-column:1/-1;text-align:center;color:#888780;font-size:13px;padding:20px 0;">No one has clocked in yet. Type your name below to get started.</p>';
-}
-
 // ============================================================
 // ACTION PANEL
 // ============================================================
 function openPanel(name) {
-  if (kioskMode === 'event') { openEventPanel(name); return; }
   currentStudent = name;
   var state = passState[name];
   document.getElementById('panel-name').textContent = name;
@@ -512,78 +423,6 @@ function signBack() {
       return sheetsUpdate(SHEET_PASSES+'!I'+sheetRow+':J'+sheetRow, [[now,'']]);
     }
   }).catch(function(e){ console.log('back error',e); });
-}
-
-function openEventPanel(name) {
-  currentStudent = name;
-  document.getElementById('panel-name').textContent = name;
-  document.getElementById('dest-section').classList.remove('visible');
-  var active = eventActiveSessions[name];
-  if (active) {
-    var mins = Math.round((Date.now()-active.in)/60000);
-    var h = Math.floor(mins/60), m = mins%60;
-    var elapsed = (h?h+'h ':'')+m+'m';
-    document.getElementById('panel-status').textContent = 'Clocked in - '+elapsed+' so far this session';
-    document.getElementById('panel-buttons').innerHTML =
-      '<button class="big-btn btn-bathroom" onclick="eventClockOut(\''+name.replace(/'/g,"\\'")+'\')">Clock Out</button>';
-  } else {
-    document.getElementById('panel-status').textContent = 'Ready to clock in for '+kioskEventName;
-    document.getElementById('panel-buttons').innerHTML =
-      '<button class="big-btn btn-clockin" onclick="eventClockIn(\''+name.replace(/'/g,"\\'")+'\')">&#9989; Clock In</button>';
-  }
-  document.getElementById('panel').classList.add('visible');
-  document.getElementById('overlay').classList.add('visible');
-}
-
-function eventClockIn(name) {
-  if (!name) return;
-  closePanel();
-  var now = Date.now();
-  var sessionId = now.toString(36)+Math.random().toString(36).slice(2,8);
-  eventActiveSessions[name] = {sessionId:sessionId, in:now};
-  if (eventStudents.indexOf(name) === -1) {
-    eventStudents.push(name);
-    eventStudents.sort(function(a,b){ return a.localeCompare(b); });
-  }
-  renderKioskEventGrid();
-  sheetsAppendEvent([[
-    new Date().toISOString(), sessionId, kioskEventId, kioskEventName, name, now, ''
-  ]]).catch(function(e){ console.log('event clockin error',e); });
-}
-
-function eventClockOut(name) {
-  if (!name) return;
-  var active = eventActiveSessions[name];
-  if (!active) { closePanel(); return; }
-  closePanel();
-  var now = Date.now();
-  eventTotalsMs[name] = (eventTotalsMs[name]||0) + (now - active.in);
-  delete eventActiveSessions[name];
-  renderKioskEventGrid();
-
-  sheetsGet(SHEET_EVENTS+'!A2:G5000').then(function(res){
-    var rows = res.values||[];
-    var rowIdx = -1;
-    rows.forEach(function(r,i){
-      if(r[1]===active.sessionId && !r[6]) rowIdx=i;
-    });
-    if(rowIdx>=0){
-      var sheetRow = rowIdx+2;
-      return sheetsUpdate(SHEET_EVENTS+'!G'+sheetRow+':G'+sheetRow, [[now]]);
-    }
-  }).catch(function(e){ console.log('event clockout error',e); });
-}
-
-function eventClockInNew() {
-  var inp = document.getElementById('event-new-name-kiosk');
-  if (!inp) return;
-  var name = inp.value.trim();
-  if (!name) return;
-  var match = eventStudents.find(function(n){ return n.toLowerCase()===name.toLowerCase(); });
-  if (match) name = match;
-  inp.value = '';
-  if (eventActiveSessions[name]) { alert(name+' is already clocked in.'); return; }
-  eventClockIn(name);
 }
 
 // ============================================================
