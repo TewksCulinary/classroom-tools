@@ -288,7 +288,6 @@
         <p class="page-title">Event Hours</p>
         <div style="display:flex;gap:6px;">
           <button class="small-btn" onclick="exportEventCSV()">Export</button>
-          <button class="small-btn" onclick="exportAllEventsCSV()">Export All</button>
           <button class="small-btn" onclick="showPhase('phase-tracker')">Back</button>
         </div>
       </div>
@@ -1282,30 +1281,6 @@ function exportEventCSV(){
   });
   var csv=rows.map(function(row){return row.map(function(cell){var s=String(cell);return s.indexOf(',')>-1||s.indexOf('"')>-1?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');}).join('\n');
   var blob=new Blob([csv],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='event-hours-'+ev.name.replace(/\s+/g,'-').toLowerCase()+'-'+todayKey()+'.csv';a.click();
-}
-
-function exportAllEventsCSV(){
-  var events=cfg.events||[];
-  if(!events.length){ alert('No events yet.'); return; }
-  var namesSet={};
-  events.forEach(function(ev){ (ev.students||[]).forEach(function(n){ namesSet[n]=true; }); });
-  var names=Object.keys(namesSet).sort(function(a,b){ return a.localeCompare(b); });
-  if(!names.length){ alert('No students have been added to any event yet.'); return; }
-  var header=['Student'].concat(events.map(function(ev){ return ev.name; })).concat(['Total Hours']);
-  var rows=[header];
-  names.forEach(function(name){
-    var row=[name];
-    var total=0;
-    events.forEach(function(ev){
-      var ms=eventTotalMs(ev.id,name);
-      total+=ms;
-      row.push(ms?(ms/3600000).toFixed(2):'');
-    });
-    row.push((total/3600000).toFixed(2));
-    rows.push(row);
-  });
-  var csv=rows.map(function(row){return row.map(function(cell){var s=String(cell);return s.indexOf(',')>-1||s.indexOf('"')>-1?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');}).join('\n');
-  var blob=new Blob([csv],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='event-hours-all-events-'+todayKey()+'.csv';a.click();
 }
 
 function showHistory(){showPhase('phase-history');renderHistory();}
