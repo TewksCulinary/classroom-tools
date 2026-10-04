@@ -196,7 +196,6 @@
         <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
           <button class="small-btn" onclick="showSearch()">&#128269; Search</button>
           <button class="small-btn" onclick="showHistory()">History</button>
-          <button class="small-btn" onclick="showEvents()">Event Hours</button>
           <button class="small-btn" onclick="goToSettings()">&#9881;</button>
         </div>
       </div>
@@ -279,39 +278,6 @@
       </div>
     </div>
     <div id="history-area"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No history yet</p></div>
-  </div>
-
-  <!-- EVENT HOURS -->
-  <div class="phase" id="phase-events">
-    <div class="section">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-        <p class="page-title">Event Hours</p>
-        <div style="display:flex;gap:6px;">
-          <button class="small-btn" onclick="exportEventCSV()">Export</button>
-          <button class="small-btn" onclick="showPhase('phase-tracker')">Back</button>
-        </div>
-      </div>
-      <p style="font-size:11px;color:#5F5E5A;margin-bottom:10px;">Track hours for events like bake sales or fundraisers. Students add their own name once, then tap their card to clock in and out.</p>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="event-tabs"></div>
-      <div id="event-sync-warn" style="display:none;background:#FFF8E0;border:1.5px solid #C09A20;border-radius:8px;padding:8px 12px;margin-top:8px;font-size:12px;color:#7A5E00;"></div>
-    </div>
-    <div class="section" id="event-noevents" style="display:none;">
-      <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No events yet &mdash; tap "+ New event" above to create one.</p>
-    </div>
-    <div class="section" id="event-body" style="display:none;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <p class="sec-label" style="margin:0;" id="event-summary"></p>
-      </div>
-      <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <input class="search-input" id="event-new-name" type="text" placeholder="Student's first and last name..." style="flex:1;" onkeydown="if(event.key==='Enter')addEventStudent();" />
-        <button class="primary-btn" style="width:auto;white-space:nowrap;margin-top:0;" onclick="addEventStudent()">+ Add</button>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="event-grid"></div>
-    </div>
-    <div class="section">
-      <p class="sec-label">Recent activity</p>
-      <div id="event-log"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No activity yet</p></div>
-    </div>
   </div>
 
   <!-- SETTINGS -->
@@ -456,7 +422,6 @@
 var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.com';
 var SHEET_PASSES = 'passes';
 var SHEET_CONFIG = 'config';
-var SHEET_EVENTS = 'event_hours';
 
 // ============================================================
 // SHEETS RELAY — a small server holds the signing key now, instead
@@ -571,65 +536,41 @@ function setSyncStatus(type, msg) {
 async function syncToSheets() {
   if (!SHEET_ID) return;
   setSyncStatus('syncing','Syncing...');
-  var rows = [];
-  cfg.classes.forEach(function(cls) {
-    var cd = passData[cls.id]||{};
-    Object.keys(cd).forEach(function(dateKey) {
-      Object.keys(cd[dateKey]).forEach(function(name) {
-        (cd[dateKey][name]||[]).forEach(function(t) {
-          rows.push([new Date().toISOString(), t.eventId||'', cls.id, cls.name, name,
-            t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'']);
+  try {
+    var rows = [];
+    cfg.classes.forEach(function(cls) {
+      var cd = passData[cls.id]||{};
+      Object.keys(cd).forEach(function(dateKey) {
+        Object.keys(cd[dateKey]).forEach(function(name) {
+          (cd[dateKey][name]||[]).forEach(function(t) {
+            rows.push([new Date().toISOString(), t.eventId||'', cls.id, cls.name, name,
+              t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'']);
+          });
         });
       });
     });
-  });
 
-  // Build roster data for kiosk
-  var rosterData = {};
-  cfg.classes.forEach(function(c){ rosterData[c.id]={name:c.name,students:c.students||[]}; });
+    // Build roster data for kiosk
+    var rosterData = {};
+    cfg.classes.forEach(function(c){ rosterData[c.id]={name:c.name,students:c.students||[]}; });
 
-  var configData = [
-    ['kioskClassId', kioskActiveClassId||''],
-    ['destLib', JSON.stringify(destLib)],
-    ['noteLib', JSON.stringify(noteLib)],
-    ['watchList', JSON.stringify(Object.keys(watchList).reduce(function(o,k){ o[k]=Array.from(watchList[k]); return o; },{}) )],
-    ['rosterData', JSON.stringify(rosterData)],
-    ['eventsData', JSON.stringify(cfg.events||[])]
-  ];
+    var configData = [
+      ['kioskClassId', kioskActiveClassId||''],
+      ['destLib', JSON.stringify(destLib)],
+      ['noteLib', JSON.stringify(noteLib)],
+      ['watchList', JSON.stringify(Object.keys(watchList).reduce(function(o,k){ o[k]=Array.from(watchList[k]); return o; },{}) )],
+      ['rosterData', JSON.stringify(rosterData)]
+    ];
 
-  try {
     await Promise.all([
       sheetsUpdate(SHEET_PASSES+'!A2:J'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
-      sheetsUpdate(SHEET_CONFIG+'!A1:B6', configData)
+      sheetsUpdate(SHEET_CONFIG+'!A1:B5', configData)
     ]);
     lastSync = Date.now();
     setSyncStatus('synced','Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
     updateKioskLabel();
   } catch(e) {
     setSyncStatus('error','Sync error: '+e.message);
-  }
-
-  // Event-hours sync runs separately: a missing "event_hours" tab in the
-  // Sheet must never break attendance/pass syncing above.
-  if ((cfg.events||[]).length) {
-    try {
-      var eventRows = [];
-      cfg.events.forEach(function(ev){
-        (ev.students||[]).forEach(function(name){
-          eventSessions(ev.id,name).forEach(function(s){
-            eventRows.push([new Date(s.in).toISOString(), s.sessionId||'', ev.id, ev.name, name, s.in, s.out||'']);
-          });
-        });
-      });
-      var r1 = await sheetsUpdate(SHEET_EVENTS+'!A1:G1', [['timestamp','sessionId','eventId','eventName','studentName','clockInMs','clockOutMs']]);
-      if (r1 && r1.error) throw new Error(r1.error.message || 'Could not write to the "event_hours" tab.');
-      var r2 = await sheetsUpdate(SHEET_EVENTS+'!A2:G'+(Math.max(eventRows.length,1)+1), eventRows.length ? eventRows : [['']]);
-      if (r2 && r2.error) throw new Error(r2.error.message || 'Could not write to the "event_hours" tab.');
-      eventSyncError = '';
-    } catch(e) {
-      eventSyncError = e.message;
-    }
-    renderEventSyncWarn();
   }
 }
 
@@ -678,7 +619,7 @@ var TYPE_LABEL  = {bathroom:'Bathroom',water:'Water fountain',other:'Other',abse
 var STATUS_CLASS= {notclockedin:'s-notclockedin',present:'s-present',absent:'s-absent',tardy:'s-tardy',bathroom:'s-bathroom',water:'s-water',other:'s-other',note:'s-note',alert:'s-alert'};
 var STATUS_LBL  = {notclockedin:'Not clocked in',present:'Present',absent:'Absent',tardy:'Tardy',bathroom:'Bathroom',water:'Water fountain',other:'Other',note:'Note',alert:'Out too long!'};
 
-var cfg = {classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};
+var cfg = {classes:[],timeoutMins:7,passThreshold:5,passWindowDays:7};
 var noteLib = [];
 var destLib = [];
 var passData = {};
@@ -693,9 +634,6 @@ var actionStudent = null;
 var notePanelOpen = false;
 var otherPanelOpen = false;
 var kioskActiveClassId = null;
-var eventData = {};
-var activeEventId = null;
-var eventSyncError = '';
 
 // ============================================================
 // LOCAL STORAGE
@@ -705,7 +643,6 @@ function save() {
   try{localStorage.setItem('ct_data',JSON.stringify(passData));}catch(e){}
   try{localStorage.setItem('ct_notes',JSON.stringify(noteLib));}catch(e){}
   try{localStorage.setItem('ct_dests',JSON.stringify(destLib));}catch(e){}
-  try{localStorage.setItem('ct_event_data',JSON.stringify(eventData));}catch(e){}
   try{
     var wl={};
     Object.keys(watchList).forEach(function(id){wl[id]=Array.from(watchList[id]);});
@@ -721,14 +658,11 @@ function loadStorage() {
     var n=localStorage.getItem('ct_notes');
     var ds=localStorage.getItem('ct_dests');
     var w=localStorage.getItem('ct_watch');
-    var ed=localStorage.getItem('ct_event_data');
     if(c) cfg=JSON.parse(c);
-    if(!cfg.events) cfg.events=[];
     if(d) passData=JSON.parse(d);
     if(n) noteLib=JSON.parse(n);
     if(ds) destLib=JSON.parse(ds);
     if(w){var raw=JSON.parse(w);Object.keys(raw).forEach(function(id){watchList[id]=new Set(raw[id]);});}
-    if(ed) eventData=JSON.parse(ed);
     return !!(c&&cfg.classes&&cfg.classes.length);
   }catch(e){return false;}
 }
@@ -1079,18 +1013,17 @@ function submitNote(){
   addNoteEntry(activeClassId,actionStudent,text);inp.value='';closePanel();renderAll();
 }
 
-function startTicker(){if(tickerInterval)clearInterval(tickerInterval);tickerInterval=setInterval(function(){renderGrid();renderSummary();if((cfg.events||[]).length)renderEventGrid();},5000);}
+function startTicker(){if(tickerInterval)clearInterval(tickerInterval);tickerInterval=setInterval(function(){renderGrid();renderSummary();},5000);}
 function newDay(){if(!confirm('Start a new day? Today\'s data is saved to history.'))return;renderAll();}
 
 function showSearch(){showPhase('phase-search');document.getElementById('search-input').value='';document.getElementById('search-results').innerHTML='';setTimeout(function(){document.getElementById('search-input').focus();},80);}
 function runSearch(){
   var q=document.getElementById('search-input').value.trim().toLowerCase();var el=document.getElementById('search-results');
   if(q.length<2){el.innerHTML='';return;}
-  var cards=[];
-  cfg.classes.forEach(function(cls){(cls.students||[]).forEach(function(name){if(name.toLowerCase().indexOf(q)>-1)cards.push(buildStudentCard(cls.id,cls.name,name));});});
-  (cfg.events||[]).forEach(function(ev){(ev.students||[]).forEach(function(name){if(name.toLowerCase().indexOf(q)>-1)cards.push(buildEventStudentCard(ev.id,ev.name,name));});});
-  if(!cards.length){el.innerHTML='<div class="section"><p style="font-size:13px;color:#5F5E5A;text-align:center;">No students found</p></div>';return;}
-  el.innerHTML=cards.join('');
+  var matches=[];
+  cfg.classes.forEach(function(cls){(cls.students||[]).forEach(function(name){if(name.toLowerCase().indexOf(q)>-1)matches.push({classId:cls.id,className:cls.name,name:name});});});
+  if(!matches.length){el.innerHTML='<div class="section"><p style="font-size:13px;color:#5F5E5A;text-align:center;">No students found</p></div>';return;}
+  el.innerHTML=matches.map(function(m){return buildStudentCard(m.classId,m.className,m.name);}).join('');
 }
 function buildStudentCard(classId,className,name){
   var cd=passData[classId]||{};var allDays=Object.keys(cd).sort(function(a,b){return b.localeCompare(a);});
@@ -1100,127 +1033,6 @@ function buildStudentCard(classId,className,name){
   var pills=[totals.absent?'<span class="stat-pill" style="background:#F0F0F0;color:#555555;">'+totals.absent+' absent</span>':'',totals.tardy?'<span class="stat-pill" style="background:#FFF0D0;color:#7A4500;">'+totals.tardy+' tardy</span>':'',totals.bathroom?'<span class="stat-pill" style="background:#E8F0FB;color:#1A3F7A;">'+totals.bathroom+' bathroom</span>':'',totals.water?'<span class="stat-pill" style="background:#E0F5F5;color:#0D6B6B;">'+totals.water+' water</span>':'',totals.other?'<span class="stat-pill" style="background:#FFF6DC;color:#7A5500;">'+totals.other+' other</span>':'',totals.notes?'<span class="stat-pill" style="background:#F5EAF9;color:#5B2D8E;">'+totals.notes+' note'+(totals.notes!==1?'s':'')+'</span>':''].filter(Boolean).join('');
   var rows=timeline.sort(function(a,b){return b.out-a.out;}).map(function(t){var tc=TYPE_COLOR[t.type]||'#2C2C2A';var tl=TYPE_LABEL[t.type]||t.type;var notPass=['absent','tardy','note'].indexOf(t.type)>-1;var dur=t.backUnknown?'':t.back&&!notPass?Math.round((t.back-t.out)/1000/60)+'m':'';var extra=t.type==='note'?' - "'+t.text+'"':t.type==='other'&&t.destination?' - '+t.destination:t.type==='tardy'?' arrived '+fmtTime(t.out):'';var backStr=t.backUnknown?' (returned, time unknown)':t.back&&!notPass?' -> '+fmtTime(t.back):'';return'<div class="hist-row"><span style="color:#5F5E5A;min-width:70px;font-size:11px;">'+fmtDate(t.day)+'</span><span style="color:'+tc+';">'+tl+extra+'</span><span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(t.out))+backStr+(dur?' ('+dur+')':'')+'</span></div>';}).join('');
   return'<div class="section"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;"><div><p style="font-size:14px;font-weight:700;color:#2C2C2A;">'+name+'</p><p style="font-size:11px;color:#5F5E5A;">'+className+'</p></div>'+(watched?'<span style="font-size:11px;background:#FFF8E0;color:#7A5E00;border:1px solid #C09A20;border-radius:6px;padding:2px 8px;">Watched - '+passCount+' passes ('+cfg.passWindowDays+'d)</span>':'')+'</div>'+(pills?'<div style="margin-bottom:10px;">'+pills+'</div>':'<p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">No activity recorded yet</p>')+(rows?'<div style="border-top:1px solid #e8e6e0;padding-top:8px;">'+rows+'</div>':'')+'</div>';
-}
-
-// ============================================================
-// EVENT HOURS
-// ============================================================
-function eventById(id){return (cfg.events||[]).find(function(e){return e.id===id;});}
-function ensureEventData(eventId,name){if(!eventData[eventId])eventData[eventId]={};if(!eventData[eventId][name])eventData[eventId][name]=[];}
-function eventSessions(eventId,name){return ((eventData[eventId]||{})[name])||[];}
-function activeEventSession(eventId,name){return eventSessions(eventId,name).find(function(s){return !s.out;})||null;}
-function eventTotalMs(eventId,name){var total=0;eventSessions(eventId,name).forEach(function(s){total+=(s.out||Date.now())-s.in;});return total;}
-function fmtDuration(ms){var mins=Math.round(ms/60000);var h=Math.floor(mins/60);var m=mins%60;return h?(h+'h '+m+'m'):(m+'m');}
-function elapsedEventLabel(eventId,name){var s=activeEventSession(eventId,name);if(!s)return'';var sec=Math.floor((Date.now()-s.in)/1000);return Math.floor(sec/60)+'m '+String(sec%60).padStart(2,'0')+'s';}
-
-function showEvents(){showPhase('phase-events');if(!activeEventId&&(cfg.events||[]).length)activeEventId=cfg.events[0].id;renderEventAll();}
-
-function addEvent(){
-  var name=prompt('Name this event (e.g. "Fall Bake Sale"):');
-  if(name===null)return; name=name.trim(); if(!name)return;
-  var ev={id:uid(),name:name,students:[]};
-  cfg.events=cfg.events||[];cfg.events.push(ev);eventData[ev.id]={};
-  activeEventId=ev.id;save();renderEventAll();
-}
-function switchEvent(id){activeEventId=id;renderEventAll();}
-
-function addEventStudent(){
-  var inp=document.getElementById('event-new-name');var name=inp.value.trim();
-  var ev=eventById(activeEventId);if(!ev||!name)return;
-  var exists=(ev.students||[]).some(function(n){return n.toLowerCase()===name.toLowerCase();});
-  if(exists){alert(name+' is already on this event\'s list.');inp.value='';return;}
-  ev.students=ev.students||[];ev.students.push(name);
-  ensureEventData(ev.id,name);
-  inp.value='';save();renderEventAll();
-}
-
-function tapEventCard(name){
-  var ev=eventById(activeEventId);if(!ev)return;
-  ensureEventData(ev.id,name);
-  var sessions=eventData[ev.id][name];
-  var active=sessions.find(function(s){return !s.out;});
-  if(active) active.out=Date.now();
-  else sessions.push({sessionId:uid(),in:Date.now(),out:null});
-  save();renderEventGrid();renderEventSummary();renderEventLog();
-}
-
-function renderEventTabs(){
-  var tabsEl=document.getElementById('event-tabs');if(!tabsEl)return;
-  var html=(cfg.events||[]).map(function(e){return '<button class="period-tab '+(e.id===activeEventId?'active':'')+'" onclick="switchEvent(\''+e.id+'\')">'+e.name+'</button>';}).join('');
-  html+='<button class="period-tab" style="border-style:dashed;" onclick="addEvent()">+ New event</button>';
-  tabsEl.innerHTML=html;
-  var has=(cfg.events||[]).length>0;
-  document.getElementById('event-noevents').style.display=has?'none':'block';
-  document.getElementById('event-body').style.display=has?'block':'none';
-}
-
-function renderEventGrid(){
-  var el=document.getElementById('event-grid');if(!el)return;
-  var ev=eventById(activeEventId);if(!ev){el.innerHTML='';return;}
-  var html='';
-  (ev.students||[]).forEach(function(name){
-    var active=activeEventSession(ev.id,name);
-    var totalMs=eventTotalMs(ev.id,name);
-    var longSession=active&&(Date.now()-active.in)>=4*3600000;
-    var sc=longSession?'s-alert':(active?'s-present':'s-notclockedin');
-    var statusText=active?'Clocked in':'Clocked out';
-    var safe=name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    var timer=active?elapsedEventLabel(ev.id,name):'';
-    html+='<div class="stu-card '+sc+(longSession?' pulsing':'')+'" onclick="tapEventCard(\''+safe+'\')"><div class="stu-name">'+name+'</div><div class="stu-status">'+statusText+'</div>'+(timer?'<div class="stu-timer">'+timer+'</div>':'')+'<div class="stu-snip">Total: '+fmtDuration(totalMs)+'</div></div>';
-  });
-  el.innerHTML=html||'<p style="font-size:12px;color:#888780;grid-column:1/-1;text-align:center;padding:10px 0;">No students yet &mdash; add a name above.</p>';
-}
-
-function renderEventSummary(){
-  var el=document.getElementById('event-summary');if(!el)return;
-  var ev=eventById(activeEventId);if(!ev){el.textContent='';return;}
-  var students=ev.students||[];
-  var inNow=students.filter(function(n){return !!activeEventSession(ev.id,n);}).length;
-  el.textContent=students.length+' student'+(students.length!==1?'s':'')+' - '+inNow+' clocked in now';
-}
-
-function renderEventLog(){
-  var el=document.getElementById('event-log');if(!el)return;
-  var ev=eventById(activeEventId);if(!ev){el.innerHTML='';return;}
-  var entries=[];
-  (ev.students||[]).forEach(function(name){eventSessions(ev.id,name).forEach(function(s){entries.push({name:name,in:s.in,out:s.out});});});
-  entries.sort(function(a,b){return b.in-a.in;});entries=entries.slice(0,25);
-  if(!entries.length){el.innerHTML='<p style="font-size:13px;color:#5F5E5A;text-align:center;padding:6px 0;">No activity yet</p>';return;}
-  el.innerHTML=entries.map(function(e){
-    var dur=e.out?fmtDuration(e.out-e.in):'in progress';
-    return '<div class="hist-row"><span style="font-weight:600;min-width:75px;">'+e.name+'</span><span style="color:#5F5E5A;font-size:11px;">'+fmtDate(new Date(e.in).toISOString().slice(0,10))+' '+fmtTime(e.in)+(e.out?' -> '+fmtTime(e.out):' (in progress)')+'</span><span style="font-size:11px;">'+dur+'</span></div>';
-  }).join('');
-}
-
-function renderEventSyncWarn(){
-  var el=document.getElementById('event-sync-warn');if(!el)return;
-  if(eventSyncError){el.style.display='block';el.textContent='Not syncing to your Google Sheet yet: add a tab named "event_hours" to the Sheet. (Nothing is lost locally - this will catch up once the tab exists.)';}
-  else el.style.display='none';
-}
-function renderEventAll(){renderEventTabs();renderEventGrid();renderEventSummary();renderEventLog();renderEventSyncWarn();}
-
-function buildEventStudentCard(eventId,eventName,name){
-  var sessions=eventSessions(eventId,name).slice().sort(function(a,b){return b.in-a.in;});
-  var totalMs=eventTotalMs(eventId,name);
-  var active=activeEventSession(eventId,name);
-  var rows=sessions.slice(0,15).map(function(s){
-    var dur=s.out?fmtDuration(s.out-s.in):'in progress';
-    return '<div class="hist-row"><span style="color:#5F5E5A;min-width:70px;font-size:11px;">'+fmtDate(new Date(s.in).toISOString().slice(0,10))+'</span><span>'+fmtTime(s.in)+(s.out?' -> '+fmtTime(s.out):' (in progress)')+'</span><span style="color:#5F5E5A;font-size:11px;">'+dur+'</span></div>';
-  }).join('');
-  return '<div class="section"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;"><div><p style="font-size:14px;font-weight:700;color:#2C2C2A;">'+name+'</p><p style="font-size:11px;color:#5F5E5A;">'+eventName+' (Event Hours)</p></div>'+(active?'<span style="font-size:11px;background:#EAF3DE;color:#27500A;border-radius:6px;padding:2px 8px;">Clocked in now</span>':'')+'</div><div style="margin-bottom:10px;"><span class="stat-pill" style="background:#E8F0FB;color:#1A3F7A;">Total: '+fmtDuration(totalMs)+'</span></div>'+(rows?'<div style="border-top:1px solid #e8e6e0;padding-top:8px;">'+rows+'</div>':'<p style="font-size:12px;color:#5F5E5A;">No sessions recorded yet</p>')+'</div>';
-}
-
-function exportEventCSV(){
-  var ev=eventById(activeEventId);if(!ev){alert('No event selected.');return;}
-  var rows=[['Student','Total Hours','Total Minutes','Sessions','Currently Clocked In']];
-  (ev.students||[]).forEach(function(name){
-    var sessions=eventSessions(ev.id,name);
-    var totalMs=eventTotalMs(ev.id,name);
-    var active=activeEventSession(ev.id,name);
-    rows.push([name,(totalMs/3600000).toFixed(2),Math.round(totalMs/60000),sessions.length,active?'Yes':'No']);
-  });
-  var csv=rows.map(function(row){return row.map(function(cell){var s=String(cell);return s.indexOf(',')>-1||s.indexOf('"')>-1?'"'+s.replace(/"/g,'""')+'"':s;}).join(',');}).join('\n');
-  var blob=new Blob([csv],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='event-hours-'+ev.name.replace(/\s+/g,'-').toLowerCase()+'-'+todayKey()+'.csv';a.click();
 }
 
 function showHistory(){showPhase('phase-history');renderHistory();}
@@ -1313,9 +1125,9 @@ function saveRosterUpdates(){cfg.classes.forEach(function(c){var ta=document.get
 function clearAllHistory(){if(!confirm('Clear ALL history? Cannot be undone.'))return;passData={};save();showPhase('phase-tracker');renderAll();}
 function resetEverything(){
   if(!confirm('Full reset - delete all data?'))return;
-  ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data'].forEach(function(k){localStorage.removeItem(k);});
-  cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};
-  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;
+  ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id'].forEach(function(k){localStorage.removeItem(k);});
+  cfg={classes:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};
+  activeClassId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;
   document.querySelectorAll('.num-btn').forEach(function(b){b.classList.remove('active');});
   ['s-names','s-rosters','s-thresholds'].forEach(function(id){document.getElementById(id).style.display='none';});
   if(tickerInterval)clearInterval(tickerInterval);if(syncInterval)clearInterval(syncInterval);
