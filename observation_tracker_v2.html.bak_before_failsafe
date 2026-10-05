@@ -1021,58 +1021,46 @@ function toggleStudentRole(name, role) {
   renderRoleAssignment();
 }
 
-function safeDateKey(ts) {
-  var d = new Date(typeof ts === 'number' && isFinite(ts) ? ts : Date.now());
-  if (isNaN(d.getTime())) d = new Date();
-  return d.toISOString().slice(0,10);
-}
 function flushStaleLog() {
-  try {
-    var sess = currentSession();
-    if (!sess.log || !sess.log.length) return;
-    var todayKey = new Date().toISOString().slice(0,10);
-    var staleEntries = sess.log.filter(function(e){ return safeDateKey(e.ts) !== todayKey; });
-    if (!staleEntries.length) return;
-    var freshEntries = sess.log.filter(function(e){ return safeDateKey(e.ts) === todayKey; });
-    var d = currentLabData();
-    var cls = classById(activeClassId);
-    var byDate = {};
-    staleEntries.forEach(function(e) {
-      var k = safeDateKey(e.ts);
-      if (!byDate[k]) byDate[k] = [];
-      byDate[k].push(e);
-    });
-    Object.keys(byDate).forEach(function(dateKey) {
-      var firstTs = byDate[dateKey][0].ts;
-      var displayDate = new Date(typeof firstTs === 'number' && isFinite(firstTs) ? firstTs : Date.now());
-      if (isNaN(displayDate.getTime())) displayDate = new Date();
-      var entry = {
-        id: uid(),
-        date: displayDate.toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'}),
-        dateKey: dateKey,
-        labName: (sess.labName || 'Lesson') + ' (recovered)',
-        className: cls ? cls.name : '',
-        classId: activeClassId,
-        mode: sess.mode || 'group',
-        groups: JSON.parse(JSON.stringify(d.groups||[])),
-        studentGroups: JSON.parse(JSON.stringify(d.studentGroups||{})),
-        studentRoles: JSON.parse(JSON.stringify(d.studentRoles||{})),
-        log: JSON.parse(JSON.stringify(byDate[dateKey])),
-        notes: ''
-      };
-      var existIdx = -1;
-      for (var i = 0; i < obsHistory.length; i++) {
-        if (obsHistory[i].dateKey===entry.dateKey && obsHistory[i].classId===entry.classId && obsHistory[i].labName===entry.labName) {
-          existIdx = i; break;
-        }
+  var sess = currentSession();
+  if (!sess.log || !sess.log.length) return;
+  var todayKey = new Date().toISOString().slice(0,10);
+  var staleEntries = sess.log.filter(function(e){ return new Date(e.ts||Date.now()).toISOString().slice(0,10) !== todayKey; });
+  if (!staleEntries.length) return;
+  var freshEntries = sess.log.filter(function(e){ return new Date(e.ts||Date.now()).toISOString().slice(0,10) === todayKey; });
+  var d = currentLabData();
+  var cls = classById(activeClassId);
+  var byDate = {};
+  staleEntries.forEach(function(e) {
+    var k = new Date(e.ts||Date.now()).toISOString().slice(0,10);
+    if (!byDate[k]) byDate[k] = [];
+    byDate[k].push(e);
+  });
+  Object.keys(byDate).forEach(function(dateKey) {
+    var entry = {
+      id: uid(),
+      date: new Date(byDate[dateKey][0].ts||Date.now()).toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'}),
+      dateKey: dateKey,
+      labName: (sess.labName || 'Lesson') + ' (recovered)',
+      className: cls ? cls.name : '',
+      classId: activeClassId,
+      mode: sess.mode || 'group',
+      groups: JSON.parse(JSON.stringify(d.groups||[])),
+      studentGroups: JSON.parse(JSON.stringify(d.studentGroups||{})),
+      studentRoles: JSON.parse(JSON.stringify(d.studentRoles||{})),
+      log: JSON.parse(JSON.stringify(byDate[dateKey])),
+      notes: ''
+    };
+    var existIdx = -1;
+    for (var i = 0; i < obsHistory.length; i++) {
+      if (obsHistory[i].dateKey===entry.dateKey && obsHistory[i].classId===entry.classId && obsHistory[i].labName===entry.labName) {
+        existIdx = i; break;
       }
-      if (existIdx >= 0) obsHistory[existIdx] = entry; else obsHistory.unshift(entry);
-    });
-    sess.log = freshEntries;
-    save();
-  } catch (err) {
-    console.warn('flushStaleLog() skipped due to an error (Start Tracking will still proceed):', err);
-  }
+    }
+    if (existIdx >= 0) obsHistory[existIdx] = entry; else obsHistory.unshift(entry);
+  });
+  sess.log = freshEntries;
+  save();
 }
 function startLab() {
   flushStaleLog();
