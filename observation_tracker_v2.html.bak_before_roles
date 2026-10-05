@@ -172,10 +172,7 @@
     <div class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <p class="page-title" id="setup-title">Lesson Setup</p>
-        <div style="display:flex;gap:6px;">
-          <button class="small-btn" onclick="openRoleHistory('phase-setup')">Role History</button>
-          <button class="small-btn" onclick="goToSettings()">&#9881; Settings</button>
-        </div>
+        <button class="small-btn" onclick="goToSettings()">&#9881; Settings</button>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;" id="setup-class-tabs"></div>
     </div>
@@ -246,12 +243,6 @@
       </div>
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;" id="student-assign-grid"></div>
       <p class="hint" id="unassigned-hint" style="color:#A32D2D;margin-top:8px;"></p>
-    </div>
-
-    <div class="section" id="role-assign-section" style="display:none;">
-      <p class="sec-label" style="margin-bottom:2px;">Assign roles</p>
-      <p style="font-size:11px;color:#888780;margin-bottom:10px;">Tap a role to assign it to a student; tap again to clear it. Optional &mdash; only students already in a group show up here.</p>
-      <div id="role-assign-area"></div>
     </div>
 
     <div class="section" style="padding:12px 16px;">
@@ -340,7 +331,6 @@
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
         <p class="page-title">Log Review</p>
         <div style="display:flex;gap:6px;">
-          <button class="small-btn" onclick="openRoleHistory('phase-review')">Role History</button>
           <button class="small-btn" onclick="exportHistory()">Export all</button>
           <button class="small-btn" onclick="showPhase('phase-lab')">Back to tracking</button>
         </div>
@@ -360,18 +350,6 @@
     <div id="review-area">
       <p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No observations yet</p>
     </div>
-  </div>
-
-  <!-- PHASE 5B: ROLE HISTORY -->
-  <div class="phase" id="phase-role-history">
-    <div class="section">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <p class="page-title">Role History</p>
-        <button class="small-btn" onclick="closeRoleHistory()">Back</button>
-      </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;" id="role-history-class-tabs"></div>
-    </div>
-    <div id="role-history-area"></div>
   </div>
 
   <!-- PHASE 6: SETTINGS -->
@@ -442,14 +420,12 @@ var GROUP_COLORS = [
   '#C09A20','#2A8FAD','#B83060','#5C7A2A'
 ];
 var ABSENT_COLOR = '#6B6B6B';
-var ROLES = ['General Manager','Head Chef','Sous Chef','Dishwasher','Flex Role'];
-var ROLE_COLORS = ['#8B4DB8','#C0562A','#2A9E5F','#2A8FAD','#888780'];
 
 // STATE
 var cfg = { classes: [], categories: [], pin: '' };
 // categories: [{id, name, labels: [{id, label}]}]
 var labData = {};
-var obsHistory = [];
+var history = [];
 var activeClassId = null;
 var reviewActiveClassId = null;
 var setupActiveGroup = null;
@@ -463,14 +439,12 @@ var labMode = 'group';
 var activeLabCategoryId = null;
 var reviewCategoryFilter = null; // null = all
 var pinUnlocked = false;
-var roleHistoryActiveClassId = null;
-var roleHistoryReturnPhase = 'phase-setup';
 
 // PERSISTENCE
 function save() {
   try { localStorage.setItem('obs_cfg', JSON.stringify(cfg)); } catch(e){}
   try { localStorage.setItem('obs_labdata', JSON.stringify(labData)); } catch(e){}
-  try { localStorage.setItem('obs_history', JSON.stringify(obsHistory)); } catch(e){}
+  try { localStorage.setItem('obs_history', JSON.stringify(history)); } catch(e){}
 }
 function loadStorage() {
   try {
@@ -479,8 +453,7 @@ function loadStorage() {
     var h = localStorage.getItem('obs_history');
     if (c) cfg = JSON.parse(c);
     if (d) labData = JSON.parse(d);
-    if (h) obsHistory = JSON.parse(h);
-    Object.keys(labData).forEach(function(cid){ if(!labData[cid].studentRoles) labData[cid].studentRoles={}; });
+    if (h) history = JSON.parse(h);
     if (!cfg.categories) cfg.categories = [];
     return !!(c && cfg.classes && cfg.classes.length);
   } catch(e) { return false; }
@@ -503,10 +476,10 @@ function categoryColor(catId) {
   return CATEGORY_COLORS[idx >= 0 ? idx % CATEGORY_COLORS.length : 0];
 }
 function currentLabData() {
-  return labData[activeClassId] || {students:[],studentGroups:{},studentRoles:{},groups:[]};
+  return labData[activeClassId] || {students:[],studentGroups:{},groups:[]};
 }
 function sessionFor(classId) {
-  if (!labData[classId]) labData[classId] = {students:[],studentGroups:{},studentRoles:{},groups:[]};
+  if (!labData[classId]) labData[classId] = {students:[],studentGroups:{},groups:[]};
   if (!labData[classId].session) labData[classId].session = {labName:'',log:[],started:false,mode:'group'};
   return labData[classId].session;
 }
@@ -577,7 +550,7 @@ function goToCategorySetup() {
     var name = el ? el.value.trim() : '';
     if (!name) name = 'Class ' + (i+1);
     var id = uid();
-    if (!labData[id]) labData[id] = {students:[],studentGroups:{},studentRoles:{},groups:[]};
+    if (!labData[id]) labData[id] = {students:[],studentGroups:{},groups:[]};
     cfg.classes.push({id: id, name: name});
   }
   showPhase('phase-category-setup');
@@ -683,7 +656,7 @@ function livePreview(classId) {
 function saveRosters() {
   cfg.classes.forEach(function(c) {
     var ta = document.getElementById('roster-'+c.id);
-    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},studentRoles:{},groups:[]};
+    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},groups:[]};
     labData[c.id].students = ta && ta.value.trim() ? parseNames(ta.value.trim()) : [];
     labData[c.id].studentGroups = {};
   });
@@ -752,7 +725,6 @@ function startClearGroups() {
     for (var i = 0; i < 8; i++) d.groups.push('Group ' + (i+1));
   }
   d.studentGroups = {};
-  d.studentRoles = {};
   setupActiveGroup = null;
   renderSetupGroupBtns(); renderStudentAssignGrid();
 }
@@ -775,7 +747,6 @@ function randomizeGroups() {
   d.groups = groups;
   var shuffled = shuffle(students);
   d.studentGroups = {};
-  d.studentRoles = {};
   for (var j = 0; j < shuffled.length; j++) d.studentGroups[shuffled[j]] = groups[j % count];
   setupActiveGroup = null;
   document.getElementById('random-panel').style.display = 'none';
@@ -785,7 +756,7 @@ function randomizeGroups() {
 }
 function renderPrevGroupList() {
   var el = document.getElementById('prev-group-list'); if (!el) return;
-  var classHistory = obsHistory.filter(function(h) { return h.classId === activeClassId; });
+  var classHistory = history.filter(function(h) { return h.classId === activeClassId; });
   if (!classHistory.length) {
     el.innerHTML = '<p style="font-size:12px;color:#888780;">No previous lessons saved for this class yet.</p>';
     return;
@@ -816,19 +787,15 @@ function renderPrevGroupList() {
 }
 function loadPrevGroups(histId) {
   var h = null;
-  for (var i = 0; i < obsHistory.length; i++) { if (obsHistory[i].id === histId) { h = obsHistory[i]; break; } }
+  for (var i = 0; i < history.length; i++) { if (history[i].id === histId) { h = history[i]; break; } }
   if (!h) return;
   var d = currentLabData();
   var currentStudents = {};
   (d.students||[]).forEach(function(s) { currentStudents[s] = true; });
   d.groups = (h.groups||[]).slice();
   d.studentGroups = {};
-  d.studentRoles = {};
   Object.keys(h.studentGroups||{}).forEach(function(s) {
-    if (currentStudents[s]) {
-      d.studentGroups[s] = h.studentGroups[s];
-      if (h.studentRoles && h.studentRoles[s]) d.studentRoles[s] = h.studentRoles[s];
-    }
+    if (currentStudents[s]) d.studentGroups[s] = h.studentGroups[s];
   });
   setupActiveGroup = null;
   document.getElementById('prev-panel').style.display = 'none';
@@ -876,7 +843,7 @@ function renderStudentAssignGrid() {
       + '</button>';
   });
   document.getElementById('student-assign-grid').innerHTML = html;
-  renderSetupSummary(); updateUnassignedHint(); renderRoleAssignment();
+  renderSetupSummary(); updateUnassignedHint();
 }
 
 function renderIndividualAssignGrid() {
@@ -898,7 +865,6 @@ function renderIndividualAssignGrid() {
   document.getElementById('student-assign-grid').innerHTML = html;
   document.getElementById('setup-summary').innerHTML = '';
   document.getElementById('unassigned-hint').textContent = '';
-  renderRoleAssignment();
 }
 function toggleIndividualAbsent(name) {
   var d = currentLabData();
@@ -916,15 +882,12 @@ function toggleStudentAssign(name) {
     return;
   }
   var d = currentLabData();
-  if (d.studentGroups[name] === setupActiveGroup) {
-    delete d.studentGroups[name];
-    if (d.studentRoles) delete d.studentRoles[name];
-  }
+  if (d.studentGroups[name] === setupActiveGroup) delete d.studentGroups[name];
   else d.studentGroups[name] = setupActiveGroup;
   renderStudentAssignGrid();
 }
 function resetAssignments() {
-  var d = currentLabData(); d.studentGroups = {}; d.studentRoles = {};
+  var d = currentLabData(); d.studentGroups = {};
   setupActiveGroup = null; renderSetupGroupBtns(); renderStudentAssignGrid();
 }
 function renderSetupSummary() {
@@ -957,59 +920,6 @@ function updateUnassignedHint() {
     hint.textContent = 'All students assigned!'; hint.style.color = '#27500A';
     btn.textContent = 'Start Tracking';
   }
-}
-
-function renderRoleAssignment() {
-  var wrap = document.getElementById('role-assign-section'); if (!wrap) return;
-  var el = document.getElementById('role-assign-area'); if (!el) return;
-  if (setupMode !== 'group') { wrap.style.display = 'none'; return; }
-  var d = currentLabData();
-  if (!d.studentRoles) d.studentRoles = {};
-  var groups = (d.groups||[]);
-  var assignedGroups = groups.filter(function(g){ return (d.students||[]).some(function(s){ return d.studentGroups[s]===g; }); });
-  if (!assignedGroups.length) { wrap.style.display = 'none'; return; }
-  wrap.style.display = 'block';
-  var rows = [];
-  assignedGroups.forEach(function(g) {
-    (d.students||[]).filter(function(s){ return d.studentGroups[s]===g; }).forEach(function(s) {
-      rows.push({name: s, group: g});
-    });
-  });
-  var html = '';
-  var lastGroup = null;
-  rows.forEach(function(row, rowIdx) {
-    if (row.group !== lastGroup) {
-      if (lastGroup !== null) html += '</div>';
-      html += '<div style="margin-bottom:10px;"><p style="font-size:12px;font-weight:700;color:' + groupColor(row.group) + ';margin-bottom:6px;">' + row.group + '</p>';
-      lastGroup = row.group;
-    }
-    html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid #e8e6e0;">'
-      + '<span style="font-size:12px;font-weight:600;min-width:90px;">' + row.name + '</span>';
-    ROLES.forEach(function(role, ri) {
-      var isActive = d.studentRoles[row.name] === role;
-      var rc = ROLE_COLORS[ri];
-      html += '<button class="small-btn role-chip" data-row-idx="' + rowIdx + '" data-role-idx="' + ri + '"'
-        + ' style="font-size:10px;padding:4px 8px;' + (isActive ? 'background:'+rc+' !important;color:#ffffff !important;border-color:'+rc+' !important;' : '') + '">'
-        + role + '</button>';
-    });
-    html += '</div>';
-  });
-  if (lastGroup !== null) html += '</div>';
-  el.innerHTML = html;
-  el.querySelectorAll('.role-chip').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var rowIdx = parseInt(btn.getAttribute('data-row-idx'));
-      var roleIdx = parseInt(btn.getAttribute('data-role-idx'));
-      toggleStudentRole(rows[rowIdx].name, ROLES[roleIdx]);
-    });
-  });
-}
-function toggleStudentRole(name, role) {
-  var d = currentLabData();
-  if (!d.studentRoles) d.studentRoles = {};
-  if (d.studentRoles[name] === role) delete d.studentRoles[name];
-  else d.studentRoles[name] = role;
-  renderRoleAssignment();
 }
 
 function startLab() {
@@ -1418,17 +1328,16 @@ function saveToHistory() {
     mode: sess.mode || 'group',
     groups: JSON.parse(JSON.stringify(d.groups||[])),
     studentGroups: JSON.parse(JSON.stringify(d.studentGroups||{})),
-    studentRoles: JSON.parse(JSON.stringify(d.studentRoles||{})),
     log: JSON.parse(JSON.stringify(sess.log||[])),
     notes: notesEl ? notesEl.value : ''
   };
   var existIdx = -1;
-  for (var i = 0; i < obsHistory.length; i++) {
-    if (obsHistory[i].dateKey===entry.dateKey && obsHistory[i].classId===entry.classId && obsHistory[i].labName===entry.labName) {
+  for (var i = 0; i < history.length; i++) {
+    if (history[i].dateKey===entry.dateKey && history[i].classId===entry.classId && history[i].labName===entry.labName) {
       existIdx = i; break;
     }
   }
-  if (existIdx >= 0) obsHistory[existIdx] = entry; else obsHistory.unshift(entry);
+  if (existIdx >= 0) history[existIdx] = entry; else history.unshift(entry);
   save();
 }
 
@@ -1461,7 +1370,7 @@ function exportLog() {
   a.click();
 }
 function exportHistory() {
-  var classHistory = obsHistory.filter(function(h){ return h.classId===reviewActiveClassId; });
+  var classHistory = history.filter(function(h){ return h.classId===reviewActiveClassId; });
   var sess = sessionFor(reviewActiveClassId);
   if (!classHistory.length && (!sess.log||!sess.log.length)) { alert('No history to export for this class.'); return; }
   var cls = classById(reviewActiveClassId);
@@ -1523,7 +1432,7 @@ function saveRosterUpdates() {
     var nameEl = document.getElementById('cname-edit-'+c.id);
     if (nameEl && nameEl.value.trim()) c.name = nameEl.value.trim();
     var ta = document.getElementById('roster-'+c.id);
-    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},studentRoles:{},groups:[]};
+    if (!labData[c.id]) labData[c.id] = {students:[],studentGroups:{},groups:[]};
     if (ta && ta.value.trim()) labData[c.id].students = parseNames(ta.value.trim());
     labData[c.id].studentGroups = {};
   });
@@ -1532,68 +1441,12 @@ function saveRosterUpdates() {
 }
 function clearHistory() {
   if (!confirm('Clear all observation history? Cannot be undone.')) return;
-  obsHistory = []; save(); showPhase('phase-setup');
-}
-
-// ============= ROLE HISTORY (read-only, tracks roles across past lessons) =============
-function openRoleHistory(fromPhase) {
-  roleHistoryReturnPhase = fromPhase || 'phase-setup';
-  roleHistoryActiveClassId = activeClassId;
-  showPhase('phase-role-history');
-  renderRoleHistoryClassTabs();
-  renderRoleHistory();
-}
-function closeRoleHistory() { showPhase(roleHistoryReturnPhase); }
-function renderRoleHistoryClassTabs() {
-  var html = '';
-  cfg.classes.forEach(function(c, idx) {
-    var active = c.id === roleHistoryActiveClassId ? ' active' : '';
-    html += '<button class="class-tab' + active + '" data-rh-class-idx="' + idx + '">' + c.name + '</button>';
-  });
-  var el = document.getElementById('role-history-class-tabs');
-  el.innerHTML = html;
-  el.querySelectorAll('.class-tab').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var idx = parseInt(btn.getAttribute('data-rh-class-idx'));
-      roleHistoryActiveClassId = cfg.classes[idx].id;
-      renderRoleHistoryClassTabs(); renderRoleHistory();
-    });
-  });
-}
-function renderRoleHistory() {
-  var el = document.getElementById('role-history-area'); if (!el) return;
-  var d = labData[roleHistoryActiveClassId] || {students:[]};
-  var students = (d.students||[]).slice().sort(function(a,b){ return a.localeCompare(b); });
-  if (!students.length) { el.innerHTML = '<div class="section"><p style="font-size:13px;color:#5F5E5A;text-align:center;padding:8px 0;">No students in this class yet</p></div>'; return; }
-  var classHistory = obsHistory.filter(function(h){ return h.classId===roleHistoryActiveClassId; })
-    .sort(function(a,b){ return b.dateKey.localeCompare(a.dateKey); });
-  var html = '';
-  students.forEach(function(name) {
-    var entries = classHistory.filter(function(h){ return h.studentRoles && h.studentRoles[name]; })
-      .map(function(h){ return {labName:h.labName, date:h.date, role:h.studentRoles[name]}; });
-    var tally = {};
-    entries.forEach(function(e){ tally[e.role] = (tally[e.role]||0)+1; });
-    var tallyStr = Object.keys(tally).sort(function(a,b){ return tally[b]-tally[a]; })
-      .map(function(r){ return r+': '+tally[r]; }).join(' &middot; ');
-    html += '<div class="section">'
-      + '<div class="hist-head">' + name + '</div>'
-      + (tallyStr ? '<p style="font-size:11px;color:#5F5E5A;margin-bottom:6px;">' + tallyStr + '</p>' : '')
-      + (entries.length
-          ? entries.map(function(e) {
-              var ri = ROLES.indexOf(e.role);
-              var rc = ri>=0 ? ROLE_COLORS[ri] : '#888780';
-              return '<div class="hist-row"><span>' + e.labName + ' - ' + e.date + '</span>'
-                + '<span class="badge" style="background:'+rc+'22;color:'+rc+';">' + e.role + '</span></div>';
-            }).join('')
-          : '<p style="font-size:12px;color:#888780;text-align:center;padding:6px 0;">No roles assigned yet</p>')
-      + '</div>';
-  });
-  el.innerHTML = html;
+  history = []; save(); showPhase('phase-setup');
 }
 function resetEverything() {
   if (!confirm('Full reset - delete all classes, rosters, categories, and history?')) return;
   ['obs_cfg','obs_labdata','obs_history'].forEach(function(k) { localStorage.removeItem(k); });
-  cfg = {classes:[],categories:[],pin:''}; labData = {}; obsHistory = [];
+  cfg = {classes:[],categories:[],pin:''}; labData = {}; history = [];
   activeClassId = null; reviewActiveClassId = null; pendingClassCount = 0;
   document.querySelectorAll('.num-btn').forEach(function(b) { b.classList.remove('active'); });
   document.getElementById('class-name-section').style.display = 'none';
