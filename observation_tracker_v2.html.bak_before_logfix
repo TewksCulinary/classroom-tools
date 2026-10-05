@@ -827,7 +827,7 @@ function loadPrevGroups(histId) {
   Object.keys(h.studentGroups||{}).forEach(function(s) {
     if (currentStudents[s]) {
       d.studentGroups[s] = h.studentGroups[s];
-      if (h.studentRoles && h.studentRoles[s]) d.studentRoles[s] = rolesOf(h.studentRoles[s]).slice();
+      if (h.studentRoles && h.studentRoles[s]) d.studentRoles[s] = rolesOf(h.studentRoles[s]);
     }
   });
   setupActiveGroup = null;
@@ -1021,49 +1021,7 @@ function toggleStudentRole(name, role) {
   renderRoleAssignment();
 }
 
-function flushStaleLog() {
-  var sess = currentSession();
-  if (!sess.log || !sess.log.length) return;
-  var todayKey = new Date().toISOString().slice(0,10);
-  var staleEntries = sess.log.filter(function(e){ return new Date(e.ts||Date.now()).toISOString().slice(0,10) !== todayKey; });
-  if (!staleEntries.length) return;
-  var freshEntries = sess.log.filter(function(e){ return new Date(e.ts||Date.now()).toISOString().slice(0,10) === todayKey; });
-  var d = currentLabData();
-  var cls = classById(activeClassId);
-  var byDate = {};
-  staleEntries.forEach(function(e) {
-    var k = new Date(e.ts||Date.now()).toISOString().slice(0,10);
-    if (!byDate[k]) byDate[k] = [];
-    byDate[k].push(e);
-  });
-  Object.keys(byDate).forEach(function(dateKey) {
-    var entry = {
-      id: uid(),
-      date: new Date(byDate[dateKey][0].ts||Date.now()).toLocaleDateString([],{year:'numeric',month:'long',day:'numeric'}),
-      dateKey: dateKey,
-      labName: (sess.labName || 'Lesson') + ' (recovered)',
-      className: cls ? cls.name : '',
-      classId: activeClassId,
-      mode: sess.mode || 'group',
-      groups: JSON.parse(JSON.stringify(d.groups||[])),
-      studentGroups: JSON.parse(JSON.stringify(d.studentGroups||{})),
-      studentRoles: JSON.parse(JSON.stringify(d.studentRoles||{})),
-      log: JSON.parse(JSON.stringify(byDate[dateKey])),
-      notes: ''
-    };
-    var existIdx = -1;
-    for (var i = 0; i < obsHistory.length; i++) {
-      if (obsHistory[i].dateKey===entry.dateKey && obsHistory[i].classId===entry.classId && obsHistory[i].labName===entry.labName) {
-        existIdx = i; break;
-      }
-    }
-    if (existIdx >= 0) obsHistory[existIdx] = entry; else obsHistory.unshift(entry);
-  });
-  sess.log = freshEntries;
-  save();
-}
 function startLab() {
-  flushStaleLog();
   labName = document.getElementById('lab-name-input').value.trim() || 'Lesson ' + new Date().toLocaleDateString();
   var sess = sessionFor(activeClassId);
   sess.labName = labName;
@@ -1320,17 +1278,11 @@ function logAction(categoryId, label) {
   var d = currentLabData();
   var sess = currentSession();
   var time = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-  var names = [];
   selectedStudents.forEach(function(s) {
     var grp = labMode==='individual' ? s : d.studentGroups[s];
     sess.log.push({student:s, group:grp, categoryId:categoryId, label:label, time:time, ts: Date.now()});
-    names.push(s);
   });
   save();
-  var h = document.getElementById('stu-hint');
-  h.textContent = 'Logged "' + label + '" for ' + names.join(', ');
-  h.style.color = '#2A9E5F';
-  setTimeout(updateStuHint, 1500);
 }
 
 // ============= LOG REVIEW (GATED) =============
