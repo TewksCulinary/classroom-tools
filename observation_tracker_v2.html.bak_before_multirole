@@ -827,7 +827,7 @@ function loadPrevGroups(histId) {
   Object.keys(h.studentGroups||{}).forEach(function(s) {
     if (currentStudents[s]) {
       d.studentGroups[s] = h.studentGroups[s];
-      if (h.studentRoles && h.studentRoles[s]) d.studentRoles[s] = rolesOf(h.studentRoles[s]);
+      if (h.studentRoles && h.studentRoles[s]) d.studentRoles[s] = h.studentRoles[s];
     }
   });
   setupActiveGroup = null;
@@ -959,11 +959,6 @@ function updateUnassignedHint() {
   }
 }
 
-function rolesOf(val) {
-  if (!val) return [];
-  if (Array.isArray(val)) return val;
-  return [val];
-}
 function renderRoleAssignment() {
   var wrap = document.getElementById('role-assign-section'); if (!wrap) return;
   var el = document.getElementById('role-assign-area'); if (!el) return;
@@ -991,7 +986,7 @@ function renderRoleAssignment() {
     html += '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;padding-bottom:8px;border-bottom:0.5px solid #e8e6e0;">'
       + '<span style="font-size:12px;font-weight:600;min-width:90px;">' + row.name + '</span>';
     ROLES.forEach(function(role, ri) {
-      var isActive = rolesOf(d.studentRoles[row.name]).indexOf(role) > -1;
+      var isActive = d.studentRoles[row.name] === role;
       var rc = ROLE_COLORS[ri];
       html += '<button class="small-btn role-chip" data-row-idx="' + rowIdx + '" data-role-idx="' + ri + '"'
         + ' style="font-size:10px;padding:4px 8px;' + (isActive ? 'background:'+rc+' !important;color:#ffffff !important;border-color:'+rc+' !important;' : '') + '">'
@@ -1012,12 +1007,8 @@ function renderRoleAssignment() {
 function toggleStudentRole(name, role) {
   var d = currentLabData();
   if (!d.studentRoles) d.studentRoles = {};
-  var current = rolesOf(d.studentRoles[name]);
-  var idx = current.indexOf(role);
-  if (idx > -1) current.splice(idx, 1);
-  else current.push(role);
-  if (current.length) d.studentRoles[name] = current;
-  else delete d.studentRoles[name];
+  if (d.studentRoles[name] === role) delete d.studentRoles[name];
+  else d.studentRoles[name] = role;
   renderRoleAssignment();
 }
 
@@ -1578,10 +1569,10 @@ function renderRoleHistory() {
     .sort(function(a,b){ return b.dateKey.localeCompare(a.dateKey); });
   var html = '';
   students.forEach(function(name) {
-    var entries = classHistory.filter(function(h){ return h.studentRoles && rolesOf(h.studentRoles[name]).length; })
-      .map(function(h){ return {labName:h.labName, date:h.date, roles: rolesOf(h.studentRoles[name])}; });
+    var entries = classHistory.filter(function(h){ return h.studentRoles && h.studentRoles[name]; })
+      .map(function(h){ return {labName:h.labName, date:h.date, role:h.studentRoles[name]}; });
     var tally = {};
-    entries.forEach(function(e){ e.roles.forEach(function(r){ tally[r] = (tally[r]||0)+1; }); });
+    entries.forEach(function(e){ tally[e.role] = (tally[e.role]||0)+1; });
     var tallyStr = Object.keys(tally).sort(function(a,b){ return tally[b]-tally[a]; })
       .map(function(r){ return r+': '+tally[r]; }).join(' &middot; ');
     html += '<div class="section">'
@@ -1589,13 +1580,10 @@ function renderRoleHistory() {
       + (tallyStr ? '<p style="font-size:11px;color:#5F5E5A;margin-bottom:6px;">' + tallyStr + '</p>' : '')
       + (entries.length
           ? entries.map(function(e) {
-              var badges = e.roles.map(function(role) {
-                var ri = ROLES.indexOf(role);
-                var rc = ri>=0 ? ROLE_COLORS[ri] : '#888780';
-                return '<span class="badge" style="background:'+rc+'22;color:'+rc+';margin-left:4px;">' + role + '</span>';
-              }).join('');
+              var ri = ROLES.indexOf(e.role);
+              var rc = ri>=0 ? ROLE_COLORS[ri] : '#888780';
               return '<div class="hist-row"><span>' + e.labName + ' - ' + e.date + '</span>'
-                + '<span>' + badges + '</span></div>';
+                + '<span class="badge" style="background:'+rc+'22;color:'+rc+';">' + e.role + '</span></div>';
             }).join('')
           : '<p style="font-size:12px;color:#888780;text-align:center;padding:6px 0;">No roles assigned yet</p>')
       + '</div>';
