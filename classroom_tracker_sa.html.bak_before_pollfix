@@ -674,7 +674,7 @@ async function pollKioskEvents() {
 }
 
 async function pollKioskEventHours() {
-  if (!SHEET_ID || kioskMode !== 'event') return;
+  if (!SHEET_ID || !(cfg.events||[]).length) return;
   try {
     var res = await sheetsGet(SHEET_EVENTS+'!A2:G5000');
     if (!res.values||!res.values.length) return;
@@ -709,9 +709,10 @@ function startSyncInterval() {
   if(syncInterval) clearInterval(syncInterval);
   syncInterval = setInterval(function(){
     syncToSheets();
+    pollKioskEvents();
+    pollKioskEventHours();
   }, 15000);
-  // Kiosk-facing reads run on their own faster cadence; the 15s tick above
-  // only needs to push this device's local changes out to the sheet.
+  // Also poll kiosk more frequently
   setInterval(pollKioskEvents, 5000);
   setInterval(pollKioskEventHours, 5000);
 }
