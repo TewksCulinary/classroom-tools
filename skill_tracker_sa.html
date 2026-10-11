@@ -29,8 +29,12 @@
     .first-time-setup { background: #EAF3F9; border: 1.5px solid #A8C0EE; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
 
     /* tabs */
-    .tab-row { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; -ms-overflow-style: none; scrollbar-width: none; }
+    .tab-row-wrap { display: flex; align-items: center; gap: 4px; }
+    .tab-row { display: flex; gap: 6px; overflow-x: auto; padding: 2px 2px 8px; -ms-overflow-style: none; scrollbar-width: none; flex: 1; min-width: 0; }
     .tab-row::-webkit-scrollbar { display: none; }
+    .tab-scroll-btn { flex-shrink: 0; width: 26px; height: 26px; border-radius: 50%; border: 1.5px solid #B4B2A9; background: #ffffff; color: #5F5E5A; font-size: 13px; font-weight: 700; cursor: pointer; display: none; align-items: center; justify-content: center; padding: 0; }
+    .tab-scroll-btn:hover { background: #F1EFE8; }
+    .tab-scroll-btn.visible { display: flex; }
     .period-tab { padding: 9px 14px; border: 2px solid #888780; border-radius: 8px; background: #ffffff; cursor: pointer; font-size: 13px; font-weight: 600; color: #2C2C2A; white-space: nowrap; flex-shrink: 0; }
     .period-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
     .skill-tab { padding: 8px 14px; border: 2px solid #3E8B18; border-radius: 20px; background: #ffffff; cursor: pointer; font-size: 13px; font-weight: 600; color: #2E6B10; white-space: nowrap; flex-shrink: 0; }
@@ -65,6 +69,17 @@
     .score-3 { background: #E8F0FB; color: #185FA5; border-color: #A8C0EE; }
     .score-2 { background: #FFF8E0; color: #7A5E00; border-color: #E3C468; }
     .score-1 { background: #FCEBEB; color: #C0392B; border-color: #E9A9A0; }
+    .score-0 { background: #F1EFE8; color: #5F5E5A; border-color: #B4B2A9; }
+
+    /* knife-skills rubric buttons */
+    .level-btn { border: 2px solid #B4B2A9; border-radius: 10px; padding: 11px 14px; font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; text-align: left; background: #ffffff; color: #2C2C2A; }
+    .level-btn:hover { background: #F1EFE8; }
+    .level-btn.active { border-width: 3px; font-weight: 700; }
+    .level-btn.lvl-0.active { background: #F1EFE8; border-color: #5F5E5A; color: #3A3934; }
+    .level-btn.lvl-1.active { background: #FCEBEB; border-color: #C0392B; color: #791F1F; }
+    .level-btn.lvl-2.active { background: #FFF8E0; border-color: #C09A20; color: #7A5E00; }
+    .level-btn.lvl-3.active { background: #E8F0FB; border-color: #185FA5; color: #185FA5; }
+    .level-btn.lvl-4.active { background: #EAF3DE; border-color: #3E8B18; color: #2E6B10; }
     .note-flag { position: absolute; top: 4px; right: 6px; font-size: 10px; }
 
     .empty-state { text-align: center; padding: 30px 10px; color: #5F5E5A; font-size: 13px; }
@@ -151,17 +166,32 @@
 
       <div id="sync-bar-wrap"></div>
 
-      <div class="tab-row" id="period-tabs"></div>
-      <div class="tab-row" id="skill-tabs"></div>
+      <div class="tab-row-wrap">
+        <button class="tab-scroll-btn" id="period-tabs-left" onclick="scrollTabRow('period-tabs',-1)">&#8249;</button>
+        <div class="tab-row" id="period-tabs"></div>
+        <button class="tab-scroll-btn" id="period-tabs-right" onclick="scrollTabRow('period-tabs',1)">&#8250;</button>
+      </div>
+      <div class="tab-row-wrap">
+        <button class="tab-scroll-btn" id="skill-tabs-left" onclick="scrollTabRow('skill-tabs',-1)">&#8249;</button>
+        <div class="tab-row" id="skill-tabs"></div>
+        <button class="tab-scroll-btn" id="skill-tabs-right" onclick="scrollTabRow('skill-tabs',1)">&#8250;</button>
+      </div>
 
-      <div class="legend">
+      <div class="legend" id="legend-standard">
         <span><span class="legend-dot" style="background:#3E8B18;"></span>4 &middot; Independent</span>
         <span><span class="legend-dot" style="background:#185FA5;"></span>3 &middot; Proficient</span>
         <span><span class="legend-dot" style="background:#C09A20;"></span>2 &middot; Emerging</span>
         <span><span class="legend-dot" style="background:#C0392B;"></span>1 &middot; Beginning</span>
       </div>
+      <div class="legend" id="legend-knife" style="display:none;">
+        <span><span class="legend-dot" style="background:#3E8B18;"></span>Exemplary</span>
+        <span><span class="legend-dot" style="background:#185FA5;"></span>Proficient</span>
+        <span><span class="legend-dot" style="background:#C09A20;"></span>Developing</span>
+        <span><span class="legend-dot" style="background:#C0392B;"></span>Guided Practice</span>
+        <span><span class="legend-dot" style="background:#5F5E5A;"></span>No Effort</span>
+      </div>
 
-      <div class="session-bar">
+      <div class="session-bar" id="session-bar">
         <div class="session-info" id="session-info">&nbsp;</div>
         <button class="primary-btn" style="width:auto;padding:10px 16px;" onclick="startNewSession()">Start New Lab Session</button>
       </div>
@@ -173,7 +203,7 @@
 
     <div class="section" id="indep-section" style="display:none;">
       <div class="indep-toggle" onclick="toggleIndepList()">
-        <b>&#10003; Independent on this skill</b>
+        <b id="indep-label">&#10003; Independent on this skill</b>
         <span class="indep-count" id="indep-count">0</span>
       </div>
       <div class="indep-body" id="indep-body"></div>
@@ -185,12 +215,22 @@
   <div class="panel" id="action-panel">
     <button class="panel-close" onclick="closePanel()">&times;</button>
     <p class="panel-name" id="ap-name">Student</p>
-    <p class="panel-sub"><span id="ap-skill"></span> &middot; this session: <b id="ap-tally">0</b> prompt(s) <span class="score-pill" id="ap-score-pill"></span></p>
+    <p class="panel-sub" id="ap-standard-sub"><span id="ap-skill"></span> &middot; this session: <b id="ap-tally">0</b> prompt(s) <span class="score-pill" id="ap-score-pill"></span></p>
 
-    <button class="action-btn ab-prompt" onclick="tapPrompt()">+1 Prompt</button>
-    <button class="action-btn ab-indep" onclick="tapMarkIndependent()">Mark Independent (Score 4)</button>
-    <button class="action-btn ab-help" onclick="tapNeededHelp()">Needed Hands-On Help (Score 1)</button>
-    <button class="action-btn ab-undo" id="ap-undo-btn" onclick="tapUndoIndependent()" style="display:none;">Move back to active list</button>
+    <div id="ap-standard-actions">
+      <button class="action-btn ab-prompt" onclick="tapPrompt()">+1 Prompt</button>
+      <button class="action-btn ab-indep" onclick="tapMarkIndependent()">Mark Independent (Score 4)</button>
+      <button class="action-btn ab-help" onclick="tapNeededHelp()">Needed Hands-On Help (Score 1)</button>
+      <button class="action-btn ab-undo" id="ap-undo-btn" onclick="tapUndoIndependent()" style="display:none;">Move back to active list</button>
+    </div>
+
+    <div id="ap-knife-rubric" style="display:none;">
+      <p class="panel-sub" id="ap-knife-overall" style="margin-bottom:12px;"></p>
+      <p style="font-size:12px;font-weight:700;color:#5F5E5A;margin:0 0 6px;">Guiding-hand claw (safety)</p>
+      <div id="ap-claw-buttons" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;"></div>
+      <p style="font-size:12px;font-weight:700;color:#5F5E5A;margin:0 0 6px;">Knife grip (technique)</p>
+      <div id="ap-grip-buttons" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
 
     <textarea class="note-input" id="ap-note-input" placeholder="Add a note (optional)..."></textarea>
     <button class="note-save-btn" onclick="tapSaveNote()">Save Note</button>
@@ -324,6 +364,32 @@ function changeSheet() {
   showPhase('phase-sheet-setup');
 }
 
+function scrollTabRow(id, dir) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.scrollBy({ left: dir * 160, behavior: 'smooth' });
+}
+function updateTabScrollArrows(id) {
+  var el = document.getElementById(id);
+  var left = document.getElementById(id+'-left');
+  var right = document.getElementById(id+'-right');
+  if (!el || !left || !right) return;
+  var overflowing = el.scrollWidth > el.clientWidth + 2;
+  left.classList.toggle('visible', overflowing && el.scrollLeft > 2);
+  right.classList.toggle('visible', overflowing && el.scrollLeft < el.scrollWidth - el.clientWidth - 2);
+}
+function enableHWheelScroll(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('wheel', function(e) {
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // already a horizontal gesture, let it through
+    el.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+  el.addEventListener('scroll', function(){ updateTabScrollArrows(id); });
+  window.addEventListener('resize', function(){ updateTabScrollArrows(id); });
+}
+
 function showPhase(id) {
   document.querySelectorAll('.phase').forEach(function(p){ p.classList.remove('visible'); });
   document.getElementById(id).classList.add('visible');
@@ -336,7 +402,30 @@ var classes = [];              // [{id,name,students:[names]}]
 var activeClassId = null;
 var skills = ['Knife Skills', 'Sanitation', 'Equipment Use'];
 var activeSkill = null;
-var skillStatus = {};          // skillStatus[classId][skill][student] = {score,tally,sessionsCount,lastSessionDate,firstMasteryDate,helpFlag}
+var skillStatus = {};          // skillStatus[classId][skill][student] = {score,tally,sessionsCount,lastSessionDate,firstMasteryDate,helpFlag,claw,grip}
+
+// ------------------------------------------------------------
+// Knife Skills rubric (Claw & Grip): a separately-rated skill with its
+// own 5-level scale and a two-component overall-score rule, replacing
+// the tally/prompt-counting flow used by every other skill.
+// ------------------------------------------------------------
+var KNIFE_SKILL_NAME = 'Knife Skills';
+var KNIFE_LEVELS = ['No Effort', 'Guided Practice', 'Developing', 'Proficient', 'Exemplary'];
+function isKnifeSkill(sk) { return sk === KNIFE_SKILL_NAME; }
+function knifeLevelClass(lvl) { return (lvl===null||lvl===undefined) ? 'score-none' : 'score-'+lvl; }
+// Rule, per the rubric: claw below Proficient(3) sets the overall rating to
+// the claw rating outright, whatever grip is. At or above Proficient, grip
+// can still cap the overall down to its own level (so "Proficient overall"
+// needs grip >= Proficient too, and "Exemplary overall" needs both
+// Exemplary) -- that upper-range behavior isn't spelled out for every
+// combination in the rubric, so this fills the one unstated gap (claw >=
+// Proficient but grip below it) the same way: the lower of the two governs.
+function knifeOverall(claw, grip) {
+  if (claw === null || claw === undefined) return null;
+  if (claw < 3) return claw;
+  if (grip === null || grip === undefined) return null;
+  return Math.min(claw, grip);
+}
 var logQueue = [];             // events waiting to be pushed to Sheets
 var actionStudent = null;
 var indepExpanded = false;
@@ -349,7 +438,7 @@ function ensureStatusBucket(classId, skill) {
 }
 function ensureStudentEntry(classId, skill, name) {
   var bucket = ensureStatusBucket(classId, skill);
-  if (!bucket[name]) bucket[name] = {score:null, tally:0, sessionsCount:0, lastSessionDate:'', firstMasteryDate:'', helpFlag:false};
+  if (!bucket[name]) bucket[name] = {score:null, tally:0, sessionsCount:0, lastSessionDate:'', firstMasteryDate:'', helpFlag:false, claw:null, grip:null};
   return bucket[name];
 }
 
@@ -440,7 +529,14 @@ async function syncNow() {
         (c.students||[]).forEach(function(name){
           var st = (skillStatus[c.id] && skillStatus[c.id][sk] && skillStatus[c.id][sk][name]) || null;
           if (!st) return;
-          rows2.push([c.id, c.name, sk, name, st.score||'', st.tally||0, st.sessionsCount||0, st.lastSessionDate||'', st.firstMasteryDate||'']);
+          var scoreOut;
+          if (isKnifeSkill(sk)) {
+            var ov = knifeOverall(st.claw, st.grip);
+            scoreOut = (ov===null||ov===undefined) ? '' : ov;
+          } else {
+            scoreOut = st.score||'';
+          }
+          rows2.push([c.id, c.name, sk, name, scoreOut, st.tally||0, st.sessionsCount||0, st.lastSessionDate||'', st.firstMasteryDate||'']);
         });
       });
     });
@@ -468,6 +564,7 @@ function renderPeriodTabs() {
   }).join('');
   var cls = activeClass();
   document.getElementById('class-name-label').textContent = cls ? cls.name+' \u00b7 '+cls.students.length+' students' : 'No classes found in your Sheet yet.';
+  updateTabScrollArrows('period-tabs');
 }
 function switchClass(id) { activeClassId = id; indepExpanded=false; saveLocal(); renderAll(); }
 
@@ -476,6 +573,7 @@ function renderSkillTabs() {
   el.innerHTML = skills.map(function(sk){
     return '<button class="skill-tab '+(sk===activeSkill?'active':'')+'" onclick="switchSkill(\''+sk.replace(/'/g,"\\'")+'\')">'+sk+'</button>';
   }).join('') + '<button class="skill-tab-add" onclick="openSkillManager()">+ Skill</button>';
+  updateTabScrollArrows('skill-tabs');
 }
 function switchSkill(sk) { activeSkill = sk; indepExpanded=false; saveLocal(); renderAll(); }
 
@@ -492,14 +590,29 @@ function renderGrid() {
     return;
   }
   var bucket = ensureStatusBucket(cls.id, activeSkill);
+  var knife = isKnifeSkill(activeSkill);
+  var masteredLabel = knife ? 'Exemplary' : 'Independent';
   var active = [], indep = [];
   cls.students.forEach(function(name){
     var st = bucket[name];
-    if (st && st.score === 4) indep.push(name); else active.push(name);
+    var mastered = knife ? (st && knifeOverall(st.claw, st.grip) === 4) : (st && st.score === 4);
+    if (mastered) indep.push(name); else active.push(name);
   });
 
   if (!active.length) {
-    wrap.innerHTML = '<div class="empty-state">Everyone here has reached Independent on '+activeSkill+'. &#127881;</div>';
+    wrap.innerHTML = '<div class="empty-state">Everyone here has reached '+masteredLabel+' on '+activeSkill+'. &#127881;</div>';
+  } else if (knife) {
+    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+      var st = bucket[name] || {claw:null, grip:null};
+      var overall = knifeOverall(st.claw, st.grip);
+      var cardClass = knifeLevelClass(overall);
+      var subTxt = (st.claw===null && st.grip===null) ? 'Not yet assessed'
+        : 'Claw: '+(st.claw===null?'-':KNIFE_LEVELS[st.claw])+' &middot; Grip: '+(st.grip===null?'-':KNIFE_LEVELS[st.grip]);
+      return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
+        + '<div class="stu-name">'+name+'</div>'
+        + '<div class="stu-tally">'+subTxt+'</div>'
+        + '</div>';
+    }).join('') + '</div>';
   } else {
     wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
       var st = bucket[name] || {tally:0, score:null};
@@ -516,6 +629,7 @@ function renderGrid() {
   if (indep.length) {
     indepSection.style.display = 'block';
     document.getElementById('indep-count').textContent = indep.length;
+    document.getElementById('indep-label').innerHTML = '&#10003; '+masteredLabel+' on this skill';
     document.getElementById('indep-body').innerHTML = indep.map(function(name){
       return '<span class="indep-chip" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">&#10003; '+name+'</span>';
     }).join('');
@@ -534,9 +648,20 @@ function renderSessionInfo() {
   el.innerHTML = 'Last session: <b>' + (lastDate || 'none yet') + '</b>';
 }
 
+function updateSkillChrome() {
+  var knife = isKnifeSkill(activeSkill);
+  var std = document.getElementById('legend-standard');
+  var kn = document.getElementById('legend-knife');
+  var sessionBar = document.getElementById('session-bar');
+  if (std) std.style.display = knife ? 'none' : 'flex';
+  if (kn) kn.style.display = knife ? 'flex' : 'none';
+  if (sessionBar) sessionBar.style.display = knife ? 'none' : 'flex';
+}
+
 function renderAll() {
   renderPeriodTabs();
   renderSkillTabs();
+  updateSkillChrome();
   renderSessionInfo();
   renderGrid();
 }
@@ -569,6 +694,7 @@ function finalizeOpenSession(cls) {
 
 function startNewSession() {
   var cls = activeClass(); if (!cls || !activeSkill) return;
+  if (isKnifeSkill(activeSkill)) { alert('Knife Skills doesn\'t use lab sessions \u2014 just tap a student and set their claw and grip level directly.'); return; }
   if (!confirm('Start a new lab session for '+activeSkill+' \u2014 '+cls.name+'?\nThis finalizes today\u2019s scores and resets prompt tallies for students still being monitored.')) return;
   finalizeOpenSession(cls);
   var today = new Date().toISOString().slice(0,10);
@@ -586,27 +712,74 @@ function startNewSession() {
 // ============================================================
 // ACTION PANEL
 // ============================================================
+function renderKnifeButtons(st) {
+  var overall = knifeOverall(st.claw, st.grip);
+  var overallEl = document.getElementById('ap-knife-overall');
+  overallEl.innerHTML = (overall===null)
+    ? 'Overall: <span class="score-pill score-none">Not yet assessed</span>'
+    : 'Overall: <span class="score-pill '+knifeLevelClass(overall)+'">'+KNIFE_LEVELS[overall]+'</span>';
+  document.getElementById('ap-claw-buttons').innerHTML = KNIFE_LEVELS.map(function(label, i){
+    return '<button class="level-btn lvl-'+i+(st.claw===i?' active':'')+'" onclick="setClawLevel('+i+')">'+label+'</button>';
+  }).reverse().join('');
+  document.getElementById('ap-grip-buttons').innerHTML = KNIFE_LEVELS.map(function(label, i){
+    return '<button class="level-btn lvl-'+i+(st.grip===i?' active':'')+'" onclick="setGripLevel('+i+')">'+label+'</button>';
+  }).reverse().join('');
+}
+
 function openPanel(name) {
   actionStudent = name;
   var cls = activeClass();
   var st = ensureStudentEntry(cls.id, activeSkill, name);
   document.getElementById('ap-name').textContent = name;
   document.getElementById('ap-skill').textContent = activeSkill;
-  document.getElementById('ap-tally').textContent = st.tally || 0;
-  var pill = document.getElementById('ap-score-pill');
-  var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag && st.score !== 4;
-  if (notYetInSession) {
-    pill.textContent = 'Not yet assessed';
-    pill.className = 'score-pill score-none';
+  var knife = isKnifeSkill(activeSkill);
+  document.getElementById('ap-standard-sub').style.display = knife ? 'none' : 'block';
+  document.getElementById('ap-standard-actions').style.display = knife ? 'none' : 'block';
+  document.getElementById('ap-knife-rubric').style.display = knife ? 'block' : 'none';
+  if (knife) {
+    renderKnifeButtons(st);
   } else {
-    var displayScore = st.score || (st.helpFlag ? 1 : (st.tally===0?4:st.tally<=2?3:2));
-    pill.textContent = scoreLabel(displayScore) + ' (' + displayScore + ')';
-    pill.className = 'score-pill ' + scoreClass(displayScore);
+    document.getElementById('ap-tally').textContent = st.tally || 0;
+    var pill = document.getElementById('ap-score-pill');
+    var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag && st.score !== 4;
+    if (notYetInSession) {
+      pill.textContent = 'Not yet assessed';
+      pill.className = 'score-pill score-none';
+    } else {
+      var displayScore = st.score || (st.helpFlag ? 1 : (st.tally===0?4:st.tally<=2?3:2));
+      pill.textContent = scoreLabel(displayScore) + ' (' + displayScore + ')';
+      pill.className = 'score-pill ' + scoreClass(displayScore);
+    }
+    document.getElementById('ap-undo-btn').style.display = st.score===4 ? 'block' : 'none';
   }
   document.getElementById('ap-note-input').value = '';
-  document.getElementById('ap-undo-btn').style.display = st.score===4 ? 'block' : 'none';
   document.getElementById('action-overlay').classList.add('visible');
   document.getElementById('action-panel').classList.add('visible');
+}
+
+function setClawLevel(i) {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.claw = i;
+  st.lastSessionDate = new Date().toISOString().slice(0,10);
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'claw_set', 0, i, '');
+  renderKnifeButtons(st);
+  renderGrid();
+  syncNow();
+}
+function setGripLevel(i) {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.grip = i;
+  st.lastSessionDate = new Date().toISOString().slice(0,10);
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'grip_set', 0, i, '');
+  renderKnifeButtons(st);
+  renderGrid();
+  syncNow();
 }
 function closePanel() {
   document.getElementById('action-overlay').classList.remove('visible');
@@ -737,6 +910,8 @@ function addSkill() {
 // ============================================================
 function init() {
   document.getElementById('sa-email-display').textContent = SA_EMAIL;
+  enableHWheelScroll('period-tabs');
+  enableHWheelScroll('skill-tabs');
   loadLocal();
   var saved = localStorage.getItem('skl_sheet_id') || localStorage.getItem('ct_sheet_id');
   if (saved) {

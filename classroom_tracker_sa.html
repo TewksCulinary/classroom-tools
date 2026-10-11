@@ -539,7 +539,7 @@ async function saveSheetId() {
   try {
     await getAccessToken();
     // Try writing headers
-    await sheetsUpdate(SHEET_PASSES+'!A1:J1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown']]);
+    await sheetsUpdate(SHEET_PASSES+'!A1:L1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal']]);
     localStorage.setItem('ct_sheet_id', id);
     SHEET_ID = id;
     status.textContent = 'Connected!';
@@ -579,6 +579,16 @@ function setSyncStatus(type, msg) {
   wrap.innerHTML = '<div class="sync-bar '+cls+'">'+icon+msg+'</div>';
 }
 
+function fmtLocalPT(ms) {
+  if (!ms) return '';
+  try {
+    return new Intl.DateTimeFormat('sv-SE', {
+      timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+    }).format(new Date(ms));
+  } catch (e) { return ''; }
+}
+
 async function syncToSheets() {
   if (!SHEET_ID) return;
   setSyncStatus('syncing','Syncing...');
@@ -588,8 +598,9 @@ async function syncToSheets() {
     Object.keys(cd).forEach(function(dateKey) {
       Object.keys(cd[dateKey]).forEach(function(name) {
         (cd[dateKey][name]||[]).forEach(function(t) {
-          rows.push([new Date().toISOString(), t.eventId||'', cls.id, cls.name, name,
-            t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'']);
+          rows.push([t.out ? new Date(t.out).toISOString() : '', t.eventId||'', cls.id, cls.name, name,
+            t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'',
+            fmtLocalPT(t.out), fmtLocalPT(t.back)]);
         });
       });
     });
@@ -612,7 +623,8 @@ async function syncToSheets() {
 
   try {
     await Promise.all([
-      sheetsUpdate(SHEET_PASSES+'!A2:J'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
+      sheetsUpdate(SHEET_PASSES+'!A1:L1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal']]),
+      sheetsUpdate(SHEET_PASSES+'!A2:L'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
       sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData)
     ]);
     lastSync = Date.now();
