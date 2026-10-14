@@ -19,8 +19,8 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
   body { font-family: Lexend, system-ui, sans-serif; background: var(--ground); color: var(--ink); }
-  button, input { font-family: inherit; }
-  button:focus-visible, input:focus-visible { outline: 4px solid var(--go); outline-offset: 3px; }
+  button, input, select { font-family: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 4px solid var(--go); outline-offset: 3px; }
 
   #app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(230px, 23vw, 310px) clamp(250px, 24vw, 330px); height: 100vh; }
   #app > * { overflow-y: auto; }
@@ -29,6 +29,7 @@
   #queue { background: #fff; border-left: 4px solid var(--ink); padding: 28px 20px; display: flex; flex-direction: column; gap: 14px; }
 
   h1 { margin: 0; font-size: 42px; line-height: 1.1; font-weight: 700; }
+  h2 { margin: 0; font-size: 26px; font-weight: 700; }
   .side-title { font-size: 30px; font-weight: 700; }
   .muted { color: var(--muted); }
 
@@ -45,6 +46,7 @@
   .tile { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 80px; padding: 12px 18px; border-radius: 18px; font-size: 23px; font-weight: 600; line-height: 1.15; text-align: left; cursor: pointer; color: var(--ink); border: 4px solid var(--line); background: #fff; }
   .tile.on { border-color: var(--ink); background: var(--pick); }
   .tile.big { min-height: 88px; font-size: 28px; }
+  .tile small { display: block; margin-top: 4px; font-size: 0.72em; font-weight: 400; color: var(--muted); }
   .tile svg { flex: none; }
 
   .chip { font-size: 22px; font-weight: 600; padding: 6px 16px; border-radius: 999px; background: var(--pick); border: 3px solid var(--ink); }
@@ -62,6 +64,7 @@
   .field-label { font-size: 24px; font-weight: 600; }
   .text-input { height: 76px; width: 100%; padding: 0 24px; font-size: 34px; font-weight: 600; border-radius: 18px; border: 4px solid var(--ink); background: #fff; color: var(--ink); }
   .text-input.notes { font-size: 30px; }
+  .text-input.mid { height: 64px; font-size: 24px; padding: 0 16px; }
 
   .tcard { background: #fff; border: 3px solid var(--ink); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
   .t-title { font-size: 24px; font-weight: 700; line-height: 1.15; }
@@ -80,6 +83,20 @@
 
   .labels { display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start; flex: 1; min-height: 0; overflow-y: auto; }
   .label { width: 320px; padding: 18px 20px; border: 3px dashed var(--ink); border-radius: 14px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
+
+  /* punch cards */
+  .teacher-list { max-height: 300px; overflow-y: auto; padding: 4px; }
+  .notice { border: 4px solid var(--ink); border-radius: 16px; padding: 14px 18px; background: var(--pick); font-size: 22px; font-weight: 600; line-height: 1.35; }
+  .info { font-size: 22px; line-height: 1.4; padding: 12px 16px; border-radius: 14px; background: #fff; border: 3px solid var(--line); }
+  .panel { background: #fff; border: 3px solid var(--ink); border-radius: 18px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
+  .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .form-row > div { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 150px; }
+  .form-row label { font-size: 18px; font-weight: 600; }
+  .trow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 2px solid var(--line); font-size: 22px; }
+  .trow:last-child { border-bottom: none; }
+  .trow .bal { font-weight: 700; min-width: 70px; text-align: right; }
+  .logrow { font-size: 18px; display: flex; gap: 10px; padding: 4px 0; }
+  .logrow .when { color: var(--muted); min-width: 120px; }
 
   /* smaller screens: keep the ticket and queue on the side, just make everything a bit tighter */
   @media (max-width: 1200px) {
@@ -141,6 +158,7 @@
   var FLAVORS = ['Caramel', 'Hazelnut', 'Vanilla', 'Raspberry', 'Strawberry', 'Sour Gummy Worm'];
   var SF_FLAVORS = ['Raspberry', 'Strawberry', 'Vanilla'];
   var QUICK_NOTES = ['Splash of milk', 'Extra hot', 'Not too hot', 'Extra sauce'];
+  var PUNCHES_PER_CARD = 5; // default number of punches on a card
 
   var STEPS = {
     sauce:  { crumb: 'Sauce',  title: 'Pick a sauce',  hint: 'Choose one.', cols: 2, list: SAUCES },
@@ -151,16 +169,23 @@
   };
 
   // ---------- state ----------
-  var STORE_KEY = 'coffeeCartOrders.v1';
+  // Orders/queue live in sessionStorage (cleared when the tab closes).
+  // Teachers, punch balances and the PIN live in localStorage (kept on this computer/browser).
+  var ORDERS_KEY = 'coffeeCartOrders.v1';
+  var PUNCH_KEY = 'coffeeCartPunch.v1';
   var state = {
     screen: 'drink', drink: null, step: 0, sel: {}, flavors: [],
     cart: [], name: '', method: null, room: '',
+    pay: null, teacherId: null, teacherQuery: '', result: null, focusName: false,
+    prevScreen: 'drink', adminUnlocked: false, changingPin: false, adminMsg: '',
     orders: [], nextNum: 1, nextId: 1
   };
+  var punch = { pinHash: null, teachers: [], cards: [], log: [], lastBackup: null, nextTid: 1 };
+  var punchStorageOk = true;
 
   function loadSession() {
     try {
-      var raw = sessionStorage.getItem(STORE_KEY);
+      var raw = sessionStorage.getItem(ORDERS_KEY);
       if (!raw) return;
       var saved = JSON.parse(raw);
       if (saved && Array.isArray(saved.orders)) {
@@ -172,8 +197,29 @@
   }
   function saveSession() {
     try {
-      sessionStorage.setItem(STORE_KEY, JSON.stringify({ orders: state.orders, nextNum: state.nextNum, nextId: state.nextId }));
+      sessionStorage.setItem(ORDERS_KEY, JSON.stringify({ orders: state.orders, nextNum: state.nextNum, nextId: state.nextId }));
     } catch (e) { /* ignore */ }
+  }
+  function loadPunch() {
+    try {
+      localStorage.setItem('coffeeCartTest', '1'); localStorage.removeItem('coffeeCartTest');
+      var raw = localStorage.getItem(PUNCH_KEY);
+      if (raw) {
+        var p = JSON.parse(raw);
+        if (p && Array.isArray(p.teachers)) {
+          punch.pinHash = p.pinHash || null;
+          punch.teachers = p.teachers;
+          punch.cards = Array.isArray(p.cards) ? p.cards : [];
+          punch.log = Array.isArray(p.log) ? p.log : [];
+          punch.lastBackup = p.lastBackup || null;
+          punch.nextTid = p.nextTid || (p.teachers.length + 1);
+        }
+      }
+    } catch (e) { punchStorageOk = false; }
+  }
+  function savePunch() {
+    try { localStorage.setItem(PUNCH_KEY, JSON.stringify(punch)); }
+    catch (e) { punchStorageOk = false; }
   }
 
   // ---------- helpers ----------
@@ -183,9 +229,22 @@
     });
   }
   function $(id) { return document.getElementById(id); }
+  function val(id) { var el = $(id); return el ? el.value : ''; }
   function drinkObj() { return DRINKS.filter(function (d) { return d.id === state.drink; })[0] || null; }
   function currentKey() { var d = drinkObj(); return d ? d.steps[state.step] : null; }
   function isOptionalSauce() { var d = drinkObj(); return currentKey() === 'sauce' && d.id !== 'mocha'; }
+  function teacherById(id) { return punch.teachers.filter(function (t) { return t.id === id; })[0] || null; }
+  function byName(a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0; }
+  function plural(n, word) {
+    var many = word === 'punch' ? 'punches' : word + 's';
+    return n + ' ' + (Math.abs(n) === 1 ? word : many);
+  }
+  function balanceText(n) {
+    return n > 0 ? plural(n, 'punch') + ' left' : n === 0 ? 'No punches left' : 'Owes ' + plural(-n, 'punch');
+  }
+  function whenText(t) {
+    return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  }
 
   var CHECK = '<svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="#2B1D14"/><path d="M10 18.5l5.5 5.5L26 12.5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function cup(color) {
@@ -203,10 +262,16 @@
   }
   function canSend() {
     return state.cart.length > 0 && state.name.trim().length > 0 && !!state.method &&
-      (state.method !== 'delivery' || state.room.trim().length > 0);
+      (state.method !== 'delivery' || state.room.trim().length > 0) &&
+      !!state.pay && (state.pay !== 'punch' || !!teacherById(state.teacherId));
   }
   function deliveryText(method, room) {
     return method === 'delivery' ? 'Delivery · Room ' + room : method === 'pickup' ? 'Pickup' : '';
+  }
+  function payText(o) {
+    if (o.pay === 'punch') return 'Punch card · ' + (o.balanceAfter > 0 ? o.balanceAfter + ' left' : o.balanceAfter === 0 ? 'last punch used' : 'owes ' + (-o.balanceAfter));
+    if (o.pay === 'other') return 'Paid another way';
+    return '';
   }
   function linesFor(sel, flavors) {
     var lines = [];
@@ -217,6 +282,22 @@
     var notes = (sel.chips || []).concat((sel.typed || '').trim()).filter(Boolean);
     if (notes.length) lines.push(['Notes', notes.join(', ')]);
     return lines;
+  }
+
+  // PIN: a simple lock to keep students from changing balances (not real security)
+  function hashPin(p) {
+    var s = 'coffee-cart:' + p;
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      return window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      });
+    }
+    return Promise.resolve('x' + btoa(s));
+  }
+
+  function logPunch(name, delta, note) {
+    punch.log.unshift({ t: Date.now(), name: name, delta: delta, note: note });
+    if (punch.log.length > 300) punch.log.length = 300;
   }
 
   // ---------- rendering ----------
@@ -233,9 +314,101 @@
     }).join('') + '</div>';
   }
 
+  function teacherListHtml() {
+    if (!punch.teachers.length) return '<div class="notice">There are no teachers on the list yet, so there is nothing to search. A teacher needs to add them first.<br><br><button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="openAdmin">Add teachers (teacher PIN)</button></div>';
+    var q = state.teacherQuery.trim().toLowerCase();
+    var list = punch.teachers.slice().sort(byName).filter(function (t) { return !q || t.name.toLowerCase().indexOf(q) >= 0; });
+    if (!list.length) return '<div class="muted" style="font-size:20px">No match. Ask a teacher to add them in Punch cards.</div>';
+    return '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' + list.map(function (t) {
+      var on = state.teacherId === t.id;
+      return '<button class="tile' + (on ? ' on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" data-action="pickTeacher" data-v="' + t.id + '"><span>' + esc(t.name) + '<small>' + esc(balanceText(t.punches)) + '</small></span>' + (on ? CHECK : '') + '</button>';
+    }).join('') + '</div>';
+  }
+  function payInfoHtml() {
+    var t = teacherById(state.teacherId);
+    if (!t) return '';
+    var n = state.cart.length, after = t.punches - n;
+    if (after >= 0) return esc(t.name) + ' has ' + plural(t.punches, 'punch') + '. After this order: ' + after + '.';
+    return esc(t.name) + ' has ' + plural(t.punches, 'punch') + ' and this order is ' + plural(n, 'drink') + '. That is OK. Their balance will show ' + after + ' until they bring a card to mark off.';
+  }
+
+  function adminHtml() {
+    var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><h1>Punch cards</h1><button class="secondary" data-action="closeAdmin">Done</button></div>';
+    var msg = state.adminMsg ? '<div class="notice" role="status">' + esc(state.adminMsg) + '</div>' : '';
+    if (!punchStorageOk) html += '<div class="notice">This browser is not letting the page save punch cards, so changes will be lost when the tab closes.</div>';
+
+    // PIN screens
+    if (!punch.pinHash || state.changingPin) {
+      html += msg + '<div class="panel" style="max-width:520px"><h2>' + (punch.pinHash ? 'Change the teacher PIN' : 'Create a teacher PIN') + '</h2>' +
+        '<div class="muted" style="font-size:20px;line-height:1.4">4 to 8 numbers. This PIN keeps students from changing punch balances. It is a simple lock, not a vault.</div>' +
+        '<label class="field-label" for="pinNew">New PIN</label><input id="pinNew" class="text-input mid" type="password" inputmode="numeric" autocomplete="off" maxlength="8">' +
+        '<label class="field-label" for="pinConfirm">Type it again</label><input id="pinConfirm" class="text-input mid" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-enter="pinSaveBtn">' +
+        '<div class="row"><button id="pinSaveBtn" class="primary" style="min-height:60px;font-size:22px" data-action="setPin">Save PIN</button>' +
+        (state.changingPin ? '<button class="secondary" style="min-height:60px;font-size:22px" data-action="cancelPin">Cancel</button>' : '') + '</div></div>';
+      return html;
+    }
+    if (!state.adminUnlocked) {
+      html += msg + '<div class="panel" style="max-width:520px"><h2>Teacher PIN</h2>' +
+        '<label class="field-label" for="pinInput">Enter the PIN</label>' +
+        '<input id="pinInput" class="text-input mid" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-enter="unlockBtn">' +
+        '<button id="unlockBtn" class="primary" style="min-height:60px;font-size:22px" data-action="unlock">Unlock</button></div>';
+      return html;
+    }
+
+    // unlocked
+    html += msg;
+    var teachers = punch.teachers.slice().sort(byName);
+    var stale = !punch.lastBackup || (Date.now() - punch.lastBackup) > 7 * 24 * 3600 * 1000;
+    if (stale && punch.teachers.length) html += '<div class="notice">It has been a while since the last backup. Use Export backup below.</div>';
+
+    html += '<div class="scroll">';
+
+    html += '<div class="panel"><h2>Load a punch card</h2>';
+    if (!teachers.length) {
+      html += '<div class="muted" style="font-size:20px">Add a teacher first (next box).</div>';
+    } else {
+      html += '<div class="form-row"><div><label for="loadTeacher">Teacher</label><select id="loadTeacher" class="text-input mid">' +
+        teachers.map(function (t) { return '<option value="' + t.id + '">' + esc(t.name) + ' (' + esc(balanceText(t.punches)) + ')</option>'; }).join('') + '</select></div>' +
+        '<div><label for="loadCardNo">Card number (optional)</label><input id="loadCardNo" class="text-input mid" type="text" autocomplete="off"></div>' +
+        '<div style="max-width:140px"><label for="loadCount">Punches</label><input id="loadCount" class="text-input mid" type="number" min="1" max="50" value="' + PUNCHES_PER_CARD + '"></div>' +
+        '<button class="primary" style="min-height:64px;font-size:22px;padding:0 28px" data-action="loadCard">Load card</button></div>' +
+        '<div class="muted" style="font-size:18px">If a card number is typed, the app will refuse to load the same number twice.</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="panel"><h2>Add a teacher</h2><div class="form-row"><div><label for="newTeacher">Name</label><input id="newTeacher" class="text-input mid" type="text" autocomplete="off" data-enter="addTeacherBtn"></div>' +
+      '<div style="max-width:160px"><label for="newTeacherStart">Starting punches</label><input id="newTeacherStart" class="text-input mid" type="number" value="0"></div>' +
+      '<button id="addTeacherBtn" class="primary" style="min-height:64px;font-size:22px;padding:0 28px" data-action="addTeacher">Add teacher</button></div>' +
+      '<label for="bulkTeachers" style="font-size:18px;font-weight:600;margin-top:6px">Or add many at once (one name per line)</label>' +
+      '<textarea id="bulkTeachers" class="text-input" rows="5" style="height:auto;padding:12px 16px;font-size:20px;font-weight:400" placeholder="Paste a list of names here"></textarea>' +
+      '<div><button class="primary" style="min-height:56px;font-size:20px;padding:0 28px" data-action="addMany">Add all</button></div></div>';
+
+    html += '<div class="panel"><h2>Teachers and balances</h2>' + (teachers.length ? teachers.map(function (t) {
+      return '<div class="trow"><span>' + esc(t.name) + '</span><span style="display:flex;align-items:center;gap:10px"><span class="bal">' + t.punches + '</span>' +
+        '<button class="small" aria-label="Take 1 punch off ' + esc(t.name) + '" data-action="adjust" data-v="' + t.id + '" data-key="-1">−1</button>' +
+        '<button class="small" aria-label="Add 1 punch to ' + esc(t.name) + '" data-action="adjust" data-v="' + t.id + '" data-key="1">+1</button></span></div>';
+    }).join('') : '<div class="muted" style="font-size:20px">No teachers yet.</div>') + '</div>';
+
+    html += '<div class="panel"><h2>Recent activity</h2>' + (punch.log.length ? punch.log.slice(0, 15).map(function (e) {
+      return '<div class="logrow"><span class="when">' + esc(whenText(e.t)) + '</span><span><b>' + esc(e.name) + '</b> ' + (e.delta > 0 ? '+' : '') + e.delta + ' · ' + esc(e.note) + '</span></div>';
+    }).join('') : '<div class="muted" style="font-size:20px">Nothing yet.</div>') + '</div>';
+
+    html += '<div class="panel"><h2>Backup and PIN</h2>' +
+      '<div class="muted" style="font-size:18px">Last backup: ' + (punch.lastBackup ? esc(whenText(punch.lastBackup)) : 'never') + '. Balances are saved in this browser on this computer. Clearing the browser’s history or switching browsers would lose them, so export a backup now and then.</div>' +
+      '<div class="form-row"><button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="exportBackup">Export backup</button>' +
+      '<label class="secondary" style="display:inline-flex;align-items:center;min-height:56px;font-size:20px;padding:0 24px;cursor:pointer">Restore from backup<input id="restoreFile" type="file" accept=".json,application/json" style="display:none"></label>' +
+      '<button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="changePin">Change PIN</button>' +
+      '<button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="lock">Lock</button></div></div>';
+
+    html += '</div>';
+    return html;
+  }
+
   function renderMain() {
-    var html = renderCrumbs();
+    var html = state.screen === 'admin' ? '' : renderCrumbs();
     var d = drinkObj();
+
+    if (state.screen === 'admin') html += adminHtml();
 
     if (state.screen === 'drink') {
       html += '<h1>What drink is it?</h1><div class="drinks">' + DRINKS.map(function (x) {
@@ -289,7 +462,7 @@
     }
 
     if (state.screen === 'review') {
-      html += '<h1>Who is this order for?</h1>' +
+      html += '<h1>Who is this order for?</h1><div class="scroll">' +
         '<label class="field-label" for="customerName">Customer name</label>' +
         '<input id="customerName" class="text-input" type="text" autocomplete="off" placeholder="Type a name" value="' + esc(state.name) + '">' +
         '<div class="field-label">Delivery or pickup?</div>' +
@@ -300,27 +473,50 @@
         html += '<label class="field-label" for="roomNumber">Room number</label>' +
           '<input id="roomNumber" class="text-input" type="text" autocomplete="off" placeholder="Type the room number" value="' + esc(state.room) + '">';
       }
-      html += '<div class="muted" style="font-size:20px;line-height:1.4">Check the ticket on the right. Tap Remove to take a drink off.</div>' +
-        '<div class="spacer"></div>' +
+      html += '<div class="field-label">How is it paid?</div>' +
+        '<div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+        tile('Punch card', state.pay === 'punch', 'setPay', 'punch', 'big') +
+        tile('Paid another way', state.pay === 'other', 'setPay', 'other', 'big') + '</div>';
+      if (state.pay === 'punch') {
+        html += (punch.teachers.length ? '<label class="field-label" for="teacherSearch">Find the teacher</label>' +
+          '<input id="teacherSearch" class="text-input mid" type="text" autocomplete="off" placeholder="Start typing a name" value="' + esc(state.teacherQuery) + '">' : '') +
+          '<div id="teacherList" class="teacher-list">' + teacherListHtml() + '</div>' +
+          '<div id="payInfo" class="info"' + (state.teacherId ? '' : ' hidden') + '>' + payInfoHtml() + '</div>';
+      }
+      html += '<div class="muted" style="font-size:20px;line-height:1.4">Check the ticket on the right. Tap Remove to take a drink off.</div></div>' +
         '<div class="row"><button class="secondary" data-action="addAnother">+ Add another drink</button>' +
         '<button id="sendBtn" class="primary" data-action="send"' + (canSend() ? '' : ' disabled') + '>Send order</button></div>';
     }
 
     if (state.screen === 'done') {
       var where = deliveryText(state.method, state.room.trim());
+      var res = state.result, notice = '';
+      if (res && res.kind === 'punch') {
+        var b = res.balance;
+        notice = b >= 2 ? esc(res.name) + ' has ' + plural(b, 'punch') + ' left.' :
+          b === 1 ? esc(res.name) + ' has 1 punch left.' :
+          b === 0 ? 'That was the last punch! Remind ' + esc(res.name) + ' to bring a new card.' :
+          esc(res.name) + ' is out of punches (owes ' + plural(-b, 'punch') + '). Remind them to bring their card to mark off.';
+      }
       html += '<div style="display:flex;align-items:center;gap:16px"><svg width="56" height="56" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="#1F6F5C"/><path d="M10 18.5l5.5 5.5L26 12.5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><h1>Order sent!</h1></div>' +
+        (notice ? '<div class="notice" role="status">' + notice + '</div>' : '') +
         '<div class="muted" style="font-size:22px">Cup labels (this is what we could print later)</div>' +
         '<div class="labels">' + state.cart.map(function (c) {
+          var punchLine = res && res.kind === 'punch' ? (res.balance > 0 ? 'Punch card · ' + res.balance + ' left' : 'Punch card · out of punches') : '';
           return '<div class="label"><div style="font-size:36px;font-weight:700;line-height:1.1">' + esc(state.name.trim()) + '</div>' +
             '<div style="font-size:22px;font-weight:700">' + esc(where) + '</div>' +
             '<div style="font-size:26px;font-weight:600">' + esc(c.title) + '</div>' +
-            '<div style="font-size:20px;line-height:1.35">' + esc(c.detail) + '</div></div>';
+            '<div style="font-size:20px;line-height:1.35">' + esc(c.detail) + '</div>' +
+            (punchLine ? '<div style="font-size:18px;color:#5A4A3D">' + esc(punchLine) + '</div>' : '') + '</div>';
         }).join('') + '</div>' +
         '<div style="display:flex;justify-content:flex-end"><button class="primary" data-action="newCustomer">Next customer</button></div>';
     }
 
     $('main').innerHTML = html;
-    if (state.screen === 'review' && !state.name) { var n = $('customerName'); if (n) n.focus(); }
+    if (state.screen === 'review' && state.focusName) { state.focusName = false; var n = $('customerName'); if (n && !state.name) n.focus(); }
+    if (state.screen === 'admin') {
+      var f = $('pinInput') || $('pinNew') || null; if (f) f.focus();
+    }
   }
 
   function renderTicket() {
@@ -339,7 +535,8 @@
       }).join('') + '</div>';
     }
     html += '<div class="spacer"></div>';
-    if (state.screen !== 'done' && (state.cart.length || d)) html += '<button class="clear" data-action="clearAll">Clear order</button>';
+    if (state.screen !== 'done' && state.screen !== 'admin' && (state.cart.length || d)) html += '<button class="clear" data-action="clearAll">Clear order</button>';
+    if (state.screen !== 'admin') html += '<button class="clear" data-action="openAdmin">Punch cards (teacher PIN)</button>';
     $('ticket').innerHTML = html;
   }
 
@@ -349,8 +546,10 @@
     var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="side-title">Queue</div><div class="badge">' + open.length + '</div></div>';
     if (!open.length) html += '<div class="muted" style="font-size:22px;line-height:1.4">No orders waiting.</div>';
     html += open.map(function (o) {
+      var pay = payText(o);
       return '<div class="qcard"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><div class="name">' + esc(o.name) + '</div><div style="font-size:22px;font-weight:700">#' + o.num + '</div></div>' +
         '<div style="font-size:22px;font-weight:700">' + esc(deliveryText(o.method, o.room)) + '</div>' +
+        (pay ? '<div style="font-size:18px;font-weight:600">' + esc(pay) + '</div>' : '') +
         '<div class="muted" style="font-size:18px">Sent ' + esc(o.time) + '</div>' +
         '<div class="items">' + o.items.map(function (i) { return esc(i.title + ' — ' + i.detail); }).join('\n') + '</div>' +
         '<button class="finish" data-action="finish" data-v="' + o.id + '">Mark finished</button></div>';
@@ -369,6 +568,7 @@
   function resetOrder() {
     state.screen = 'drink'; state.drink = null; state.step = 0; state.sel = {}; state.flavors = [];
     state.cart = []; state.name = ''; state.method = null; state.room = '';
+    state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null;
   }
   function finishDrink() {
     var d = drinkObj();
@@ -377,12 +577,13 @@
       id: state.nextId++, title: d.name,
       detail: lines.length ? lines.map(function (l) { return l[0] + ': ' + l[1]; }).join(' · ') : 'Plain'
     });
-    state.drink = null; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'review';
+    state.drink = null; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'review'; state.focusName = true;
   }
   function setOrderDone(id, done) {
     state.orders.forEach(function (o) { if (String(o.id) === String(id)) o.done = done; });
     saveSession();
   }
+  function say(msg) { state.adminMsg = msg; }
 
   var actions = {
     pickDrink: function (v) { state.drink = v; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'options'; },
@@ -409,25 +610,127 @@
     },
     addAnother: function () { state.screen = 'drink'; },
     setMethod: function (v) { state.method = v; },
+    setPay: function (v) { state.pay = v; if (v !== 'punch') { state.teacherId = null; state.teacherQuery = ''; } },
+    pickTeacher: function (v) {
+      state.teacherId = Number(v);
+      var t = teacherById(state.teacherId);
+      if (t && !state.name.trim()) state.name = t.name;
+    },
     removeCart: function (v) {
       state.cart = state.cart.filter(function (c) { return String(c.id) !== String(v); });
     },
     send: function () {
       if (!canSend()) return;
-      state.orders.push({
+      var order = {
         id: state.nextId++, num: state.nextNum++, name: state.name.trim(),
         method: state.method, room: state.room.trim(),
         time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-        done: false,
+        done: false, pay: state.pay,
         items: state.cart.map(function (c) { return { title: c.title, detail: c.detail }; })
-      });
+      };
+      state.result = null;
+      if (state.pay === 'punch') {
+        var t = teacherById(state.teacherId);
+        var n = state.cart.length;
+        t.punches -= n; // one punch per drink; can go below zero (honor system)
+        logPunch(t.name, -n, 'Order #' + order.num + ' (' + plural(n, 'drink') + ')');
+        savePunch();
+        order.teacherName = t.name;
+        order.balanceAfter = t.punches;
+        state.result = { kind: 'punch', name: t.name, balance: t.punches };
+      }
+      state.orders.push(order);
       state.screen = 'done';
       saveSession();
     },
     newCustomer: function () { resetOrder(); },
     clearAll: function () { resetOrder(); },
     finish: function (v) { setOrderDone(v, true); },
-    undo: function (v) { setOrderDone(v, false); }
+    undo: function (v) { setOrderDone(v, false); },
+
+    // ----- punch card admin -----
+    openAdmin: function () { state.prevScreen = state.screen; state.screen = 'admin'; state.adminMsg = ''; state.adminUnlocked = false; state.changingPin = false; },
+    closeAdmin: function () { state.screen = state.prevScreen || 'drink'; state.adminUnlocked = false; state.changingPin = false; state.adminMsg = ''; },
+    lock: function () { state.adminUnlocked = false; state.adminMsg = ''; },
+    changePin: function () { state.changingPin = true; state.adminMsg = ''; },
+    cancelPin: function () { state.changingPin = false; state.adminMsg = ''; },
+    unlock: function () {
+      var entered = val('pinInput');
+      hashPin(entered).then(function (h) {
+        if (h === punch.pinHash) { state.adminUnlocked = true; state.adminMsg = ''; }
+        else state.adminMsg = 'That PIN is not right.';
+        render();
+      });
+    },
+    setPin: function () {
+      var a = val('pinNew'), b = val('pinConfirm');
+      if (!/^\d{4,8}$/.test(a)) { say('The PIN must be 4 to 8 numbers.'); return; }
+      if (a !== b) { say('The two PINs did not match. Try again.'); return; }
+      hashPin(a).then(function (h) {
+        punch.pinHash = h; savePunch();
+        state.changingPin = false; state.adminUnlocked = true; state.adminMsg = 'PIN saved.';
+        render();
+      });
+    },
+    addTeacher: function () {
+      var name = val('newTeacher').trim();
+      var start = parseInt(val('newTeacherStart'), 10) || 0;
+      if (!name) { say('Type the teacher’s name first.'); return; }
+      var dupe = punch.teachers.some(function (t) { return t.name.toLowerCase() === name.toLowerCase(); });
+      if (dupe) { say(name + ' is already on the list.'); return; }
+      punch.teachers.push({ id: punch.nextTid++, name: name, punches: start });
+      if (start !== 0) logPunch(name, start, 'Starting balance');
+      savePunch();
+      say('Added ' + name + '.');
+    },
+    addMany: function () {
+      var names = val('bulkTeachers').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
+      if (!names.length) { say('Type or paste some names first, one per line.'); return; }
+      var added = 0, skipped = 0;
+      names.forEach(function (n) {
+        var dupe = punch.teachers.some(function (t) { return t.name.toLowerCase() === n.toLowerCase(); });
+        if (dupe) { skipped++; return; }
+        punch.teachers.push({ id: punch.nextTid++, name: n, punches: 0 });
+        added++;
+      });
+      savePunch();
+      say('Added ' + plural(added, 'teacher') + (skipped ? ' (' + skipped + ' already on the list)' : '') + '.');
+    },
+    loadCard: function () {
+      var t = teacherById(Number(val('loadTeacher')));
+      var count = parseInt(val('loadCount'), 10);
+      var cardNo = val('loadCardNo').trim();
+      if (!t) { say('Pick a teacher first.'); return; }
+      if (!(count >= 1 && count <= 50)) { say('Punches should be a number from 1 to 50.'); return; }
+      if (cardNo) {
+        var seen = punch.cards.some(function (c) { return c.toLowerCase() === cardNo.toLowerCase(); });
+        if (seen) { say('Card ' + cardNo + ' was already loaded. Nothing was added.'); return; }
+        punch.cards.push(cardNo);
+      }
+      t.punches += count;
+      logPunch(t.name, count, cardNo ? 'Loaded card ' + cardNo : 'Loaded a card');
+      savePunch();
+      say('Added ' + plural(count, 'punch') + ' for ' + t.name + '. Balance: ' + t.punches + '.');
+    },
+    adjust: function (v, key) {
+      var t = teacherById(Number(v)); var delta = parseInt(key, 10);
+      if (!t || !delta) return;
+      t.punches += delta;
+      logPunch(t.name, delta, 'Adjusted by hand');
+      savePunch();
+      say(t.name + ' now has ' + t.punches + '.');
+    },
+    exportBackup: function () {
+      var blob = new Blob([JSON.stringify(punch, null, 2)], { type: 'application/json' });
+      var a = document.createElement('a');
+      var d = new Date();
+      a.href = URL.createObjectURL(blob);
+      a.download = 'coffee-cart-punch-backup-' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      punch.lastBackup = Date.now(); savePunch();
+      say('Backup file saved to your Downloads folder.');
+    }
   };
 
   document.addEventListener('click', function (e) {
@@ -445,9 +748,39 @@
     if (id === 'customerName') { state.name = e.target.value; var s1 = $('sendBtn'); if (s1) s1.disabled = !canSend(); }
     else if (id === 'roomNumber') { state.room = e.target.value; var s2 = $('sendBtn'); if (s2) s2.disabled = !canSend(); }
     else if (id === 'drinkNotes') { state.sel.typed = e.target.value; renderTicket(); }
+    else if (id === 'teacherSearch') { state.teacherQuery = e.target.value; var tl = $('teacherList'); if (tl) tl.innerHTML = teacherListHtml(); }
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var target = e.target.getAttribute && e.target.getAttribute('data-enter');
+    if (target && $(target)) { e.preventDefault(); $(target).click(); }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.id !== 'restoreFile' || !e.target.files || !e.target.files[0]) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var p = JSON.parse(reader.result);
+        if (!p || !Array.isArray(p.teachers)) throw new Error('bad file');
+        if (!window.confirm('Replace all punch card data on this computer with this backup?')) return;
+        punch.pinHash = p.pinHash || punch.pinHash;
+        punch.teachers = p.teachers;
+        punch.cards = Array.isArray(p.cards) ? p.cards : [];
+        punch.log = Array.isArray(p.log) ? p.log : [];
+        punch.lastBackup = p.lastBackup || null;
+        punch.nextTid = p.nextTid || (p.teachers.length + 1);
+        savePunch();
+        say('Backup restored.');
+      } catch (err) { say('That file is not a coffee cart backup.'); }
+      render();
+    };
+    reader.readAsText(e.target.files[0]);
   });
 
   loadSession();
+  loadPunch();
   render();
 })();
 </script>
