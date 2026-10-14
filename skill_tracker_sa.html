@@ -681,26 +681,18 @@ function renderGrid() {
   var cls = activeClass();
   var wrap = document.getElementById('student-grid-wrap');
   var indepSection = document.getElementById('indep-section');
+  indepSection.style.display = 'none'; // retired: mastered students stay in the main grid below, shown in green, instead of being pulled into a separate list
   if (!cls || !activeSkill) {
     wrap.innerHTML = '<div class="empty-state">Connect a Sheet with at least one class to get started.</div>';
-    indepSection.style.display = 'none';
+    return;
+  }
+  if (!cls.students.length) {
+    wrap.innerHTML = '<div class="empty-state">No students in this class yet.</div>';
     return;
   }
   var bucket = ensureStatusBucket(cls.id, activeSkill);
   var type = skillType(activeSkill);
   var cfg = skillConfig(activeSkill);
-  var masteredLabel = type==='tally' ? 'Independent'
-    : type==='levels' ? ((cfg.components && cfg.components[0] && cfg.components[0].levels[4]) || 'Exemplary')
-    : 'Mastered';
-  var active = [], indep = [];
-  cls.students.forEach(function(name){
-    var st = bucket[name];
-    var mastered;
-    if (type==='levels') mastered = st && computeOverall(activeSkill, st) === 4;
-    else if (type==='log') mastered = st && st.tagMastered && !st.logMasteryOverridden;
-    else mastered = st && st.score === 4;
-    if (mastered) indep.push(name); else active.push(name);
-  });
 
   function cardHtml(name, cardClass, subTxt) {
     return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
@@ -709,11 +701,9 @@ function renderGrid() {
       + '</div>';
   }
 
-  if (!active.length) {
-    wrap.innerHTML = '<div class="empty-state">Everyone here has reached '+masteredLabel+' on '+activeSkill+'. &#127881;</div>';
-  } else if (type === 'levels') {
+  if (type === 'levels') {
     var comps = cfg.components || [];
-    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+    wrap.innerHTML = '<div class="student-grid">' + cls.students.map(function(name){
       var st = bucket[name] || {};
       var overall = computeOverall(activeSkill, st);
       var cardClass = levelClass(overall);
@@ -725,32 +715,24 @@ function renderGrid() {
       return cardHtml(name, cardClass, subTxt);
     }).join('') + '</div>';
   } else if (type === 'log') {
-    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+    wrap.innerHTML = '<div class="student-grid">' + cls.students.map(function(name){
       var st = bucket[name] || {tags:[]};
+      var mastered = st.tagMastered && !st.logMasteryOverridden;
       var n = (st.tags||[]).length;
-      var cardClass = n ? 'score-3' : 'score-none';
-      var subTxt = n ? n+' tag'+(n!==1?'s':'')+' observed' : 'Not yet assessed';
+      var cardClass = mastered ? 'score-4' : (n ? 'score-3' : 'score-none');
+      var subTxt = mastered ? 'Mastered' + (n ? ' &middot; '+n+' tag'+(n!==1?'s':'') : '')
+        : (n ? n+' tag'+(n!==1?'s':'')+' observed' : 'Not yet assessed');
       return cardHtml(name, cardClass, subTxt);
     }).join('') + '</div>';
   } else {
-    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+    wrap.innerHTML = '<div class="student-grid">' + cls.students.map(function(name){
       var st = bucket[name] || {tally:0, score:null};
-      var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag;
-      var cardClass = notYetInSession ? 'score-none' : scoreClass(st.helpFlag ? 1 : (st.tally===0 ? 4 : st.tally<=2 ? 3 : 2));
-      var tallyTxt = notYetInSession ? 'Not yet assessed' : (st.tally ? st.tally+' prompt'+(st.tally!==1?'s':'') : 'No prompts yet');
+      var mastered = st.score === 4;
+      var notYetInSession = !mastered && !st.lastSessionDate && !st.tally && !st.helpFlag;
+      var cardClass = mastered ? 'score-4' : notYetInSession ? 'score-none' : scoreClass(st.helpFlag ? 1 : (st.tally===0 ? 4 : st.tally<=2 ? 3 : 2));
+      var tallyTxt = mastered ? 'Independent' : notYetInSession ? 'Not yet assessed' : (st.tally ? st.tally+' prompt'+(st.tally!==1?'s':'') : 'No prompts yet');
       return cardHtml(name, cardClass, tallyTxt);
     }).join('') + '</div>';
-  }
-
-  if (indep.length) {
-    indepSection.style.display = 'block';
-    document.getElementById('indep-count').textContent = indep.length;
-    document.getElementById('indep-label').innerHTML = '&#10003; '+masteredLabel+' on this skill';
-    document.getElementById('indep-body').innerHTML = indep.map(function(name){
-      return '<span class="indep-chip" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">&#10003; '+name+'</span>';
-    }).join('');
-  } else {
-    indepSection.style.display = 'none';
   }
 }
 
