@@ -34,7 +34,7 @@
   .muted { color: var(--muted); }
 
   .crumbs { display: flex; gap: 10px; }
-  .crumb { flex: 1; min-width: 0; text-align: center; padding: 12px 8px; border-radius: 999px; font-size: 20px; font-weight: 600; border: 3px solid var(--line); background: #fff; color: #6B5A4C; }
+  .crumb { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; padding: 12px 8px; border-radius: 999px; font-size: 20px; font-weight: 600; border: 3px solid var(--line); background: #fff; color: #6B5A4C; }
   .crumb.active { border-color: var(--ink); background: var(--ink); color: #fff; }
   .crumb.done { border-color: var(--go); background: #D6EBE1; color: #12372C; }
 
@@ -111,6 +111,7 @@
     .drink svg { width: 64px; height: 64px; }
     .tile { font-size: 20px; padding: 10px 14px; min-height: 68px; }
     .tile.big { font-size: 24px; min-height: 76px; }
+    .crumbs { gap: 6px; }
     .crumb { font-size: 16px; padding: 10px 4px; }
     .primary, .secondary { font-size: 22px; padding: 0 24px; min-height: 64px; }
     .text-input { font-size: 28px; height: 68px; }
@@ -156,14 +157,14 @@
 
   // ---------- menu data (edit here to change the menu) ----------
   var DRINKS = [
-    { id: 'mocha',     name: 'Mocha',              color: '#6B3F2A', steps: ['sauce', 'milk', 'flavor'] },
-    { id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['sauce', 'milk', 'flavor'] },
-    { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['sauce', 'flavor'] },
+    { id: 'mocha',     name: 'Mocha',              color: '#6B3F2A', steps: ['temp', 'sauce', 'milk', 'flavor'] },
+    { id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['temp', 'sauce', 'milk', 'flavor'] },
+    { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'sauce', 'flavor'] },
     { id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['sauce', 'milk', 'flavor'] },
     { id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['sauce', 'milk', 'flavor'] },
     { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], sfOnly: true },
     { id: 'soda',      name: 'Italian Soda',       color: '#7FB8DA', steps: ['flavor'] },
-    { id: 'tea',       name: 'Tea',                color: '#9DB86A', steps: ['tea', 'flavor'] }
+    { id: 'tea',       name: 'Tea',                color: '#9DB86A', steps: ['temp', 'tea', 'flavor'] }
   ];
   DRINKS.forEach(function (d) { d.steps = d.steps.concat('notes'); });
 
@@ -175,7 +176,10 @@
   var QUICK_NOTES = ['Splash of milk', 'Extra hot', 'Not too hot', 'Extra sauce'];
   var PUNCHES_PER_CARD = 5; // default number of punches on a card
 
+  var TEMPS = ['Hot', 'Iced'];
+
   var STEPS = {
+    temp:   { crumb: 'Temp',   title: 'Hot or iced?',  hint: 'Choose one.', cols: 2, list: TEMPS },
     sauce:  { crumb: 'Sauce',  title: 'Pick a sauce',  hint: 'Choose one.', cols: 2, list: SAUCES },
     milk:   { crumb: 'Milk',   title: 'Pick a milk',   hint: 'Choose one.', cols: 3, list: MILKS },
     tea:    { crumb: 'Tea',    title: 'Pick a tea',    hint: 'Choose one.', cols: 2, list: TEAS },
@@ -272,7 +276,7 @@
   function stepReady() {
     var d = drinkObj(); if (!d) return false;
     var key = currentKey();
-    var required = (key === 'sauce' && d.id === 'mocha') || key === 'milk' || key === 'tea';
+    var required = (key === 'sauce' && d.id === 'mocha') || key === 'milk' || key === 'tea' || key === 'temp';
     return !required || !!state.sel[key];
   }
   function canSend() {
@@ -294,6 +298,7 @@
   }
   function linesFor(sel, flavors) {
     var lines = [];
+    if (sel.temp) lines.push(['Temp', sel.temp]);
     if (sel.sauce && sel.sauce !== 'No sauce') lines.push(['Sauce', sel.sauce]);
     if (sel.milk) lines.push(['Milk', sel.milk]);
     if (sel.tea) lines.push(['Tea', sel.tea]);
@@ -473,7 +478,7 @@
         }
         body += '<div class="grid" style="grid-template-columns:repeat(' + info.cols + ',minmax(0,1fr))">' + list.map(function (label) {
           var on = (isOptionalSauce() && label === 'No sauce') ? (!state.sel.sauce || state.sel.sauce === 'No sauce') : state.sel[key] === label;
-          return tile(label, on, 'pickOption', label, '', key);
+          return tile(label, on, 'pickOption', label, key === 'temp' ? 'big' : '', key);
         }).join('') + '</div>';
       }
 
@@ -612,9 +617,9 @@
   }
   function finishDrink() {
     var d = drinkObj();
-    var lines = linesFor(state.sel, state.flavors);
+    var lines = linesFor(state.sel, state.flavors).filter(function (l) { return l[0] !== 'Temp'; });
     state.cart.push({
-      id: state.nextId++, title: d.name,
+      id: state.nextId++, title: (state.sel.temp ? state.sel.temp + ' ' : '') + d.name,
       detail: lines.length ? lines.map(function (l) { return l[0] + ': ' + l[1]; }).join(' · ') : 'Plain'
     });
     state.drink = null; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'review'; state.focusName = true;
