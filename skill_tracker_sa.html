@@ -126,6 +126,16 @@
     .skill-del { background: none; border: none; color: #C0392B; font-size: 18px; cursor: pointer; padding: 0 4px; }
     .add-row { display: flex; gap: 8px; margin-top: 10px; }
     .add-row input { flex: 1; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 10px; font-size: 13px; font-family: sans-serif; }
+    .tag-btn { border: 2px solid #B4B2A9; border-radius: 16px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; background: #ffffff; color: #2C2C2A; }
+    .tag-btn:hover { background: #F1EFE8; }
+    .tag-btn.active { background: #EAF3DE; border-color: #3E8B18; color: #2E6B10; }
+    .tag-btn .tag-star { color: #C09A20; }
+    .skill-type-badge { display: inline-block; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; background: #EAF3F9; color: #1A3F7A; border-radius: 6px; padding: 3px 7px; white-space: nowrap; }
+    .nsw-box { border: 1.5px solid #D8D6D0; border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .nsw-box input { width: 100%; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 7px 9px; font-size: 13px; font-family: sans-serif; margin-bottom: 4px; }
+    .nsw-remove { background: none; border: none; color: #C0392B; font-size: 18px; cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+    .nsw-type-toggle { font-size: 12px; background: #ffffff; border: 1.5px solid #B4B2A9; border-radius: 8px; padding: 8px 12px; cursor: pointer; color: #5F5E5A; font-weight: 600; margin-right: 6px; margin-bottom: 6px; }
+    .nsw-type-toggle.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
   </style>
 </head>
 <body>
@@ -183,12 +193,12 @@
         <span><span class="legend-dot" style="background:#C09A20;"></span>2 &middot; Emerging</span>
         <span><span class="legend-dot" style="background:#C0392B;"></span>1 &middot; Beginning</span>
       </div>
-      <div class="legend" id="legend-knife" style="display:none;">
-        <span><span class="legend-dot" style="background:#3E8B18;"></span>Exemplary</span>
-        <span><span class="legend-dot" style="background:#185FA5;"></span>Proficient</span>
-        <span><span class="legend-dot" style="background:#C09A20;"></span>Developing</span>
-        <span><span class="legend-dot" style="background:#C0392B;"></span>Guided Practice</span>
-        <span><span class="legend-dot" style="background:#5F5E5A;"></span>No Effort</span>
+      <div class="legend" id="legend-levels" style="display:none;">
+        <span><span class="legend-dot" style="background:#3E8B18;"></span><span id="ll-4">Exemplary</span></span>
+        <span><span class="legend-dot" style="background:#185FA5;"></span><span id="ll-3">Proficient</span></span>
+        <span><span class="legend-dot" style="background:#C09A20;"></span><span id="ll-2">Developing</span></span>
+        <span><span class="legend-dot" style="background:#C0392B;"></span><span id="ll-1">Guided Practice</span></span>
+        <span><span class="legend-dot" style="background:#5F5E5A;"></span><span id="ll-0">No Effort</span></span>
       </div>
 
       <div class="session-bar" id="session-bar">
@@ -224,12 +234,15 @@
       <button class="action-btn ab-undo" id="ap-undo-btn" onclick="tapUndoIndependent()" style="display:none;">Move back to active list</button>
     </div>
 
-    <div id="ap-knife-rubric" style="display:none;">
-      <p class="panel-sub" id="ap-knife-overall" style="margin-bottom:12px;"></p>
-      <p style="font-size:12px;font-weight:700;color:#5F5E5A;margin:0 0 6px;">Guiding-hand claw (safety)</p>
-      <div id="ap-claw-buttons" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;"></div>
-      <p style="font-size:12px;font-weight:700;color:#5F5E5A;margin:0 0 6px;">Knife grip (technique)</p>
-      <div id="ap-grip-buttons" style="display:flex;flex-direction:column;gap:6px;"></div>
+    <div id="ap-levels-rubric" style="display:none;">
+      <p class="panel-sub" id="ap-levels-overall" style="margin-bottom:12px;"></p>
+      <div id="ap-levels-components"></div>
+    </div>
+
+    <div id="ap-log-rubric" style="display:none;">
+      <p class="panel-sub" style="margin-bottom:10px;">Tap to log what you observed. Tap again to remove.</p>
+      <div id="ap-log-tags" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;"></div>
+      <button class="action-btn ab-undo" id="ap-log-undo-btn" onclick="tapUndoLogMastery()" style="display:none;">Move back to active list</button>
     </div>
 
     <textarea class="note-input" id="ap-note-input" placeholder="Add a note (optional)..."></textarea>
@@ -243,9 +256,19 @@
     <div class="modal">
       <h3>Manage lab skills</h3>
       <div id="skill-manage-list"></div>
-      <div class="add-row">
-        <input type="text" id="new-skill-input" placeholder="New skill name..." onkeydown="if(event.key==='Enter')addSkill()" />
-        <button class="small-btn" onclick="addSkill()">Add</button>
+      <div id="nsw-wizard" style="display:none;margin-top:14px;border-top:1.5px solid #e8e6e0;padding-top:14px;">
+        <div class="nsw-name-row" style="margin-bottom:10px;">
+          <input type="text" id="nsw-name-input" placeholder="Skill name..." style="width:100%;border:1.5px solid #B4B2A9;border-radius:8px;padding:8px 10px;font-size:13px;font-family:sans-serif;" />
+        </div>
+        <div id="nsw-type-picker" style="display:flex;flex-wrap:wrap;margin-bottom:12px;"></div>
+        <div id="nsw-builder"></div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+          <button class="ghost-btn" style="flex:1;" onclick="cancelSkillWizard()">Cancel</button>
+          <button class="primary-btn" style="flex:1;" onclick="finalizeSkillWizard()">Save skill</button>
+        </div>
+      </div>
+      <div class="add-row" id="nsw-open-row">
+        <button class="small-btn" style="width:100%;" onclick="startNewSkillType()">+ New skill</button>
       </div>
       <button class="ghost-btn" style="width:100%;margin-top:14px;" onclick="closeSkillManager()">Done</button>
     </div>
@@ -394,6 +417,7 @@ function showPhase(id) {
   document.querySelectorAll('.phase').forEach(function(p){ p.classList.remove('visible'); });
   document.getElementById(id).classList.add('visible');
 }
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8);}
 
 // ============================================================
 // STATE
@@ -402,29 +426,96 @@ var classes = [];              // [{id,name,students:[names]}]
 var activeClassId = null;
 var skills = ['Knife Skills', 'Sanitation', 'Equipment Use'];
 var activeSkill = null;
-var skillStatus = {};          // skillStatus[classId][skill][student] = {score,tally,sessionsCount,lastSessionDate,firstMasteryDate,helpFlag,claw,grip}
+var skillStatus = {};          // skillStatus[classId][skill][student] = {score,tally,sessionsCount,lastSessionDate,firstMasteryDate,helpFlag,claw,grip,components,tags,tagMastered,logMasteryOverridden}
+// ------------------------------------------------------------
+// skillConfigs[skillName] describes HOW a skill is tracked -- fully
+// customizable from the Manage Skills UI, no code changes needed per
+// skill. Each teacher's configs live in their own Sheet (same
+// mechanism as rosters), so two teachers sharing this app never collide.
+//   {type:'tally'}                                    -- legacy prompt/independent tracker (default when unset)
+//   {type:'levels', overallMode:'min'|'none', components:[{key,label,levels:[5 strings]}]}
+//   {type:'log', tags:[{id,label,mastery:bool}]}
+// ------------------------------------------------------------
+var skillConfigs = {};
 
 // ------------------------------------------------------------
-// Knife Skills rubric (Claw & Grip): a separately-rated skill with its
-// own 5-level scale and a two-component overall-score rule, replacing
-// the tally/prompt-counting flow used by every other skill.
+// Generic skill-type engine. Replaces the old Knife-Skills-only
+// special-casing with config-driven behavior for any skill.
 // ------------------------------------------------------------
 var KNIFE_SKILL_NAME = 'Knife Skills';
 var KNIFE_LEVELS = ['No Effort', 'Guided Practice', 'Developing', 'Proficient', 'Exemplary'];
-function isKnifeSkill(sk) { return sk === KNIFE_SKILL_NAME; }
-function knifeLevelClass(lvl) { return (lvl===null||lvl===undefined) ? 'score-none' : 'score-'+lvl; }
-// Rule, per the rubric: claw below Proficient(3) sets the overall rating to
-// the claw rating outright, whatever grip is. At or above Proficient, grip
-// can still cap the overall down to its own level (so "Proficient overall"
-// needs grip >= Proficient too, and "Exemplary overall" needs both
-// Exemplary) -- that upper-range behavior isn't spelled out for every
-// combination in the rubric, so this fills the one unstated gap (claw >=
-// Proficient but grip below it) the same way: the lower of the two governs.
-function knifeOverall(claw, grip) {
-  if (claw === null || claw === undefined) return null;
-  if (claw < 3) return claw;
-  if (grip === null || grip === undefined) return null;
-  return Math.min(claw, grip);
+function skillConfig(sk) { return skillConfigs[sk] || {type:'tally'}; }
+function skillType(sk) { return skillConfig(sk).type || 'tally'; }
+function levelClass(lvl) { return (lvl===null||lvl===undefined) ? 'score-none' : 'score-'+lvl; }
+function truncLabel(s, n) { n = n||12; return (s && s.length>n) ? s.slice(0,n-1)+'\u2026' : s; }
+function getComponentValue(st, key) {
+  if (st.components && st.components[key] !== undefined && st.components[key] !== null) return st.components[key];
+  if (key==='claw' && st.claw!=null) return st.claw;
+  if (key==='grip' && st.grip!=null) return st.grip;
+  return null;
+}
+function setComponentValue(st, key, val) {
+  if (!st.components) st.components = {};
+  st.components[key] = val;
+}
+// Rule (generalizes the original Knife Skills rubric exactly): the first
+// configured component acts as the gating/primary one -- below
+// Proficient(3), it alone determines the overall, whatever the other
+// components are. At or above Proficient, every component must be set,
+// and the lowest of them all governs the overall.
+function computeOverall(sk, st) {
+  var cfg = skillConfig(sk);
+  if (cfg.type !== 'levels' || cfg.overallMode === 'none') return null;
+  var comps = cfg.components || [];
+  if (!comps.length) return null;
+  var first = getComponentValue(st, comps[0].key);
+  if (first === null) return null;
+  if (first < 3) return first;
+  var vals = [];
+  for (var i=0;i<comps.length;i++) {
+    var v = getComponentValue(st, comps[i].key);
+    if (v === null) return null;
+    vals.push(v);
+  }
+  return Math.min.apply(Math, vals);
+}
+function componentHasData(sk, key) {
+  var found = false;
+  Object.keys(skillStatus).forEach(function(cid){
+    var bucket = skillStatus[cid] && skillStatus[cid][sk]; if (!bucket) return;
+    Object.keys(bucket).forEach(function(name){ if (getComponentValue(bucket[name], key) !== null) found = true; });
+  });
+  return found;
+}
+function tagHasData(sk, tagId) {
+  var found = false;
+  Object.keys(skillStatus).forEach(function(cid){
+    var bucket = skillStatus[cid] && skillStatus[cid][sk]; if (!bucket) return;
+    Object.keys(bucket).forEach(function(name){ if ((bucket[name].tags||[]).indexOf(tagId) > -1) found = true; });
+  });
+  return found;
+}
+function recomputeLogMastery(sk, st) {
+  var cfg = skillConfig(sk);
+  var masteryIds = (cfg.tags||[]).filter(function(t){return t.mastery;}).map(function(t){return t.id;});
+  st.tagMastered = masteryIds.some(function(id){ return (st.tags||[]).indexOf(id) > -1; });
+}
+// One-time (idempotent) migration: give the already-deployed Knife Skills
+// skill its generic 'levels' config the first time this loads, with the
+// exact same two components, labels and scale it already used -- zero
+// behavior change for existing data (old st.claw/st.grip values are still
+// read via getComponentValue()'s fallback above).
+function migrateKnifeSkillsConfig() {
+  if (skills.indexOf(KNIFE_SKILL_NAME) > -1 && !skillConfigs[KNIFE_SKILL_NAME]) {
+    skillConfigs[KNIFE_SKILL_NAME] = {
+      type: 'levels',
+      overallMode: 'min',
+      components: [
+        {key:'claw', label:'Guiding-hand claw (safety)', levels: KNIFE_LEVELS.slice()},
+        {key:'grip', label:'Knife grip (technique)', levels: KNIFE_LEVELS.slice()}
+      ]
+    };
+  }
 }
 var logQueue = [];             // events waiting to be pushed to Sheets
 var actionStudent = null;
@@ -438,13 +529,14 @@ function ensureStatusBucket(classId, skill) {
 }
 function ensureStudentEntry(classId, skill, name) {
   var bucket = ensureStatusBucket(classId, skill);
-  if (!bucket[name]) bucket[name] = {score:null, tally:0, sessionsCount:0, lastSessionDate:'', firstMasteryDate:'', helpFlag:false, claw:null, grip:null};
+  if (!bucket[name]) bucket[name] = {score:null, tally:0, sessionsCount:0, lastSessionDate:'', firstMasteryDate:'', helpFlag:false, claw:null, grip:null, components:{}, tags:[], tagMastered:false, logMasteryOverridden:false};
   return bucket[name];
 }
 
 function saveLocal() {
   try {
     localStorage.setItem('skl_skills', JSON.stringify(skills));
+    localStorage.setItem('skl_skillconfigs', JSON.stringify(skillConfigs));
     localStorage.setItem('skl_status', JSON.stringify(skillStatus));
     localStorage.setItem('skl_logqueue', JSON.stringify(logQueue));
     localStorage.setItem('skl_active', JSON.stringify({classId:activeClassId, skill:activeSkill}));
@@ -452,10 +544,12 @@ function saveLocal() {
 }
 function loadLocal() {
   try {
+    var sc = localStorage.getItem('skl_skillconfigs'); if (sc) skillConfigs = JSON.parse(sc);
     var s = localStorage.getItem('skl_status'); if (s) skillStatus = JSON.parse(s);
     var q = localStorage.getItem('skl_logqueue'); if (q) logQueue = JSON.parse(q);
     var a = localStorage.getItem('skl_active'); if (a) { var ao=JSON.parse(a); activeClassId=ao.classId; activeSkill=ao.skill; }
   } catch(e) {}
+  migrateKnifeSkillsConfig();
 }
 
 // ============================================================
@@ -476,22 +570,22 @@ async function loadRoster() {
 
 async function loadSkillsConfig() {
   try {
-    var res = await sheetsGet(SHEET_SKILL_STATUS+'!A1:I1');
-    // config for skills list is stored locally + mirrored into row 1 comment isn't reliable; keep skills local + sync via config tab custom row.
+    var res2 = await sheetsGet(SHEET_CONFIG+'!A6:B7');
+    var rows = res2.values || [];
+    rows.forEach(function(row){
+      if (row[0]==='skillList' && row[1]) {
+        try { var parsed = JSON.parse(row[1]); if (Array.isArray(parsed) && parsed.length) skills = parsed; } catch(e){}
+      } else if (row[0]==='skillConfigs' && row[1]) {
+        try { var parsedCfg = JSON.parse(row[1]); if (parsedCfg && typeof parsedCfg === 'object') skillConfigs = parsedCfg; } catch(e){}
+      }
+    });
   } catch(e){}
-  try {
-    var res2 = await sheetsGet(SHEET_CONFIG+'!A6:B6');
-    var row = (res2.values||[])[0];
-    if (row && row[0]==='skillList' && row[1]) {
-      var parsed = JSON.parse(row[1]);
-      if (Array.isArray(parsed) && parsed.length) skills = parsed;
-    }
-  } catch(e){}
+  migrateKnifeSkillsConfig();
   if (!activeSkill || skills.indexOf(activeSkill) === -1) activeSkill = skills[0];
 }
 
 async function saveSkillsConfig() {
-  try { await sheetsUpdate(SHEET_CONFIG+'!A6:B6', [['skillList', JSON.stringify(skills)]]); } catch(e){}
+  try { await sheetsUpdate(SHEET_CONFIG+'!A6:B7', [['skillList', JSON.stringify(skills)], ['skillConfigs', JSON.stringify(skillConfigs)]]); } catch(e){}
 }
 
 // ============================================================
@@ -530,9 +624,12 @@ async function syncNow() {
           var st = (skillStatus[c.id] && skillStatus[c.id][sk] && skillStatus[c.id][sk][name]) || null;
           if (!st) return;
           var scoreOut;
-          if (isKnifeSkill(sk)) {
-            var ov = knifeOverall(st.claw, st.grip);
+          var skType = skillType(sk);
+          if (skType === 'levels') {
+            var ov = computeOverall(sk, st);
             scoreOut = (ov===null||ov===undefined) ? '' : ov;
+          } else if (skType === 'log') {
+            scoreOut = (st.tagMastered && !st.logMasteryOverridden) ? 4 : '';
           } else {
             scoreOut = st.score||'';
           }
@@ -590,28 +687,50 @@ function renderGrid() {
     return;
   }
   var bucket = ensureStatusBucket(cls.id, activeSkill);
-  var knife = isKnifeSkill(activeSkill);
-  var masteredLabel = knife ? 'Exemplary' : 'Independent';
+  var type = skillType(activeSkill);
+  var cfg = skillConfig(activeSkill);
+  var masteredLabel = type==='tally' ? 'Independent'
+    : type==='levels' ? ((cfg.components && cfg.components[0] && cfg.components[0].levels[4]) || 'Exemplary')
+    : 'Mastered';
   var active = [], indep = [];
   cls.students.forEach(function(name){
     var st = bucket[name];
-    var mastered = knife ? (st && knifeOverall(st.claw, st.grip) === 4) : (st && st.score === 4);
+    var mastered;
+    if (type==='levels') mastered = st && computeOverall(activeSkill, st) === 4;
+    else if (type==='log') mastered = st && st.tagMastered && !st.logMasteryOverridden;
+    else mastered = st && st.score === 4;
     if (mastered) indep.push(name); else active.push(name);
   });
 
+  function cardHtml(name, cardClass, subTxt) {
+    return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
+      + '<div class="stu-name">'+name+'</div>'
+      + '<div class="stu-tally">'+subTxt+'</div>'
+      + '</div>';
+  }
+
   if (!active.length) {
     wrap.innerHTML = '<div class="empty-state">Everyone here has reached '+masteredLabel+' on '+activeSkill+'. &#127881;</div>';
-  } else if (knife) {
+  } else if (type === 'levels') {
+    var comps = cfg.components || [];
     wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
-      var st = bucket[name] || {claw:null, grip:null};
-      var overall = knifeOverall(st.claw, st.grip);
-      var cardClass = knifeLevelClass(overall);
-      var subTxt = (st.claw===null && st.grip===null) ? 'Not yet assessed'
-        : 'Claw: '+(st.claw===null?'-':KNIFE_LEVELS[st.claw])+' &middot; Grip: '+(st.grip===null?'-':KNIFE_LEVELS[st.grip]);
-      return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
-        + '<div class="stu-name">'+name+'</div>'
-        + '<div class="stu-tally">'+subTxt+'</div>'
-        + '</div>';
+      var st = bucket[name] || {};
+      var overall = computeOverall(activeSkill, st);
+      var cardClass = levelClass(overall);
+      var anySet = comps.some(function(c){ return getComponentValue(st, c.key) !== null; });
+      var subTxt = anySet ? comps.map(function(c){
+        var v = getComponentValue(st, c.key);
+        return truncLabel(c.label,10)+': '+(v===null?'-':c.levels[v]);
+      }).join(' &middot; ') : 'Not yet assessed';
+      return cardHtml(name, cardClass, subTxt);
+    }).join('') + '</div>';
+  } else if (type === 'log') {
+    wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
+      var st = bucket[name] || {tags:[]};
+      var n = (st.tags||[]).length;
+      var cardClass = n ? 'score-3' : 'score-none';
+      var subTxt = n ? n+' tag'+(n!==1?'s':'')+' observed' : 'Not yet assessed';
+      return cardHtml(name, cardClass, subTxt);
     }).join('') + '</div>';
   } else {
     wrap.innerHTML = '<div class="student-grid">' + active.map(function(name){
@@ -619,10 +738,7 @@ function renderGrid() {
       var notYetInSession = !st.lastSessionDate && !st.tally && !st.helpFlag;
       var cardClass = notYetInSession ? 'score-none' : scoreClass(st.helpFlag ? 1 : (st.tally===0 ? 4 : st.tally<=2 ? 3 : 2));
       var tallyTxt = notYetInSession ? 'Not yet assessed' : (st.tally ? st.tally+' prompt'+(st.tally!==1?'s':'') : 'No prompts yet');
-      return '<div class="stu-card '+cardClass+'" onclick="openPanel(\''+name.replace(/'/g,"\\'")+'\')">'
-        + '<div class="stu-name">'+name+'</div>'
-        + '<div class="stu-tally">'+tallyTxt+'</div>'
-        + '</div>';
+      return cardHtml(name, cardClass, tallyTxt);
     }).join('') + '</div>';
   }
 
@@ -649,13 +765,20 @@ function renderSessionInfo() {
 }
 
 function updateSkillChrome() {
-  var knife = isKnifeSkill(activeSkill);
+  var type = skillType(activeSkill);
+  var cfg = skillConfig(activeSkill);
   var std = document.getElementById('legend-standard');
-  var kn = document.getElementById('legend-knife');
+  var lv = document.getElementById('legend-levels');
   var sessionBar = document.getElementById('session-bar');
-  if (std) std.style.display = knife ? 'none' : 'flex';
-  if (kn) kn.style.display = knife ? 'flex' : 'none';
-  if (sessionBar) sessionBar.style.display = knife ? 'none' : 'flex';
+  if (std) std.style.display = (type==='tally') ? 'flex' : 'none';
+  if (lv) {
+    lv.style.display = (type==='levels') ? 'flex' : 'none';
+    if (type==='levels') {
+      var labels = (cfg.components && cfg.components[0] && cfg.components[0].levels) || ['No Effort','Guided Practice','Developing','Proficient','Exemplary'];
+      for (var i=0;i<5;i++) { var sp=document.getElementById('ll-'+i); if (sp) sp.textContent = labels[i]; }
+    }
+  }
+  if (sessionBar) sessionBar.style.display = (type==='tally') ? 'flex' : 'none';
 }
 
 function renderAll() {
@@ -694,7 +817,7 @@ function finalizeOpenSession(cls) {
 
 function startNewSession() {
   var cls = activeClass(); if (!cls || !activeSkill) return;
-  if (isKnifeSkill(activeSkill)) { alert('Knife Skills doesn\'t use lab sessions \u2014 just tap a student and set their claw and grip level directly.'); return; }
+  if (skillType(activeSkill) !== 'tally') { alert(activeSkill+' doesn\'t use lab sessions \u2014 just tap a student and record what you observed directly.'); return; }
   if (!confirm('Start a new lab session for '+activeSkill+' \u2014 '+cls.name+'?\nThis finalizes today\u2019s scores and resets prompt tallies for students still being monitored.')) return;
   finalizeOpenSession(cls);
   var today = new Date().toISOString().slice(0,10);
@@ -712,18 +835,37 @@ function startNewSession() {
 // ============================================================
 // ACTION PANEL
 // ============================================================
-function renderKnifeButtons(st) {
-  var overall = knifeOverall(st.claw, st.grip);
-  var overallEl = document.getElementById('ap-knife-overall');
-  overallEl.innerHTML = (overall===null)
-    ? 'Overall: <span class="score-pill score-none">Not yet assessed</span>'
-    : 'Overall: <span class="score-pill '+knifeLevelClass(overall)+'">'+KNIFE_LEVELS[overall]+'</span>';
-  document.getElementById('ap-claw-buttons').innerHTML = KNIFE_LEVELS.map(function(label, i){
-    return '<button class="level-btn lvl-'+i+(st.claw===i?' active':'')+'" onclick="setClawLevel('+i+')">'+label+'</button>';
-  }).reverse().join('');
-  document.getElementById('ap-grip-buttons').innerHTML = KNIFE_LEVELS.map(function(label, i){
-    return '<button class="level-btn lvl-'+i+(st.grip===i?' active':'')+'" onclick="setGripLevel('+i+')">'+label+'</button>';
-  }).reverse().join('');
+function renderLevelsButtons(st) {
+  var cfg = skillConfig(activeSkill);
+  var comps = cfg.components || [];
+  var overall = computeOverall(activeSkill, st);
+  var overallEl = document.getElementById('ap-levels-overall');
+  if (cfg.overallMode === 'none') {
+    overallEl.style.display = 'none';
+  } else {
+    overallEl.style.display = 'block';
+    overallEl.innerHTML = (overall===null || !comps.length)
+      ? 'Overall: <span class="score-pill score-none">Not yet assessed</span>'
+      : 'Overall: <span class="score-pill '+levelClass(overall)+'">'+comps[0].levels[overall]+'</span>';
+  }
+  document.getElementById('ap-levels-components').innerHTML = comps.map(function(c){
+    var val = getComponentValue(st, c.key);
+    var btns = c.levels.map(function(label, i){
+      return '<button class="level-btn lvl-'+i+(val===i?' active':'')+'" onclick="setComponentLevel(\''+c.key.replace(/'/g,"\\'")+'\','+i+')">'+label+'</button>';
+    }).reverse().join('');
+    return '<p style="font-size:12px;font-weight:700;color:#5F5E5A;margin:0 0 6px;">'+c.label+'</p>'
+      + '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px;">'+btns+'</div>';
+  }).join('');
+}
+
+function renderLogButtons(st) {
+  var cfg = skillConfig(activeSkill);
+  var tags = cfg.tags || [];
+  document.getElementById('ap-log-tags').innerHTML = tags.map(function(t){
+    var on = (st.tags||[]).indexOf(t.id) > -1;
+    return '<button class="tag-btn'+(on?' active':'')+'" onclick="tapTag(\''+t.id.replace(/'/g,"\\'")+'\')">'+(t.mastery?'<span class="tag-star">&#9733;</span> ':'')+t.label+'</button>';
+  }).join('');
+  document.getElementById('ap-log-undo-btn').style.display = (st.tagMastered && !st.logMasteryOverridden) ? 'block' : 'none';
 }
 
 function openPanel(name) {
@@ -732,12 +874,15 @@ function openPanel(name) {
   var st = ensureStudentEntry(cls.id, activeSkill, name);
   document.getElementById('ap-name').textContent = name;
   document.getElementById('ap-skill').textContent = activeSkill;
-  var knife = isKnifeSkill(activeSkill);
-  document.getElementById('ap-standard-sub').style.display = knife ? 'none' : 'block';
-  document.getElementById('ap-standard-actions').style.display = knife ? 'none' : 'block';
-  document.getElementById('ap-knife-rubric').style.display = knife ? 'block' : 'none';
-  if (knife) {
-    renderKnifeButtons(st);
+  var type = skillType(activeSkill);
+  document.getElementById('ap-standard-sub').style.display = (type==='tally') ? 'block' : 'none';
+  document.getElementById('ap-standard-actions').style.display = (type==='tally') ? 'block' : 'none';
+  document.getElementById('ap-levels-rubric').style.display = (type==='levels') ? 'block' : 'none';
+  document.getElementById('ap-log-rubric').style.display = (type==='log') ? 'block' : 'none';
+  if (type === 'levels') {
+    renderLevelsButtons(st);
+  } else if (type === 'log') {
+    renderLogButtons(st);
   } else {
     document.getElementById('ap-tally').textContent = st.tally || 0;
     var pill = document.getElementById('ap-score-pill');
@@ -757,28 +902,45 @@ function openPanel(name) {
   document.getElementById('action-panel').classList.add('visible');
 }
 
-function setClawLevel(i) {
+function setComponentLevel(key, i) {
   if (!actionStudent) return;
   var cls = activeClass();
   var st = currentStudentEntry();
-  st.claw = i;
+  setComponentValue(st, key, i);
   st.lastSessionDate = new Date().toISOString().slice(0,10);
   saveLocal();
-  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'claw_set', 0, i, '');
-  renderKnifeButtons(st);
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, key+'_set', 0, i, '');
+  renderLevelsButtons(st);
   renderGrid();
   syncNow();
 }
-function setGripLevel(i) {
+function tapTag(tagId) {
   if (!actionStudent) return;
   var cls = activeClass();
   var st = currentStudentEntry();
-  st.grip = i;
+  if (!st.tags) st.tags = [];
+  var idx = st.tags.indexOf(tagId);
+  var adding = idx === -1;
+  if (adding) { st.tags.push(tagId); st.logMasteryOverridden = false; } else st.tags.splice(idx,1);
   st.lastSessionDate = new Date().toISOString().slice(0,10);
+  recomputeLogMastery(activeSkill, st);
   saveLocal();
-  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'grip_set', 0, i, '');
-  renderKnifeButtons(st);
+  var cfg = skillConfig(activeSkill);
+  var tagObj = (cfg.tags||[]).find(function(t){return t.id===tagId;});
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, adding?'tag_set':'tag_unset', 0, '', tagObj?tagObj.label:tagId);
+  renderLogButtons(st);
   renderGrid();
+  syncNow();
+}
+function tapUndoLogMastery() {
+  if (!actionStudent) return;
+  var cls = activeClass();
+  var st = currentStudentEntry();
+  st.logMasteryOverridden = true;
+  saveLocal();
+  queueLog(cls.id, cls.name, activeSkill, actionStudent, 'undo_log_mastery', 0, '', '');
+  closePanel();
+  renderAll();
   syncNow();
 }
 function closePanel() {
@@ -861,11 +1023,17 @@ function tapSaveNote() {
 // ============================================================
 // SKILL MANAGER
 // ============================================================
+function skillTypeBadgeLabel(sk) {
+  var t = skillType(sk);
+  return t==='levels' ? 'Levels' : t==='log' ? 'Log' : 'Tally';
+}
 function openSkillManager() {
+  cancelSkillWizard();
   renderSkillManageList();
   document.getElementById('skill-modal-overlay').classList.add('visible');
 }
 function closeSkillManager() {
+  cancelSkillWizard();
   document.getElementById('skill-modal-overlay').classList.remove('visible');
   saveSkillsConfig();
   saveLocal();
@@ -874,33 +1042,180 @@ function closeSkillManager() {
 function renderSkillManageList() {
   var el = document.getElementById('skill-manage-list');
   el.innerHTML = skills.map(function(sk, i){
-    return '<div class="skill-row"><input value="'+sk.replace(/"/g,'&quot;')+'" onchange="renameSkill('+i+',this.value)"/><button class="skill-del" onclick="deleteSkill('+i+')">&times;</button></div>';
+    return '<div class="skill-row">'
+      + '<span class="skill-type-badge">'+skillTypeBadgeLabel(sk)+'</span>'
+      + '<input value="'+sk.replace(/"/g,'&quot;')+'" onchange="renameSkill('+i+',this.value)"/>'
+      + '<button class="small-btn" onclick="openSkillEditor(\''+sk.replace(/'/g,"\\'")+'\')">Edit setup</button>'
+      + '<button class="skill-del" onclick="deleteSkill('+i+')">&times;</button>'
+      + '</div>';
   }).join('');
 }
 function renameSkill(i, val) {
   val = val.trim(); if (!val) return;
   var old = skills[i];
+  if (val === old) return;
   skills[i] = val;
   Object.keys(skillStatus).forEach(function(cid){ if (skillStatus[cid][old]) { skillStatus[cid][val] = skillStatus[cid][old]; delete skillStatus[cid][old]; } });
+  if (skillConfigs[old]) { skillConfigs[val] = skillConfigs[old]; delete skillConfigs[old]; }
   if (activeSkill === old) activeSkill = val;
   saveLocal();
+  renderSkillManageList();
 }
 function deleteSkill(i) {
   if (skills.length <= 1) { alert('You need at least one skill.'); return; }
   var sk = skills[i];
   if (!confirm('Remove "'+sk+'"? Its saved scores will stay in your Sheet\u2019s skillLog but will disappear from the app.')) return;
   skills.splice(i,1);
+  delete skillConfigs[sk];
   if (activeSkill === sk) activeSkill = skills[0];
   renderSkillManageList();
   saveLocal();
 }
-function addSkill() {
-  var inp = document.getElementById('new-skill-input');
-  var val = inp.value.trim();
-  if (!val) return;
-  if (skills.indexOf(val) > -1) { alert('That skill already exists.'); return; }
-  skills.push(val);
-  inp.value = '';
+
+// ---- create/edit wizard (shared by "+ New skill" and "Edit setup") ----
+var nswEditingSkill = null;   // null = creating new; else original skill name being edited
+var nswType = null;           // 'levels' | 'log' (tally is never offered here -- retired for new skills)
+var nswComponents = [];       // [{key,label,levels:[5 strings]}]
+var nswTags = [];             // [{id,label,mastery}]
+var nswOverallMode = 'min';
+
+function startNewSkillType() {
+  nswEditingSkill = null;
+  nswType = null;
+  nswComponents = [{key:'c1', label:'', levels:['','','','','']}];
+  nswTags = [{id:uid(), label:'', mastery:false}];
+  nswOverallMode = 'min';
+  document.getElementById('nsw-name-input').value = '';
+  document.getElementById('nsw-open-row').style.display = 'none';
+  document.getElementById('nsw-wizard').style.display = 'block';
+  renderNswTypePicker();
+  renderNswBuilder();
+}
+function openSkillEditor(sk) {
+  var cfg = skillConfig(sk);
+  if (cfg.type === 'tally') { alert('"'+sk+'" uses the simple tally tracker and has no extra setup to edit \u2014 rename it using the field above.'); return; }
+  nswEditingSkill = sk;
+  nswType = cfg.type;
+  nswComponents = cfg.type==='levels' ? JSON.parse(JSON.stringify(cfg.components||[])) : [];
+  nswTags = cfg.type==='log' ? JSON.parse(JSON.stringify(cfg.tags||[])) : [];
+  nswOverallMode = cfg.overallMode || 'min';
+  document.getElementById('nsw-name-input').value = sk;
+  document.getElementById('nsw-open-row').style.display = 'none';
+  document.getElementById('nsw-wizard').style.display = 'block';
+  renderNswTypePicker();
+  renderNswBuilder();
+}
+function cancelSkillWizard() {
+  nswEditingSkill = null; nswType = null; nswComponents = []; nswTags = [];
+  var wiz = document.getElementById('nsw-wizard'); if (wiz) wiz.style.display = 'none';
+  var row = document.getElementById('nsw-open-row'); if (row) row.style.display = 'block';
+}
+function renderNswTypePicker() {
+  var wrap = document.getElementById('nsw-type-picker');
+  if (nswEditingSkill) {
+    // Type is locked once a skill exists (and may already have data) --
+    // never offer a switcher here, which is the whole enforcement.
+    wrap.innerHTML = '<span class="skill-type-badge">'+(nswType==='levels'?'Rating Levels':'Observation Log')+'</span>';
+    return;
+  }
+  wrap.innerHTML = ['levels','log'].map(function(t){
+    var label = t==='levels' ? 'Rating Levels' : 'Observation Log';
+    return '<button class="nsw-type-toggle'+(nswType===t?' active':'')+'" onclick="setNswType(\''+t+'\')">'+label+'</button>';
+  }).join('');
+}
+function setNswType(t) {
+  nswType = t;
+  if (t==='levels' && !nswComponents.length) nswComponents = [{key:'c1', label:'', levels:['','','','','']}];
+  if (t==='log' && !nswTags.length) nswTags = [{id:uid(), label:'', mastery:false}];
+  renderNswTypePicker();
+  renderNswBuilder();
+}
+function renderNswBuilder() {
+  var wrap = document.getElementById('nsw-builder');
+  if (!nswType) { wrap.innerHTML = '<p style="font-size:12px;color:#5F5E5A;">Pick how you want to track this skill.</p>'; return; }
+  if (nswType === 'levels') {
+    wrap.innerHTML = '<p style="font-size:12px;color:#5F5E5A;margin-bottom:8px;">One component per thing you rate (e.g. "Claw", "Grip"). Each gets its own 5-level scale, worst (bottom) to best (top).</p>'
+      + nswComponents.map(function(c, i){
+          var removeDisabled = nswEditingSkill && componentHasData(nswEditingSkill, c.key);
+          return '<div class="nsw-box">'
+            + '<div style="display:flex;gap:6px;align-items:center;">'
+            + '<input value="'+(c.label||'').replace(/"/g,'&quot;')+'" placeholder="Component name (e.g. Claw)" oninput="updateNswComponentLabel('+i+',this.value)" style="flex:1;"/>'
+            + (removeDisabled ? '' : '<button class="nsw-remove" onclick="removeNswComponent('+i+')" title="Remove">&times;</button>')
+            + '</div>'
+            + c.levels.map(function(lv, li){
+                return '<input value="'+(lv||'').replace(/"/g,'&quot;')+'" placeholder="Level '+li+' label" oninput="updateNswComponentLevel('+i+','+li+',this.value)"/>';
+              }).join('')
+            + '</div>';
+        }).join('')
+      + '<button class="small-btn" onclick="addNswComponent()">+ Component</button>'
+      + '<div style="margin-top:14px;">'
+      + '<p style="font-size:12px;font-weight:700;color:#5F5E5A;margin-bottom:6px;">When there are multiple components, show an overall score as...</p>'
+      + '<button class="nsw-type-toggle'+(nswOverallMode==='min'?' active':'')+'" onclick="setNswOverallMode(\'min\')">Combined (lowest governs)</button>'
+      + '<button class="nsw-type-toggle'+(nswOverallMode==='none'?' active':'')+'" onclick="setNswOverallMode(\'none\')">Show separately</button>'
+      + '</div>';
+  } else if (nswType === 'log') {
+    wrap.innerHTML = '<p style="font-size:12px;color:#5F5E5A;margin-bottom:8px;">Tags you can tap during an observation. Mark one or more as a mastery signal \u2014 a student moves to the mastered list once you\'ve tapped any mastery tag for them.</p>'
+      + nswTags.map(function(t, i){
+          var removeDisabled = nswEditingSkill && tagHasData(nswEditingSkill, t.id);
+          return '<div class="nsw-box" style="display:flex;align-items:center;gap:6px;">'
+            + '<input value="'+(t.label||'').replace(/"/g,'&quot;')+'" placeholder="Tag label" oninput="updateNswTagLabel('+i+',this.value)" style="flex:1;margin-bottom:0;"/>'
+            + '<label style="font-size:11px;color:#5F5E5A;display:flex;align-items:center;gap:4px;white-space:nowrap;"><input type="checkbox" '+(t.mastery?'checked':'')+' onchange="updateNswTagMastery('+i+',this.checked)"/> mastery</label>'
+            + (removeDisabled ? '' : '<button class="nsw-remove" onclick="removeNswTag('+i+')" title="Remove">&times;</button>')
+            + '</div>';
+        }).join('')
+      + '<button class="small-btn" onclick="addNswTag()">+ Tag</button>';
+  }
+}
+function updateNswComponentLabel(i, val) { nswComponents[i].label = val; }
+function updateNswComponentLevel(i, li, val) { nswComponents[i].levels[li] = val; }
+function addNswComponent() { nswComponents.push({key:'c'+uid(), label:'', levels:['','','','','']}); renderNswBuilder(); }
+function removeNswComponent(i) {
+  if (nswComponents.length <= 1) { alert('A Rating Levels skill needs at least one component.'); return; }
+  nswComponents.splice(i,1);
+  renderNswBuilder();
+}
+function setNswOverallMode(m) { nswOverallMode = m; renderNswBuilder(); }
+function updateNswTagLabel(i, val) { nswTags[i].label = val; }
+function updateNswTagMastery(i, val) { nswTags[i].mastery = val; }
+function addNswTag() { nswTags.push({id:uid(), label:'', mastery:false}); renderNswBuilder(); }
+function removeNswTag(i) {
+  if (nswTags.length <= 1) { alert('An Observation Log skill needs at least one tag.'); return; }
+  nswTags.splice(i,1);
+  renderNswBuilder();
+}
+function finalizeSkillWizard() {
+  var name = document.getElementById('nsw-name-input').value.trim();
+  if (!name) { alert('Give the skill a name first.'); return; }
+  if (!nswType) { alert('Pick how you want to track this skill.'); return; }
+  if (skills.indexOf(name) > -1 && name !== nswEditingSkill) { alert('That skill already exists.'); return; }
+
+  var defaultLevels = ['No Effort', 'Guided Practice', 'Developing', 'Proficient', 'Exemplary'];
+  var cleanComponents = nswComponents.map(function(c){
+    return {key:c.key, label:(c.label||'').trim()||'Component', levels:c.levels.map(function(l,i){ return (l||'').trim()||defaultLevels[i]; })};
+  });
+  var cleanTags = nswTags.map(function(t){ return {id:t.id, label:(t.label||'').trim()||'Observed', mastery:!!t.mastery}; });
+
+  if (nswType === 'levels' && !cleanComponents.length) { alert('Add at least one component.'); return; }
+  if (nswType === 'log' && !cleanTags.length) { alert('Add at least one tag.'); return; }
+
+  var newCfg = nswType==='levels'
+    ? {type:'levels', overallMode:nswOverallMode, components:cleanComponents}
+    : {type:'log', tags:cleanTags};
+
+  if (nswEditingSkill) {
+    if (name !== nswEditingSkill) {
+      var idx = skills.indexOf(nswEditingSkill);
+      if (idx > -1) skills[idx] = name;
+      Object.keys(skillStatus).forEach(function(cid){ if (skillStatus[cid][nswEditingSkill]) { skillStatus[cid][name] = skillStatus[cid][nswEditingSkill]; delete skillStatus[cid][nswEditingSkill]; } });
+      if (activeSkill === nswEditingSkill) activeSkill = name;
+      delete skillConfigs[nswEditingSkill];
+    }
+    skillConfigs[name] = newCfg;
+  } else {
+    skills.push(name);
+    skillConfigs[name] = newCfg;
+  }
+  cancelSkillWizard();
   renderSkillManageList();
   saveLocal();
 }
