@@ -22,7 +22,7 @@
   button, input { font-family: inherit; }
   button:focus-visible, input:focus-visible { outline: 4px solid var(--go); outline-offset: 3px; }
 
-  #app { display: grid; grid-template-columns: minmax(0, 1fr) 310px 330px; height: 100vh; }
+  #app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(230px, 23vw, 310px) clamp(250px, 24vw, 330px); height: 100vh; }
   #app > * { overflow-y: auto; }
   #main { padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; }
   #ticket { background: var(--panel); border-left: 4px solid var(--ink); padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; }
@@ -81,7 +81,28 @@
   .labels { display: flex; flex-wrap: wrap; gap: 16px; align-content: flex-start; flex: 1; min-height: 0; overflow-y: auto; }
   .label { width: 320px; padding: 18px 20px; border: 3px dashed var(--ink); border-radius: 14px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
 
-  @media (max-width: 1100px) {
+  /* smaller screens: keep the ticket and queue on the side, just make everything a bit tighter */
+  @media (max-width: 1200px) {
+    #main { padding: 20px 20px; gap: 14px; }
+    #ticket { padding: 20px 14px; }
+    #queue { padding: 20px 14px; }
+    h1 { font-size: 34px; }
+    .side-title { font-size: 26px; }
+    .drinks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .drink { min-height: 150px; font-size: 21px; }
+    .drink svg { width: 64px; height: 64px; }
+    .tile { font-size: 20px; padding: 10px 14px; min-height: 68px; }
+    .tile.big { font-size: 24px; min-height: 76px; }
+    .crumb { font-size: 16px; padding: 10px 4px; }
+    .primary, .secondary { font-size: 22px; padding: 0 24px; min-height: 64px; }
+    .text-input { font-size: 28px; height: 68px; }
+    .qcard .name { font-size: 26px; }
+    .t-title { font-size: 21px; }
+    .t-detail, .qcard .items { font-size: 18px; }
+    .label { width: 100%; }
+  }
+  /* very narrow windows only (phones): stack */
+  @media (max-width: 700px) {
     #app { grid-template-columns: 1fr; height: auto; }
     #app > * { overflow-y: visible; }
     #ticket, #queue { border-left: none; border-top: 4px solid var(--ink); }
