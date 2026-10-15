@@ -585,7 +585,13 @@ async function loadSkillsConfig() {
 }
 
 async function saveSkillsConfig() {
-  try { await sheetsUpdate(SHEET_CONFIG+'!A6:B7', [['skillList', JSON.stringify(skills)], ['skillConfigs', JSON.stringify(skillConfigs)]]); } catch(e){}
+  setSyncStatus('syncing', 'Saving skill setup...');
+  try {
+    await sheetsUpdate(SHEET_CONFIG+'!A6:B7', [['skillList', JSON.stringify(skills)], ['skillConfigs', JSON.stringify(skillConfigs)]]);
+    setSyncStatus('synced', 'Skill setup saved ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
+  } catch(e) {
+    setSyncStatus('error', 'Skill setup didn\u2019t save \u2014 stay connected and reopen Manage skills to retry.');
+  }
 }
 
 // ============================================================
@@ -1041,6 +1047,7 @@ function renameSkill(i, val) {
   if (skillConfigs[old]) { skillConfigs[val] = skillConfigs[old]; delete skillConfigs[old]; }
   if (activeSkill === old) activeSkill = val;
   saveLocal();
+  saveSkillsConfig();
   renderSkillManageList();
 }
 function deleteSkill(i) {
@@ -1052,6 +1059,7 @@ function deleteSkill(i) {
   if (activeSkill === sk) activeSkill = skills[0];
   renderSkillManageList();
   saveLocal();
+  saveSkillsConfig();
 }
 
 // ---- create/edit wizard (shared by "+ New skill" and "Edit setup") ----
@@ -1200,6 +1208,7 @@ function finalizeSkillWizard() {
   cancelSkillWizard();
   renderSkillManageList();
   saveLocal();
+  saveSkillsConfig();
 }
 
 // ============================================================
