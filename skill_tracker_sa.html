@@ -544,6 +544,7 @@ function saveLocal() {
 }
 function loadLocal() {
   try {
+    var sk = localStorage.getItem('skl_skills'); if (sk) { var parsedSkills = JSON.parse(sk); if (Array.isArray(parsedSkills) && parsedSkills.length) skills = parsedSkills; }
     var sc = localStorage.getItem('skl_skillconfigs'); if (sc) skillConfigs = JSON.parse(sc);
     var s = localStorage.getItem('skl_status'); if (s) skillStatus = JSON.parse(s);
     var q = localStorage.getItem('skl_logqueue'); if (q) logQueue = JSON.parse(q);
@@ -569,25 +570,46 @@ async function loadRoster() {
 }
 
 async function loadSkillsConfig() {
+  // Classroom Tracker owns config!A1:B8 on this same Sheet and rewrites
+  // that whole range constantly (every 15s, plus after every pass/
+  // attendance action). skillList/skillConfigs used to live at A6:B7,
+  // which collided with Classroom Tracker's eventsData/kioskMode rows
+  // and got silently overwritten within seconds of being saved -- that
+  // was the real cause of skills "disappearing". They now live at
+  // A9:B10, just past Classroom Tracker's claimed rows. This still
+  // checks the old A6:B7 spot too, so anything saved there before this
+  // fix (and not yet overwritten) is picked up and carried forward.
+  var usedLegacyRange = false;
   try {
-    var res2 = await sheetsGet(SHEET_CONFIG+'!A6:B7');
+    var res2 = await sheetsGet(SHEET_CONFIG+'!A6:B10');
     var rows = res2.values || [];
-    rows.forEach(function(row){
-      if (row[0]==='skillList' && row[1]) {
-        try { var parsed = JSON.parse(row[1]); if (Array.isArray(parsed) && parsed.length) skills = parsed; } catch(e){}
-      } else if (row[0]==='skillConfigs' && row[1]) {
-        try { var parsedCfg = JSON.parse(row[1]); if (parsedCfg && typeof parsedCfg === 'object') skillConfigs = parsedCfg; } catch(e){}
-      }
-    });
+    function applySkillList(row) {
+      if (!row || row[0] !== 'skillList' || !row[1]) return false;
+      try { var parsed = JSON.parse(row[1]); if (Array.isArray(parsed) && parsed.length) { skills = parsed; return true; } } catch(e){}
+      return false;
+    }
+    function applySkillConfigs(row) {
+      if (!row || row[0] !== 'skillConfigs' || !row[1]) return false;
+      try { var parsedCfg = JSON.parse(row[1]); if (parsedCfg && typeof parsedCfg === 'object') { skillConfigs = parsedCfg; return true; } } catch(e){}
+      return false;
+    }
+    var gotListFromNew = applySkillList(rows[3]);
+    var gotCfgFromNew = applySkillConfigs(rows[4]);
+    if (!gotListFromNew && applySkillList(rows[0])) usedLegacyRange = true;
+    if (!gotCfgFromNew && applySkillConfigs(rows[1])) usedLegacyRange = true;
   } catch(e){}
   migrateKnifeSkillsConfig();
   if (!activeSkill || skills.indexOf(activeSkill) === -1) activeSkill = skills[0];
+  // One-time forward migration: good data was only found in the old,
+  // now-unsafe spot -- re-save it immediately rather than waiting for
+  // the next skill edit.
+  if (usedLegacyRange) saveSkillsConfig();
 }
 
 async function saveSkillsConfig() {
   setSyncStatus('syncing', 'Saving skill setup...');
   try {
-    await sheetsUpdate(SHEET_CONFIG+'!A6:B7', [['skillList', JSON.stringify(skills)], ['skillConfigs', JSON.stringify(skillConfigs)]]);
+    await sheetsUpdate(SHEET_CONFIG+'!A9:B10', [['skillList', JSON.stringify(skills)], ['skillConfigs', JSON.stringify(skillConfigs)]]);
     setSyncStatus('synced', 'Skill setup saved ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}));
   } catch(e) {
     setSyncStatus('error', 'Skill setup didn\u2019t save \u2014 stay connected and reopen Manage skills to retry.');

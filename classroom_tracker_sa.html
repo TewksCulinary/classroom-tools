@@ -630,6 +630,12 @@ async function syncToSheets() {
   var rosterData = {};
   cfg.classes.forEach(function(c){ rosterData[c.id]={name:c.name,students:c.students||[]}; });
 
+  // NOTE: this writes A1:B8 below -- rows 1-8 of the "config" tab are this
+  // file's own. The Skill Tracker (skill_tracker_sa.html) uses the SAME
+  // Sheet/tab for its skillList/skillConfigs, at A9:B10 -- keep this array
+  // at 8 entries (or move the Skill Tracker's rows again) rather than
+  // letting it grow into row 9+, which silently clobbered the Skill
+  // Tracker's data once already.
   var configData = [
     ['kioskClassId', kioskActiveClassId||''],
     ['destLib', JSON.stringify(destLib)],
