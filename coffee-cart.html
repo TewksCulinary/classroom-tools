@@ -158,12 +158,12 @@
   // ---------- menu data (edit here to change the menu) ----------
   var DRINKS = [
     { id: 'mocha',     name: 'Mocha',              color: '#6B3F2A', steps: ['temp', 'sauce', 'milk', 'flavor'] },
-    { id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['temp', 'sauce', 'milk', 'flavor'] },
-    { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'sauce', 'flavor'] },
-    { id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['sauce', 'milk', 'flavor'] },
-    { id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['sauce', 'milk', 'flavor'] },
-    { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], sfOnly: true },
-    { id: 'soda',      name: 'Italian Soda',       color: '#7FB8DA', steps: ['flavor'] },
+    { id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['temp', 'milk', 'flavor'], sauceOnFlavor: true },
+    { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'flavor'], sauceOnFlavor: true },
+    { id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['milk', 'flavor'], sauceOnFlavor: true },
+    { id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['milk', 'flavor'], sauceOnFlavor: true },
+    { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], sfOnly: true, icon: 'iced' },
+    { id: 'soda',      name: 'Italian Soda',       color: '#7FB8DA', steps: ['flavor'], icon: 'iced' },
     { id: 'tea',       name: 'Tea',                color: '#9DB86A', steps: ['temp', 'tea', 'flavor'] }
   ];
   DRINKS.forEach(function (d) { d.steps = d.steps.concat('notes'); });
@@ -268,6 +268,14 @@
   var CHECK = '<svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="#2B1D14"/><path d="M10 18.5l5.5 5.5L26 12.5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
   function cup(color) {
     return '<svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true"><path d="M16 28h40v26a16 16 0 0 1-16 16h-8a16 16 0 0 1-16-16z" fill="' + color + '" stroke="#2B1D14" stroke-width="4" stroke-linejoin="round"/><path d="M56 34h6a8 8 0 0 1 0 16h-6" fill="none" stroke="#2B1D14" stroke-width="4"/><path d="M28 8c-4 4 4 6 0 12M40 8c-4 4 4 6 0 12" fill="none" stroke="#2B1D14" stroke-width="3" stroke-linecap="round"/></svg>';
+  }
+  function glass(color) {
+    return '<svg width="84" height="84" viewBox="0 0 84 84" aria-hidden="true">' +
+      '<path d="M50 4L43 40" fill="none" stroke="#2B1D14" stroke-width="5" stroke-linecap="round"/>' +
+      '<path d="M20 22h44l-5 50a4 4 0 0 1-4 3H29a4 4 0 0 1-4-3z" fill="' + color + '" stroke="#2B1D14" stroke-width="4" stroke-linejoin="round"/>' +
+      '<rect x="29" y="30" width="15" height="15" rx="3" fill="#FFFFFF" fill-opacity="0.75" stroke="#2B1D14" stroke-width="3" transform="rotate(-10 36 37)"/>' +
+      '<rect x="42" y="46" width="14" height="14" rx="3" fill="#FFFFFF" fill-opacity="0.75" stroke="#2B1D14" stroke-width="3" transform="rotate(12 49 53)"/>' +
+      '<rect x="30" y="52" width="12" height="12" rx="3" fill="#FFFFFF" fill-opacity="0.75" stroke="#2B1D14" stroke-width="3" transform="rotate(-6 36 58)"/></svg>';
   }
   function tile(label, on, action, v, extraClass, key) {
     return '<button class="tile ' + (extraClass || '') + (on ? ' on' : '') + '" aria-pressed="' + (on ? 'true' : 'false') + '" data-action="' + action + '" data-v="' + esc(v) + '"' + (key ? ' data-key="' + key + '"' : '') + '><span>' + esc(label) + '</span>' + (on ? CHECK : '') + '</button>';
@@ -441,7 +449,7 @@
 
     if (state.screen === 'drink') {
       html += '<h1>What drink is it?</h1><div class="drinks">' + DRINKS.map(function (x) {
-        return '<button class="drink" data-action="pickDrink" data-v="' + x.id + '">' + cup(x.color) + '<span>' + esc(x.name) + '</span></button>';
+        return '<button class="drink" data-action="pickDrink" data-v="' + x.id + '">' + (x.icon === 'iced' ? glass(x.color) : cup(x.color)) + '<span>' + esc(x.name) + '</span></button>';
       }).join('') + '</div>';
     }
 
@@ -450,7 +458,9 @@
 
       if (key === 'flavor') {
         var showReg = !d.sfOnly;
-        var none = tile('No flavor', state.flavors.length === 0, 'noFlavor', 'none');
+        var withSauce = !!d.sauceOnFlavor;
+        var noneOn = state.flavors.length === 0 && !(withSauce && state.sel.sauce);
+        var none = tile(withSauce ? 'No flavor or sauce' : 'No flavor', noneOn, 'noFlavor', 'none');
         var regTiles = FLAVORS.map(function (f) { return tile(f, state.flavors.indexOf(f) >= 0, 'toggleFlavor', f); });
         var sfTiles = SF_FLAVORS.map(function (f) { return tile(f, state.flavors.indexOf('Sugar Free ' + f) >= 0, 'toggleFlavor', 'Sugar Free ' + f); });
         body += '<div style="display:flex;flex-direction:column;gap:12px">';
@@ -460,7 +470,12 @@
         } else {
           body += '<div class="section-label">Sugar free flavors</div><div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + none + sfTiles.join('') + '</div>';
         }
+        if (withSauce) {
+          body += '<div class="section-label" style="margin-top:6px">Sauces <span class="muted" style="font-size:20px;font-weight:400">(pick one)</span></div><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+            SAUCES.map(function (n) { return tile(n, state.sel.sauce === n, 'pickSauce', n); }).join('') + '</div>';
+        }
         body += '</div>';
+        if (withSauce) { title = 'Add a flavor or sauce?'; hint = 'Tap as many flavors as you want, and one sauce if you like. Or leave it on No flavor or sauce.'; }
       } else if (key === 'notes') {
         body += '<div style="display:flex;flex-direction:column;gap:14px">' +
           '<label class="section-label" for="drinkNotes">Type a note</label>' +
@@ -637,7 +652,8 @@
       var i = state.flavors.indexOf(v);
       if (i >= 0) state.flavors.splice(i, 1); else state.flavors.push(v);
     },
-    noFlavor: function () { state.flavors = []; },
+    noFlavor: function () { state.flavors = []; delete state.sel.sauce; },
+    pickSauce: function (v) { if (state.sel.sauce === v) delete state.sel.sauce; else state.sel.sauce = v; },
     toggleChip: function (v) {
       var chips = state.sel.chips || [];
       var i = chips.indexOf(v);
