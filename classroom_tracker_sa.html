@@ -234,6 +234,17 @@
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="student-grid"></div>
     </div>
 
+    <!-- Random Picker -->
+    <div class="section">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <p class="sec-label" style="margin:0;">Random picker</p>
+        <button class="small-btn" onclick="resetPicker()">Reset round</button>
+      </div>
+      <p style="font-size:11px;color:#5F5E5A;margin-bottom:10px;" id="picker-status">&nbsp;</p>
+      <div id="picker-result" style="min-height:14px;"></div>
+      <button class="primary-btn" onclick="drawPickerName()">&#127922; Pick a name</button>
+    </div>
+
     <!-- Kiosk control -->
     <div class="section">
       <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -765,6 +776,7 @@ var activeEventId = null;
 var eventSyncError = '';
 var kioskMode = 'class';
 var kioskEventId = null;
+var pickerPicked = {};     // pickerPicked[classId][dateKey] = [names already drawn this round]
 
 // ============================================================
 // LOCAL STORAGE
@@ -800,6 +812,13 @@ function loadStorage() {
     if(ed) eventData=JSON.parse(ed);
     return !!(c&&cfg.classes&&cfg.classes.length);
   }catch(e){return false;}
+}
+
+function loadPickerState(){
+  try{ var p=localStorage.getItem('ct_picker'); if(p) pickerPicked=JSON.parse(p); }catch(e){}
+}
+function savePickerState(){
+  try{ localStorage.setItem('ct_picker', JSON.stringify(pickerPicked)); }catch(e){}
 }
 
 // ============================================================
@@ -913,7 +932,7 @@ function renderClassTabs(){
     return '<button class="period-tab '+(c.id===activeClassId?'active':'')+'" onclick="switchClass(\''+c.id+'\')">'+c.name+'</button>';
   }).join('');
 }
-function switchClass(id){activeClassId=id;renderAll();}
+function switchClass(id){activeClassId=id;var pr=document.getElementById('picker-result');if(pr)pr.innerHTML='';renderAll();}
 
 function toggleAbsentMode(){
   if(clockInMode) toggleClockInMode();
@@ -1062,7 +1081,7 @@ function renderTodayLog(){
 }
 
 function promptEditDest(name,eventId){var dest=prompt('Enter destination for '+name+':','');if(dest!==null&&dest.trim())editDestination(activeClassId,name,eventId,dest.trim());}
-function renderAll(){renderClassTabs();renderGrid();renderSummary();renderTodayLog();}
+function renderAll(){renderClassTabs();renderGrid();renderSummary();renderTodayLog();renderPickerStatus();}
 
 function openPanel(name){
   if(absentMode){tapAbsentMode(name);return;}
@@ -1437,13 +1456,66 @@ function addNewClass(){
 function clearAllHistory(){if(!confirm('Clear ALL history? Cannot be undone.'))return;passData={};save();showPhase('phase-tracker');renderAll();}
 function resetEverything(){
   if(!confirm('Full reset - delete all data?'))return;
-  ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data'].forEach(function(k){localStorage.removeItem(k);});
-  cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};
+  ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data','ct_picker'].forEach(function(k){localStorage.removeItem(k);});
+  cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};pickerPicked={};
   activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;
   document.querySelectorAll('.num-btn').forEach(function(b){b.classList.remove('active');});
   ['s-names','s-rosters','s-thresholds'].forEach(function(id){document.getElementById(id).style.display='none';});
   if(tickerInterval)clearInterval(tickerInterval);if(syncInterval)clearInterval(syncInterval);
   showPhase('phase-sheet-setup');
+}
+
+// ============================================================
+// RANDOM PICKER
+// ============================================================
+function presentStudentsForPicker(classId){
+  var cls=classById(classId); if(!cls) return [];
+  return cls.students.filter(function(name){ return getStudentStatus(classId,name)==='present'; });
+}
+function pickerPool(classId){
+  var t=todayKey();
+  if(!pickerPicked[classId]) pickerPicked[classId]={};
+  if(!pickerPicked[classId][t]) pickerPicked[classId][t]=[];
+  var picked=pickerPicked[classId][t];
+  var present=presentStudentsForPicker(classId);
+  var remaining=present.filter(function(n){return picked.indexOf(n)===-1;});
+  return {present:present, picked:picked, remaining:remaining};
+}
+function renderPickerStatus(){
+  var el=document.getElementById('picker-status'); if(!el) return;
+  if(!activeClassId){ el.innerHTML='&nbsp;'; return; }
+  var pool=pickerPool(activeClassId);
+  if(!pool.present.length){ el.textContent='No students marked Present yet \u2014 clock someone in first.'; return; }
+  el.textContent = pool.remaining.length+' of '+pool.present.length+' present student'+(pool.present.length!==1?'s':'')+' left this round';
+}
+function renderPickerResult(name){
+  var el=document.getElementById('picker-result'); if(!el) return;
+  el.innerHTML = '<div style="font-size:22px;font-weight:700;color:#185FA5;text-align:center;padding:10px 8px;">'+name+'</div>';
+}
+function drawPickerName(){
+  if(!activeClassId) return;
+  var pool=pickerPool(activeClassId);
+  if(!pool.present.length){ alert('No students are marked Present right now \u2014 clock someone in first (use the Mark Present button above).'); return; }
+  var remaining=pool.remaining;
+  if(!remaining.length){
+    // Everyone present has had a turn this round -- reshuffle and start over.
+    pickerPicked[activeClassId][todayKey()]=[];
+    remaining=pool.present.slice();
+  }
+  var name=remaining[Math.floor(Math.random()*remaining.length)];
+  pickerPicked[activeClassId][todayKey()].push(name);
+  savePickerState();
+  renderPickerResult(name);
+  renderPickerStatus();
+}
+function resetPicker(){
+  if(!activeClassId) return;
+  if(!confirm('Reset the picker for this class? Everyone present becomes eligible again.')) return;
+  if(!pickerPicked[activeClassId]) pickerPicked[activeClassId]={};
+  pickerPicked[activeClassId][todayKey()]=[];
+  savePickerState();
+  var el=document.getElementById('picker-result'); if(el) el.innerHTML='';
+  renderPickerStatus();
 }
 
 // INIT
@@ -1452,6 +1524,7 @@ function init(){
   if(savedSheet){
     SHEET_ID=savedSheet;
     var hasData=loadStorage();
+    loadPickerState();
     if(hasData&&cfg.classes&&cfg.classes.length>0){activeClassId=cfg.classes[0].id;launchTracker();}
     else showPhase('phase-setup');
   } else {
