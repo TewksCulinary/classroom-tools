@@ -255,11 +255,7 @@
         <button class="small-btn" onclick="setKioskClass()" style="background:#185FA5;color:#ffffff;border-color:#185FA5;">Set active</button>
       </div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Kiosk shows: <strong id="kiosk-active-label">not set</strong></div>
-      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
-        <label style="font-size:12px;color:#5F5E5A;">Max students out at once:</label>
-        <input type="number" id="kiosk-pass-cap-input" min="1" max="20" value="2" style="width:54px;border:1.5px solid #B4B2A9;border-radius:6px;padding:5px 6px;font-size:13px;text-align:center;" />
-        <button class="small-btn" onclick="setKioskPassCap()">Save</button>
-      </div>
+      <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Max students out at once: <strong id="kiosk-pass-cap-display">2</strong> &mdash; change in Settings &#9881; &rarr; Alert thresholds</div>
     </div>
 
     <div class="section">
@@ -397,6 +393,11 @@
       <div class="slider-row">
         <input type="range" id="cfg-timeout" min="3" max="20" value="7" oninput="document.getElementById('cfg-to-lbl').textContent=this.value+' min'" />
         <span class="slider-val" id="cfg-to-lbl">7 min</span>
+      </div>
+      <p style="font-size:12px;color:#5F5E5A;margin-top:8px;margin-bottom:4px;">Max students out at once (kiosk):</p>
+      <div class="slider-row">
+        <input type="range" id="cfg-pass-cap" min="1" max="20" value="2" oninput="document.getElementById('cfg-pc-lbl').textContent=this.value" />
+        <span class="slider-val" id="cfg-pc-lbl">2</span>
       </div>
       <button class="small-btn" style="margin-top:10px;" onclick="saveThresholds()">Save thresholds</button>
     </div>
@@ -890,8 +891,8 @@ function updateKioskLabel(){
   }
   var lbl=document.getElementById('kiosk-active-label');if(lbl)lbl.textContent=text;
   var lbl2=document.getElementById('kiosk-active-label-events');if(lbl2)lbl2.textContent=text;
-  var capInp=document.getElementById('kiosk-pass-cap-input');
-  if(capInp && document.activeElement!==capInp) capInp.value=kioskPassCap;
+  var capDisp=document.getElementById('kiosk-pass-cap-display');
+  if(capDisp) capDisp.textContent=kioskPassCap;
 }
 
 // ============================================================
@@ -1040,14 +1041,6 @@ function editDestination(classId,name,eventId,dest){
   if(trip){trip.destination=dest;save();renderAll();}
 }
 function setKioskClass(){kioskMode='class';kioskActiveClassId=activeClassId;save();updateKioskLabel();var cls=classById(activeClassId);alert('Kiosk set to: '+(cls?cls.name:'this class'));}
-function setKioskPassCap(){
-  var inp=document.getElementById('kiosk-pass-cap-input');
-  var n=parseInt(inp.value,10);
-  if(!n||n<1){alert('Enter a number 1 or greater.');return;}
-  kioskPassCap=n;
-  save();
-  alert('Kiosk pass cap set to: '+n);
-}
 function setKioskEvent(){var ev=eventById(activeEventId);if(!ev){alert('Create or select an event first.');return;}kioskMode='event';kioskEventId=ev.id;save();updateKioskLabel();alert('Kiosk set to: '+ev.name+' (Event Hours)');}
 
 function renderGrid(){
@@ -1441,6 +1434,7 @@ function goToSettings(){
   document.getElementById('cfg-pass-thresh').value=cfg.passThreshold;document.getElementById('cfg-pt-lbl').textContent=cfg.passThreshold+' passes';
   document.getElementById('cfg-pass-win').value=cfg.passWindowDays;document.getElementById('cfg-pw-lbl').textContent=cfg.passWindowDays+' days';
   document.getElementById('cfg-timeout').value=cfg.timeoutMins;document.getElementById('cfg-to-lbl').textContent=cfg.timeoutMins+' min';
+  document.getElementById('cfg-pass-cap').value=kioskPassCap;document.getElementById('cfg-pc-lbl').textContent=kioskPassCap;
   document.getElementById('connected-sheet-id').textContent=SHEET_ID||'none';
   renderCfgNoteLib();renderCfgDestLib();renderCfgRosters();renderCsvClassChecks();
   var today=new Date();var pad=function(n){return String(n).padStart(2,'0');};
@@ -1448,7 +1442,7 @@ function goToSettings(){
   if(!fromEl.value)fromEl.value=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-01';
   if(!toEl.value)toEl.value=today.getFullYear()+'-'+pad(today.getMonth()+1)+'-'+pad(today.getDate());
 }
-function saveThresholds(){cfg.passThreshold=parseInt(document.getElementById('cfg-pass-thresh').value);cfg.passWindowDays=parseInt(document.getElementById('cfg-pass-win').value);cfg.timeoutMins=parseInt(document.getElementById('cfg-timeout').value);save();alert('Saved!');}
+function saveThresholds(){cfg.passThreshold=parseInt(document.getElementById('cfg-pass-thresh').value);cfg.passWindowDays=parseInt(document.getElementById('cfg-pass-win').value);cfg.timeoutMins=parseInt(document.getElementById('cfg-timeout').value);kioskPassCap=parseInt(document.getElementById('cfg-pass-cap').value)||2;save();updateKioskLabel();alert('Saved!');}
 function renderCfgNoteLib(){var el=document.getElementById('cfg-note-lib');if(!el)return;if(!noteLib.length){el.innerHTML='<p style="font-size:12px;color:#888780;">No saved notes yet.</p>';return;}el.innerHTML=noteLib.map(function(note,i){return'<span class="lib-chip lib-chip-note" style="cursor:default;">'+note+'<button class="chip-del" onclick="removeLibNote('+i+')">&times;</button></span>';}).join('');}
 function addLibNote(){var inp=document.getElementById('cfg-note-inp');var text=inp.value.trim();if(!text)return;if(noteLib.indexOf(text)===-1)noteLib.push(text);inp.value='';save();renderCfgNoteLib();}
 function removeLibNote(i){noteLib.splice(i,1);save();renderCfgNoteLib();}

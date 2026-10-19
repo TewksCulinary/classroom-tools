@@ -28,9 +28,16 @@
        makes the overall page wider, not the kiosk content itself. */
     .kiosk-layout { display: flex; justify-content: center; align-items: flex-start; gap: 20px; width: 100%; box-sizing: border-box; padding: 0 12px; }
     .kiosk-main { flex: 1 1 480px; max-width: 960px; min-width: 0; }
-    .kiosk-side { flex: 0 0 240px; max-width: 280px; min-height: 160px; border: 1.5px dashed #504E49; border-radius: 12px; padding: 16px; color: #9A9890; text-align: center; margin-top: 4px; }
-    .kiosk-side-title { font-size: 14px; font-weight: 700; color: #D7D5CE; margin-bottom: 6px; }
-    .kiosk-side-placeholder { font-size: 12px; }
+    .kiosk-side { flex: 0 0 240px; max-width: 280px; min-height: 160px; background: #ffffff; border: 1.5px solid #D8D6CE; border-radius: 12px; padding: 16px; color: #2C2C2A; text-align: center; margin-top: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+    .kiosk-side-title { font-size: 14px; font-weight: 700; color: #2C2C2A; margin-bottom: 10px; }
+    .wl-empty { font-size: 12px; color: #888780; }
+    .wl-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; text-align: left; margin-bottom: 6px; background: #F1EFE8; color: #2C2C2A; }
+    .wl-pos { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; background: #737B8C; color: #ffffff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .wl-turn { background: #E8F8EC; border: 1.5px solid #3E8B18; }
+    .wl-turn .wl-pos { background: #3E8B18; }
+    .wl-turn-badge { font-size: 10px; font-weight: 700; color: #27500A; margin-left: auto; white-space: nowrap; }
+    .stu-waiting { background: #F1EFE8; color: #5F5E5A; border-color: #C8C6C0; }
+    .stu-your-turn { background: #EAF3DE; color: #27500A; border-color: #3E8B18; }
     @media (max-width: 760px) { .kiosk-side { display: none; } }
     .stu-btn { border-radius: 12px; padding: 16px 8px; cursor: pointer; border: 2px solid transparent; text-align: center; user-select: none; font-size: 15px; font-weight: 600; line-height: 1.3; transition: all 0.15s; }
     .stu-btn:active { transform: scale(0.94); }
@@ -55,6 +62,7 @@
     .btn-bathroom { background: #E8F0FB; color: #1A3F7A; }
     .btn-water    { background: #E0F5F5; color: #0D6B6B; }
     .btn-other    { background: #FFF6DC; color: #7A5500; }
+    .btn-waitlist { background: #E8F0FB; color: #1A3F7A; }
 
     .dest-section { display: none; margin-top: 4px; }
     .dest-section.visible { display: block; }
@@ -116,7 +124,7 @@
 
   <div class="kiosk-side" id="kiosk-side">
     <p class="kiosk-side-title">Waitlist</p>
-    <p class="kiosk-side-placeholder">Coming soon</p>
+    <div id="waitlist-body"><p class="wl-empty">No one waiting</p></div>
   </div>
 </div>
 
@@ -208,6 +216,7 @@ var destLib = [];
 var currentStudent = null;
 var pollInterval = null;
 var PASS_CAP = 2; // bathroom + water passes out at once before new ones lock out ("other" is never capped) -- default; overridden below by the teacher's "Max students out at once" setting, polled from the Sheet like the rest of the kiosk config
+var waitlist = []; // names waiting for a bathroom/water slot, in line order -- kept in page memory only, like the Random Picker's bag; clears when the active class changes
 function countCappedPassesOut() {
   return students.filter(function(n){ return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water'); }).length;
 }
@@ -272,6 +281,8 @@ function poll() {
     kioskMode = cfg['kioskMode'] || 'class';
 
     if (kioskMode === 'event') {
+      if (waitlist.length) waitlist = [];
+      renderWaitlist();
       kioskEventId = cfg['kioskEventId']||'';
       var eventsData = [];
       try { eventsData = JSON.parse(cfg['eventsData']||'[]'); } catch(e){}
@@ -297,8 +308,10 @@ function poll() {
       return;
     }
 
+    if (newClassId !== activeClassId) waitlist = [];
     activeClassId = newClassId;
     students = classInfo.students.slice().sort(function(a,b){ return a.localeCompare(b); });
+    waitlist = waitlist.filter(function(n){ return students.indexOf(n) > -1; });
     activeClassName = classInfo.name || 'Current Class';
     document.getElementById('class-name').textContent = activeClassName;
 
@@ -402,10 +415,15 @@ function renderGrid() {
     var clocked = clockInState[name];
     var cls = clocked ? 'stu-present' : 'stu-not-clocked';
     var statusText = clocked ? '' : 'Tap to clock in';
+    var waitPos = waitlist.indexOf(name);
     if (state) {
       if(state.type==='bathroom'){ cls='stu-out'; statusText='Bathroom'; }
       else if(state.type==='water'){ cls='stu-out-water'; statusText='Water'; }
       else { cls='stu-out-other'; statusText=state.destination||'Other'; }
+    } else if (clocked && waitPos > -1) {
+      var openSlots = Math.max(0, PASS_CAP - passOut);
+      if (waitPos < openSlots) { cls='stu-your-turn'; statusText='Your turn!'; }
+      else { cls='stu-waiting'; statusText='#'+(waitPos+1)+' in line'; }
     }
     var safe = name.replace(/'/g,"\\'");
     html += '<button class="stu-btn '+cls+'" onclick="openPanel(\''+safe+'\')">'+ name
@@ -413,6 +431,7 @@ function renderGrid() {
       +'</button>';
   });
   document.getElementById('student-grid').innerHTML = html;
+  renderWaitlist();
 }
 
 function renderKioskEventGrid() {
@@ -442,6 +461,21 @@ function renderKioskEventGrid() {
   document.getElementById('student-grid').innerHTML = html || '<p style="grid-column:1/-1;text-align:center;color:#888780;font-size:13px;padding:20px 0;">No one has clocked in yet. Type your name below to get started.</p>';
 }
 
+function renderWaitlist() {
+  var el = document.getElementById('waitlist-body');
+  if (!el) return;
+  if (kioskMode === 'event') { el.innerHTML = '<p class="wl-empty">Not used during Event Hours</p>'; return; }
+  if (!waitlist.length) { el.innerHTML = '<p class="wl-empty">No one waiting</p>'; return; }
+  var openSlots = Math.max(0, PASS_CAP - countCappedPassesOut());
+  var html = '';
+  waitlist.forEach(function(name, i) {
+    var isTurn = i < openSlots;
+    html += '<div class="wl-item'+(isTurn?' wl-turn':'')+'"><span class="wl-pos">'+(i+1)+'</span><span>'+name+'</span>'
+      + (isTurn ? '<span class="wl-turn-badge">Go!</span>' : '') + '</div>';
+  });
+  el.innerHTML = html;
+}
+
 // ============================================================
 // ACTION PANEL
 // ============================================================
@@ -461,10 +495,21 @@ function openPanel(name) {
     document.getElementById('panel-status').textContent = 'Welcome! Clock in to start your day.';
     document.getElementById('panel-buttons').innerHTML =
       '<button class="big-btn btn-clockin" onclick="clockIn(\''+name+'\')">&#9989; Clock In</button>';
+  } else if (waitlist.indexOf(name) > -1 && waitlist.indexOf(name) < Math.max(0, PASS_CAP - countCappedPassesOut())) {
+    document.getElementById('panel-status').textContent = "It's your turn! Where are you going?";
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-bathroom" onclick="claimWaitlistTurn(\''+name+'\',\'bathroom\')">Bathroom</button>'
+      +'<button class="big-btn btn-water" onclick="claimWaitlistTurn(\''+name+'\',\'water\')">Water fountain</button>'
+      +'<button class="big-btn btn-other" onclick="leaveWaitlist(\''+name+'\')">Never mind, leave waitlist</button>';
+  } else if (waitlist.indexOf(name) > -1) {
+    document.getElementById('panel-status').textContent = "You're #"+(waitlist.indexOf(name)+1)+" in line. We'll flag your name here when it's your turn.";
+    document.getElementById('panel-buttons').innerHTML =
+      '<button class="big-btn btn-other" onclick="leaveWaitlist(\''+name+'\')">Leave waitlist</button>';
   } else if (countCappedPassesOut() >= PASS_CAP) {
     document.getElementById('panel-status').textContent = 'No bathroom or water passes right now.';
     document.getElementById('panel-buttons').innerHTML =
       '<div class="locked-msg">\u{1F512} '+PASS_CAP+' students are already out.<br>Wait for someone to come back.</div>'
+      +'<button class="big-btn btn-waitlist" onclick="joinWaitlist(\''+name+'\')">Join Waitlist</button>'
       +'<button class="big-btn btn-other" onclick="showDestPicker()">Other</button>';
   } else {
     document.getElementById('panel-status').textContent = 'Where are you going?';
@@ -494,6 +539,27 @@ function closePanel() {
   document.getElementById('overlay').classList.remove('visible');
   document.getElementById('dest-section').classList.remove('visible');
   currentStudent = null;
+}
+
+function joinWaitlist(name) {
+  if (!name) return;
+  if (waitlist.indexOf(name) === -1) waitlist.push(name);
+  closePanel();
+  renderGrid();
+}
+
+function leaveWaitlist(name) {
+  if (!name) return;
+  var idx = waitlist.indexOf(name);
+  if (idx > -1) waitlist.splice(idx, 1);
+  closePanel();
+  renderGrid();
+}
+
+function claimWaitlistTurn(name, type) {
+  var idx = waitlist.indexOf(name);
+  if (idx > -1) waitlist.splice(idx, 1);
+  sendOut(name, type, null);
 }
 
 function sendOut(name, type, destination) {
