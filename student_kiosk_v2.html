@@ -217,6 +217,7 @@ var currentStudent = null;
 var pollInterval = null;
 var PASS_CAP = 2; // bathroom + water passes out at once before new ones lock out ("other" is never capped) -- default; overridden below by the teacher's "Max students out at once" setting, polled from the Sheet like the rest of the kiosk config
 var waitlist = []; // names waiting for a bathroom/water slot, in line order -- kept in page memory only, like the Random Picker's bag; clears when the active class changes
+var lastSyncedWaitlistJSON = ''; // dirty-check so syncWaitlistToSheet() only writes when the queue (or whose turn it is) actually changed
 function countCappedPassesOut() {
   return students.filter(function(n){ return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water'); }).length;
 }
@@ -461,7 +462,18 @@ function renderKioskEventGrid() {
   document.getElementById('student-grid').innerHTML = html || '<p style="grid-column:1/-1;text-align:center;color:#888780;font-size:13px;padding:20px 0;">No one has clocked in yet. Type your name below to get started.</p>';
 }
 
+function syncWaitlistToSheet() {
+  if (!SHEET_ID) return;
+  var openSlots = Math.max(0, PASS_CAP - countCappedPassesOut());
+  var payload = waitlist.map(function(name, i){ return {name:name, turn: i < openSlots}; });
+  var json = JSON.stringify(payload);
+  if (json === lastSyncedWaitlistJSON) return;
+  lastSyncedWaitlistJSON = json;
+  sheetsUpdate(SHEET_CONFIG+'!A12:B12', [['kioskWaitlist', json]]).catch(function(e){ console.log('waitlist sync error', e); });
+}
+
 function renderWaitlist() {
+  syncWaitlistToSheet();
   var el = document.getElementById('waitlist-body');
   if (!el) return;
   if (kioskMode === 'event') { el.innerHTML = '<p class="wl-empty">Not used during Event Hours</p>'; return; }

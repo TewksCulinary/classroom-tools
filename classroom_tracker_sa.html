@@ -256,6 +256,7 @@
       </div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Kiosk shows: <strong id="kiosk-active-label">not set</strong></div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Max students out at once: <strong id="kiosk-pass-cap-display">2</strong> &mdash; change in Settings &#9881; &rarr; Alert thresholds</div>
+      <div style="margin-top:8px;font-size:12px;color:#5F5E5A;" id="kiosk-waitlist-display">Waitlist: no one waiting</div>
     </div>
 
     <div class="section">
@@ -759,6 +760,31 @@ function startSyncInterval() {
   // only needs to push this device's local changes out to the sheet.
   setInterval(pollKioskEvents, 5000);
   setInterval(pollKioskEventHours, 5000);
+  setInterval(pollKioskWaitlist, 5000);
+}
+
+async function pollKioskWaitlist() {
+  if (!SHEET_ID) return;
+  try {
+    var res = await sheetsGet(SHEET_CONFIG+'!A12:B12');
+    var rows = res.values || [];
+    var raw = (rows[0] && rows[0][0] === 'kioskWaitlist') ? rows[0][1] : '';
+    var parsed = [];
+    try { parsed = JSON.parse(raw||'[]'); } catch(e) { parsed = []; }
+    if (!Array.isArray(parsed)) parsed = [];
+    kioskWaitlist = parsed;
+    renderKioskWaitlistDisplay();
+  } catch(e) { /* silent */ }
+}
+
+function renderKioskWaitlistDisplay() {
+  var el = document.getElementById('kiosk-waitlist-display');
+  if (!el) return;
+  if (!kioskWaitlist.length) { el.textContent = 'Waitlist: no one waiting'; return; }
+  el.innerHTML = 'Waitlist: ' + kioskWaitlist.map(function(e){
+    var safe = String(e.name||'').replace(/</g,'&lt;');
+    return e.turn ? '<strong style="color:#27500A;">'+safe+' (go!)</strong>' : safe;
+  }).join(', ');
 }
 
 // ============================================================
@@ -790,6 +816,7 @@ var eventSyncError = '';
 var kioskMode = 'class';
 var kioskEventId = null;
 var kioskPassCap = 2; // bathroom+water passes the kiosk allows out at once; teacher-adjustable, broadcast to the kiosk via config!A11
+var kioskWaitlist = []; // [{name, turn}], mirrored from the kiosk's own in-memory queue via config!A12 -- the kiosk writes this row, Tracker only ever reads it
 var pickerPicked = {};     // pickerPicked[classId][dateKey] = [names already drawn this round]
 
 // ============================================================
@@ -1475,7 +1502,7 @@ function resetEverything(){
   if(!confirm('Full reset - delete all data?'))return;
   ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data','ct_picker'].forEach(function(k){localStorage.removeItem(k);});
   cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};pickerPicked={};
-  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;kioskPassCap=2;
+  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;kioskPassCap=2;kioskWaitlist=[];
   document.querySelectorAll('.num-btn').forEach(function(b){b.classList.remove('active');});
   ['s-names','s-rosters','s-thresholds'].forEach(function(id){document.getElementById(id).style.display='none';});
   if(tickerInterval)clearInterval(tickerInterval);if(syncInterval)clearInterval(syncInterval);
