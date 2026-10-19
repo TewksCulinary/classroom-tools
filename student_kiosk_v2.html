@@ -10,6 +10,7 @@
     body.green { background: #d4edda; }
     body.red   { background: #f8d7da; }
     body.neutral { background: #f1efec; }
+    body.locked { background: #4A0E0E; }
 
     .top-bar { padding: 16px 20px 8px; text-align: center; }
     .top-bar h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2C2C2A; }
@@ -18,8 +19,19 @@
     .badge-green { background: #3E8B18; color: #ffffff; }
     .badge-red   { background: #791F1F; color: #ffffff; }
     .badge-neutral { background: #737B8C; color: #ffffff; }
+    .badge-locked { background: #2B0808; color: #ffffff; }
 
     .student-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 12px 16px; flex: 1; }
+
+    /* Layout: the kiosk's own content keeps its existing compact width;
+       a reserved column beside it (for the planned waitlist) is what
+       makes the overall page wider, not the kiosk content itself. */
+    .kiosk-layout { display: flex; justify-content: center; align-items: flex-start; gap: 20px; width: 100%; box-sizing: border-box; padding: 0 12px; }
+    .kiosk-main { width: 480px; max-width: 100%; flex: 0 0 auto; }
+    .kiosk-side { flex: 0 0 240px; max-width: 280px; min-height: 160px; border: 1.5px dashed #504E49; border-radius: 12px; padding: 16px; color: #9A9890; text-align: center; margin-top: 4px; }
+    .kiosk-side-title { font-size: 14px; font-weight: 700; color: #D7D5CE; margin-bottom: 6px; }
+    .kiosk-side-placeholder { font-size: 12px; }
+    @media (max-width: 760px) { .kiosk-side { display: none; } }
     .stu-btn { border-radius: 12px; padding: 16px 8px; cursor: pointer; border: 2px solid transparent; text-align: center; user-select: none; font-size: 15px; font-weight: 600; line-height: 1.3; transition: all 0.15s; }
     .stu-btn:active { transform: scale(0.94); }
     .stu-not-clocked { background: #f1efec; color: #888780; border-color: #C8C6C0; }
@@ -49,6 +61,8 @@
     .dest-chip { display: inline-block; background: #FFF6DC; border: 1.5px solid #F0D070; color: #7A5500; border-radius: 8px; padding: 8px 14px; font-size: 14px; font-weight: 600; margin: 4px; cursor: pointer; }
     .dest-chip:active { background: #F0D070; }
     .dest-skip { width: 100%; background: #F1EFE8; border: 1.5px solid #000000; color: #000000; border-radius: 10px; padding: 12px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 6px; }
+
+    .locked-msg { background: #4A0E0E; color: #ffffff; border-radius: 12px; padding: 16px; font-size: 15px; font-weight: 700; text-align: center; margin-bottom: 10px; line-height: 1.4; }
 
     .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; padding: 40px 20px; text-align: center; }
     .loading h2 { color: #2C2C2A; margin-bottom: 8px; }
@@ -85,18 +99,25 @@
   </div>
 </div>
 
-<div id="main-content">
-  <div class="loading" id="loading-state">
-    <div class="spinner"></div>
-    <h2>Connecting...</h2>
-    <p>Waiting for teacher to set the active class.</p>
+<div class="kiosk-layout">
+  <div id="main-content" class="kiosk-main">
+    <div class="loading" id="loading-state">
+      <div class="spinner"></div>
+      <h2>Connecting...</h2>
+      <p>Waiting for teacher to set the active class.</p>
+    </div>
+    <div class="out-count-bar" id="out-count-bar" style="display:none;"></div>
+    <div class="event-entry-row" id="event-new-row">
+      <input type="text" id="event-new-name-kiosk" placeholder="Type your full name..." />
+      <button onclick="eventClockInNew()">Clock In</button>
+    </div>
+    <div class="student-grid" id="student-grid" style="display:none;"></div>
   </div>
-  <div class="out-count-bar" id="out-count-bar" style="display:none;"></div>
-  <div class="event-entry-row" id="event-new-row">
-    <input type="text" id="event-new-name-kiosk" placeholder="Type your full name..." />
-    <button onclick="eventClockInNew()">Clock In</button>
+
+  <div class="kiosk-side" id="kiosk-side">
+    <p class="kiosk-side-title">Waitlist</p>
+    <p class="kiosk-side-placeholder">Coming soon</p>
   </div>
-  <div class="student-grid" id="student-grid" style="display:none;"></div>
 </div>
 
 <!-- Action panel -->
@@ -186,6 +207,10 @@ var clockInState = {}; // name -> {ts: timestamp}
 var destLib = [];
 var currentStudent = null;
 var pollInterval = null;
+var PASS_CAP = 2; // bathroom + water passes out at once before new ones lock out ("other" is never capped) -- default; overridden below by the teacher's "Max students out at once" setting, polled from the Sheet like the rest of the kiosk config
+function countCappedPassesOut() {
+  return students.filter(function(n){ return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water'); }).length;
+}
 
 // Event Hours (kiosk self-service) state
 var kioskMode = 'class';
@@ -234,12 +259,15 @@ function startPolling() {
 
 function poll() {
   if (!SHEET_ID) return;
-  sheetsGet(SHEET_CONFIG+'!A1:B10').then(function(res) {
+  sheetsGet(SHEET_CONFIG+'!A1:B11').then(function(res) {
     var rows = res.values || [];
     var cfg = {};
     rows.forEach(function(r){ if(r[0]) cfg[r[0]]=r[1]||''; });
 
     try { destLib = JSON.parse(cfg['destLib']||'[]'); } catch(e){ destLib=[]; }
+
+    var capFromSheet = parseInt(cfg['kioskPassCap'], 10);
+    PASS_CAP = (capFromSheet && capFromSheet > 0) ? capFromSheet : 2;
 
     kioskMode = cfg['kioskMode'] || 'class';
 
@@ -348,22 +376,20 @@ function renderGrid() {
   document.getElementById('out-count-bar').style.display='block';
   var newRow=document.getElementById('event-new-row'); if(newRow) newRow.style.display='none';
 
-  var passOut = students.filter(function(n){
-    return passState[n] && (passState[n].type==='bathroom' || passState[n].type==='water');
-  }).length;
+  var passOut = countCappedPassesOut();
 
   if (passOut === 0) {
     document.body.className = 'green';
     document.getElementById('status-badge').textContent = 'Pass available';
     document.getElementById('status-badge').className = 'status-badge badge-green';
-  } else if (passOut === 1) {
+  } else if (passOut < PASS_CAP) {
     document.body.className = 'green';
     document.getElementById('status-badge').textContent = '1 student out';
     document.getElementById('status-badge').className = 'status-badge badge-green';
   } else {
-    document.body.className = 'red';
-    document.getElementById('status-badge').textContent = passOut+' students out - please wait';
-    document.getElementById('status-badge').className = 'status-badge badge-red';
+    document.body.className = 'locked';
+    document.getElementById('status-badge').textContent = '\u{1F512} Locked \u2014 '+passOut+' out, wait for someone to return';
+    document.getElementById('status-badge').className = 'status-badge badge-locked';
   }
 
   document.getElementById('out-count-bar').textContent = passOut > 0
@@ -435,6 +461,11 @@ function openPanel(name) {
     document.getElementById('panel-status').textContent = 'Welcome! Clock in to start your day.';
     document.getElementById('panel-buttons').innerHTML =
       '<button class="big-btn btn-clockin" onclick="clockIn(\''+name+'\')">&#9989; Clock In</button>';
+  } else if (countCappedPassesOut() >= PASS_CAP) {
+    document.getElementById('panel-status').textContent = 'No bathroom or water passes right now.';
+    document.getElementById('panel-buttons').innerHTML =
+      '<div class="locked-msg">\u{1F512} '+PASS_CAP+' students are already out.<br>Wait for someone to come back.</div>'
+      +'<button class="big-btn btn-other" onclick="showDestPicker()">Other</button>';
   } else {
     document.getElementById('panel-status').textContent = 'Where are you going?';
     document.getElementById('panel-buttons').innerHTML =

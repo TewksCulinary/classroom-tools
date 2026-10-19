@@ -255,6 +255,11 @@
         <button class="small-btn" onclick="setKioskClass()" style="background:#185FA5;color:#ffffff;border-color:#185FA5;">Set active</button>
       </div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Kiosk shows: <strong id="kiosk-active-label">not set</strong></div>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:8px;">
+        <label style="font-size:12px;color:#5F5E5A;">Max students out at once:</label>
+        <input type="number" id="kiosk-pass-cap-input" min="1" max="20" value="2" style="width:54px;border:1.5px solid #B4B2A9;border-radius:6px;padding:5px 6px;font-size:13px;text-align:center;" />
+        <button class="small-btn" onclick="setKioskPassCap()">Save</button>
+      </div>
     </div>
 
     <div class="section">
@@ -651,7 +656,8 @@ async function syncToSheets() {
     await Promise.all([
       sheetsUpdate(SHEET_PASSES+'!A1:L1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal']]),
       sheetsUpdate(SHEET_PASSES+'!A2:L'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
-      sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData)
+      sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData),
+      sheetsUpdate(SHEET_CONFIG+'!A11:B11', [['kioskPassCap', String(kioskPassCap||2)]])
     ]);
     lastSync = Date.now();
     setSyncStatus('synced','Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
@@ -782,6 +788,7 @@ var activeEventId = null;
 var eventSyncError = '';
 var kioskMode = 'class';
 var kioskEventId = null;
+var kioskPassCap = 2; // bathroom+water passes the kiosk allows out at once; teacher-adjustable, broadcast to the kiosk via config!A11
 var pickerPicked = {};     // pickerPicked[classId][dateKey] = [names already drawn this round]
 
 // ============================================================
@@ -883,6 +890,8 @@ function updateKioskLabel(){
   }
   var lbl=document.getElementById('kiosk-active-label');if(lbl)lbl.textContent=text;
   var lbl2=document.getElementById('kiosk-active-label-events');if(lbl2)lbl2.textContent=text;
+  var capInp=document.getElementById('kiosk-pass-cap-input');
+  if(capInp && document.activeElement!==capInp) capInp.value=kioskPassCap;
 }
 
 // ============================================================
@@ -1031,6 +1040,14 @@ function editDestination(classId,name,eventId,dest){
   if(trip){trip.destination=dest;save();renderAll();}
 }
 function setKioskClass(){kioskMode='class';kioskActiveClassId=activeClassId;save();updateKioskLabel();var cls=classById(activeClassId);alert('Kiosk set to: '+(cls?cls.name:'this class'));}
+function setKioskPassCap(){
+  var inp=document.getElementById('kiosk-pass-cap-input');
+  var n=parseInt(inp.value,10);
+  if(!n||n<1){alert('Enter a number 1 or greater.');return;}
+  kioskPassCap=n;
+  save();
+  alert('Kiosk pass cap set to: '+n);
+}
 function setKioskEvent(){var ev=eventById(activeEventId);if(!ev){alert('Create or select an event first.');return;}kioskMode='event';kioskEventId=ev.id;save();updateKioskLabel();alert('Kiosk set to: '+ev.name+' (Event Hours)');}
 
 function renderGrid(){
@@ -1464,7 +1481,7 @@ function resetEverything(){
   if(!confirm('Full reset - delete all data?'))return;
   ['ct_cfg','ct_data','ct_notes','ct_dests','ct_watch','ct_sheet_id','ct_event_data','ct_picker'].forEach(function(k){localStorage.removeItem(k);});
   cfg={classes:[],events:[],timeoutMins:7,passThreshold:5,passWindowDays:7};passData={};noteLib=[];destLib=[];labHistory={};watchList={};eventData={};pickerPicked={};
-  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;
+  activeClassId=null;activeEventId=null;absentMode=false;pendingCount=0;SHEET_ID='';kioskActiveClassId=null;kioskMode='class';kioskEventId=null;kioskPassCap=2;
   document.querySelectorAll('.num-btn').forEach(function(b){b.classList.remove('active');});
   ['s-names','s-rosters','s-thresholds'].forEach(function(id){document.getElementById(id).style.display='none';});
   if(tickerInterval)clearInterval(tickerInterval);if(syncInterval)clearInterval(syncInterval);
