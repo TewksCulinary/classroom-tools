@@ -21,13 +21,13 @@
     .badge-neutral { background: #737B8C; color: #ffffff; }
     .badge-locked { background: #2B0808; color: #ffffff; }
 
-    .student-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; padding: 12px 16px; flex: 1; }
+    .student-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap: 10px; padding: 12px 16px; flex: 1; }
 
     /* Layout: the kiosk's own content keeps its existing compact width;
        a reserved column beside it (for the planned waitlist) is what
        makes the overall page wider, not the kiosk content itself. */
     .kiosk-layout { display: flex; justify-content: center; align-items: flex-start; gap: 20px; width: 100%; box-sizing: border-box; padding: 0 12px; }
-    .kiosk-main { width: 480px; max-width: 100%; flex: 0 0 auto; }
+    .kiosk-main { flex: 1 1 480px; max-width: 960px; min-width: 0; }
     .kiosk-side { flex: 0 0 240px; max-width: 280px; min-height: 160px; border: 1.5px dashed #504E49; border-radius: 12px; padding: 16px; color: #9A9890; text-align: center; margin-top: 4px; }
     .kiosk-side-title { font-size: 14px; font-weight: 700; color: #D7D5CE; margin-bottom: 6px; }
     .kiosk-side-placeholder { font-size: 12px; }
