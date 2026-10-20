@@ -33,6 +33,8 @@
     .stu-timer { font-size: 10px; font-weight: 700; margin-top: 2px; }
     .stu-snip { font-size: 9px; opacity: 0.8; margin-top: 1px; font-style: italic; }
     .watch-flag { position: absolute; top: 3px; right: 4px; font-size: 10px; line-height: 1; }
+    .stu-waitlist-badge { font-size: 9px; font-weight: 700; margin-top: 2px; color: #185FA5; }
+    .stu-waitlist-turn { color: #27500A; }
     .s-notclockedin { background: #f1efec; color: #888780; border-color: #C8C6C0; }
     .s-present  { background: #EAF3DE; color: #27500A; border-color: #C0DD97; }
     .s-absent   { background: #F0F0F0; color: #555555; border-color: #BBBBBB; }
@@ -256,7 +258,6 @@
       </div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Kiosk shows: <strong id="kiosk-active-label">not set</strong></div>
       <div style="margin-top:8px;font-size:12px;color:#5F5E5A;">Max students out at once: <strong id="kiosk-pass-cap-display">2</strong> &mdash; change in Settings &#9881; &rarr; Alert thresholds</div>
-      <div style="margin-top:8px;font-size:12px;color:#5F5E5A;" id="kiosk-waitlist-display">Waitlist: no one waiting</div>
     </div>
 
     <div class="section">
@@ -773,18 +774,8 @@ async function pollKioskWaitlist() {
     try { parsed = JSON.parse(raw||'[]'); } catch(e) { parsed = []; }
     if (!Array.isArray(parsed)) parsed = [];
     kioskWaitlist = parsed;
-    renderKioskWaitlistDisplay();
+    renderGrid();
   } catch(e) { /* silent */ }
-}
-
-function renderKioskWaitlistDisplay() {
-  var el = document.getElementById('kiosk-waitlist-display');
-  if (!el) return;
-  if (!kioskWaitlist.length) { el.textContent = 'Waitlist: no one waiting'; return; }
-  el.innerHTML = 'Waitlist: ' + kioskWaitlist.map(function(e){
-    var safe = String(e.name||'').replace(/</g,'&lt;');
-    return e.turn ? '<strong style="color:#27500A;">'+safe+' (go!)</strong>' : safe;
-  }).join(', ');
 }
 
 // ============================================================
@@ -1016,6 +1007,10 @@ function ensureData(classId,name){
 }
 function getTodayTrips(classId,name){var cd=passData[classId];if(!cd)return[];var dd=cd[todayKey()];if(!dd)return[];return dd[name]||[];}
 
+function ordinal(n){
+  var suf=['th','st','nd','rd'],v=n%100;
+  return n+(suf[(v-20)%10]||suf[v]||suf[0]);
+}
 function getStudentStatus(classId,name){
   var trips=getTodayTrips(classId,name);
   if(trips.some(function(t){return t.type==='absent';}))return'absent';
@@ -1084,7 +1079,9 @@ function renderGrid(){
     if(status==='other'){var active=getActiveTrip(activeClassId,name);if(active&&active.destination){var dest=active.destination.slice(0,14)+(active.destination.length>14?'...':'');snip='<div class="stu-snip">'+dest+'</div>';}}
     if(status==='tardy'){var tardyTrip=getTodayTrips(activeClassId,name).find(function(t){return t.type==='tardy';});if(tardyTrip)snip='<div class="stu-snip">arrived '+fmtTime(tardyTrip.out)+'</div>';}
     if(status==='note'){var noteTrips=getTodayTrips(activeClassId,name).filter(function(t){return t.type==='note';});var lastNote=noteTrips[noteTrips.length-1];if(lastNote){var ntxt=lastNote.text.slice(0,14)+(lastNote.text.length>14?'...':'');snip='<div class="stu-snip">'+ntxt+'</div>';}}
-    html+='<div class="stu-card '+sc+(isAlert?' pulsing':'')+'" onclick="'+fn+'">'+(watched?'<span class="watch-flag">&#128276;</span>':'')+'<div class="stu-name">'+name+'</div><div class="stu-status">'+(STATUS_LBL[status]||'')+'</div>'+snip+(elapsed?'<div class="stu-timer">'+elapsed+'</div>':'')+'</div>';
+    var wlIdx=kioskWaitlist.findIndex(function(e){return e.name===name;});
+    var wlBadge=wlIdx===-1?'':(kioskWaitlist[wlIdx].turn?'<div class="stu-waitlist-badge stu-waitlist-turn">Your turn!</div>':'<div class="stu-waitlist-badge">'+ordinal(wlIdx+1)+' in Line</div>');
+    html+='<div class="stu-card '+sc+(isAlert?' pulsing':'')+'" onclick="'+fn+'">'+(watched?'<span class="watch-flag">&#128276;</span>':'')+'<div class="stu-name">'+name+'</div><div class="stu-status">'+(STATUS_LBL[status]||'')+'</div>'+snip+(elapsed?'<div class="stu-timer">'+elapsed+'</div>':'')+wlBadge+'</div>';
   });
   document.getElementById('student-grid').innerHTML=html;
 }
