@@ -22,11 +22,27 @@
   button, input, select { font-family: inherit; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 4px solid var(--go); outline-offset: 3px; }
 
-  #app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(230px, 23vw, 310px) clamp(250px, 24vw, 330px); height: 100vh; }
+  #app { display: grid; grid-template-columns: minmax(0, 1fr) clamp(250px, 26vw, 340px); height: 100vh; }
   #app > * { overflow-y: auto; }
   #main { padding: 28px 32px; display: flex; flex-direction: column; gap: 18px; }
   #ticket { background: var(--panel); border-left: 4px solid var(--ink); padding: 28px 24px; display: flex; flex-direction: column; gap: 14px; }
   #queue { background: #fff; border-left: 4px solid var(--ink); padding: 28px 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* two screens: order (default) and queue (?screen=queue) */
+  .mode-order #queue { display: none; }
+  .mode-queue #app { grid-template-columns: minmax(0, 1fr); }
+  .mode-queue #main, .mode-queue #ticket { display: none; }
+  .mode-queue #queue { border-left: none; padding: 24px 28px; }
+  .qhead { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; }
+  .qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+  .mode-queue .qcard .name { font-size: 34px; }
+  .mode-queue .qcard .items { font-size: 22px; }
+  .newtag { background: var(--ink); color: #fff; border-radius: 999px; padding: 2px 12px; font-size: 16px; font-weight: 700; letter-spacing: 0.04em; }
+  .banner { border: 4px solid var(--ink); border-radius: 14px; background: var(--pick); padding: 10px 14px; font-size: 19px; line-height: 1.35; display: flex; flex-direction: column; gap: 8px; }
+  .status-ok { font-size: 18px; color: var(--muted); }
+  #overlay[hidden] { display: none; }
+  #overlay { position: fixed; inset: 0; background: rgba(43, 29, 20, 0.6); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  .modal { background: #fff; border: 4px solid var(--ink); border-radius: 20px; padding: 24px; max-width: 640px; width: 100%; max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
 
   h1 { margin: 0; font-size: 42px; line-height: 1.1; font-weight: 700; }
   h2 { margin: 0; font-size: 26px; font-weight: 700; }
@@ -150,7 +166,213 @@
   <aside id="ticket" aria-label="Order ticket"></aside>
   <aside id="queue" aria-label="Order queue"></aside>
 </div>
+<div id="overlay" hidden></div>
 
+<script>
+var CartLogic = (function () {
+  'use strict';
+  // Shared rules for the coffee cart. The SAME code runs in the browser (test mode on one
+  // computer) and in the Apps Script (real mode with a Google Sheet), so both behave alike.
+  //
+  // db = { orders: [], teachers: [{id,name,punches}], ledger: [], cards: [], pinHash: '', nextTid: 1 }
+  // handle(db, req, now, day) -> { resp, changes }
+  //   resp    = JSON sent back to the page
+  //   changes = what the Apps Script must write to the Sheet (the browser version just saves db)
+
+  function newDb() {
+    return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1 };
+  }
+  function fail(code, message) {
+    return { resp: { ok: false, error: code, message: message }, changes: null };
+  }
+  function emptyChanges() {
+    return { ordersAdded: [], ordersUpdated: [], teachersAdded: [], teachersUpdated: [], ledgerAdded: [], cardsAdded: [], pinHash: null };
+  }
+  function lower(s) { return String(s).toLowerCase(); }
+  function intOr(v, dflt) {
+    var n = parseInt(v, 10);
+    return isNaN(n) ? dflt : n;
+  }
+  function teacherById(db, id) {
+    for (var i = 0; i < db.teachers.length; i++) if (db.teachers[i].id === id) return db.teachers[i];
+    return null;
+  }
+  function plural(n, word) {
+    var many = word === 'punch' ? 'punches' : word + 's';
+    return n + ' ' + (Math.abs(n) === 1 ? word : many);
+  }
+
+  function snapshot(db, now) {
+    var cutoff = now - 3 * 3600 * 1000;
+    var orders = db.orders.filter(function (o) { return !o.done || (o.doneAt || 0) >= cutoff; });
+    orders.sort(function (a, b) { return a.createdAt - b.createdAt; });
+    if (orders.length > 80) orders = orders.slice(orders.length - 80);
+    return {
+      ok: true,
+      serverNow: now,
+      orders: orders,
+      teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
+      hasPin: !!db.pinHash,
+      log: db.ledger.slice(-15).reverse()
+    };
+  }
+
+  function addOrder(db, o, now, day) {
+    if (!o.id) return fail('bad-order', 'The order has no id.');
+    for (var i = 0; i < db.orders.length; i++) {
+      if (db.orders[i].id === o.id) return { resp: { ok: true, order: db.orders[i], duplicate: true }, changes: null };
+    }
+    if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
+    var num = 0;
+    db.orders.forEach(function (x) { if (x.day === day && x.num > num) num = x.num; });
+    var order = {
+      id: String(o.id).slice(0, 60),
+      num: num + 1,
+      day: day,
+      createdAt: now,
+      name: String(o.name || '').slice(0, 60),
+      method: o.method === 'delivery' ? 'delivery' : 'pickup',
+      room: String(o.room || '').slice(0, 20),
+      items: o.items.slice(0, 20).map(function (it) {
+        return { title: String(it.title || '').slice(0, 60), detail: String(it.detail || '').slice(0, 300) };
+      }),
+      pay: o.pay === 'punch' ? 'punch' : 'other',
+      teacherId: null,
+      teacherName: '',
+      balanceAfter: null,
+      done: false,
+      doneAt: null
+    };
+    var ch = emptyChanges();
+    if (order.pay === 'punch') {
+      var t = teacherById(db, o.teacherId);
+      if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      var n = order.items.length;
+      t.punches -= n; // one punch per drink; going below zero is allowed (honor system)
+      var entry = { t: now, teacherId: t.id, name: t.name, delta: -n, note: 'Order #' + order.num + ' (' + plural(n, 'drink') + ')' };
+      db.ledger.push(entry);
+      order.teacherId = t.id;
+      order.teacherName = t.name;
+      order.balanceAfter = t.punches;
+      ch.teachersUpdated.push(t);
+      ch.ledgerAdded.push(entry);
+    }
+    db.orders.push(order);
+    ch.ordersAdded.push(order);
+    return { resp: { ok: true, order: order }, changes: ch };
+  }
+
+  function setDone(db, req, now) {
+    for (var i = 0; i < db.orders.length; i++) {
+      if (db.orders[i].id === req.id) {
+        var o = db.orders[i];
+        o.done = !!req.done;
+        o.doneAt = o.done ? now : null;
+        var ch = emptyChanges();
+        ch.ordersUpdated.push(o);
+        return { resp: { ok: true, order: o }, changes: ch };
+      }
+    }
+    return fail('not-found', 'That order was not found.');
+  }
+
+  function needPin(db, req) {
+    if (!db.pinHash) return fail('no-pin', 'Create a teacher PIN first.');
+    if (req.pinHash !== db.pinHash) return fail('bad-pin', 'That PIN is not right.');
+    return null;
+  }
+
+  function setPin(db, req) {
+    var nh = String(req.newPinHash || '');
+    if (nh.length < 16) return fail('bad-pin', 'The new PIN was not valid.');
+    if (db.pinHash && req.pinHash !== db.pinHash) return fail('bad-pin', 'That PIN is not right.');
+    db.pinHash = nh;
+    var ch = emptyChanges();
+    ch.pinHash = nh;
+    return { resp: { ok: true }, changes: ch };
+  }
+
+  function addTeachers(db, req, now) {
+    var names = (req.names || []).map(function (s) { return String(s).trim().slice(0, 60); }).filter(Boolean);
+    if (!names.length) return fail('no-names', 'Type at least one name.');
+    var start = intOr(req.start, 0);
+    if (start < -50 || start > 200) start = 0;
+    var ch = emptyChanges();
+    var added = 0, skipped = 0;
+    names.forEach(function (name) {
+      var dupe = db.teachers.some(function (t) { return lower(t.name) === lower(name); });
+      if (dupe) { skipped++; return; }
+      var t = { id: db.nextTid++, name: name, punches: start };
+      db.teachers.push(t);
+      ch.teachersAdded.push(t);
+      if (start !== 0) {
+        var e = { t: now, teacherId: t.id, name: t.name, delta: start, note: 'Starting balance' };
+        db.ledger.push(e);
+        ch.ledgerAdded.push(e);
+      }
+      added++;
+    });
+    return { resp: { ok: true, added: added, skipped: skipped }, changes: ch };
+  }
+
+  function adjust(db, req, now) {
+    var t = teacherById(db, intOr(req.teacherId, -1));
+    var delta = intOr(req.delta, 0);
+    if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+    if (!delta || delta < -50 || delta > 50) return fail('bad-number', 'That number of punches is not allowed.');
+    t.punches += delta;
+    var e = { t: now, teacherId: t.id, name: t.name, delta: delta, note: String(req.note || 'Adjusted by hand').slice(0, 120) };
+    db.ledger.push(e);
+    var ch = emptyChanges();
+    ch.teachersUpdated.push(t);
+    ch.ledgerAdded.push(e);
+    return { resp: { ok: true, teacher: t }, changes: ch };
+  }
+
+  function loadCard(db, req, now) {
+    var t = teacherById(db, intOr(req.teacherId, -1));
+    var count = intOr(req.count, 0);
+    var cardNo = String(req.cardNo || '').trim().slice(0, 40);
+    if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+    if (count < 1 || count > 50) return fail('bad-number', 'Punches should be a number from 1 to 50.');
+    var ch = emptyChanges();
+    if (cardNo) {
+      var seen = db.cards.some(function (c) { return lower(c.cardNo) === lower(cardNo); });
+      if (seen) return fail('dup-card', 'Card ' + cardNo + ' was already loaded. Nothing was added.');
+      var c = { cardNo: cardNo, teacherId: t.id, t: now };
+      db.cards.push(c);
+      ch.cardsAdded.push(c);
+    }
+    t.punches += count;
+    var e = { t: now, teacherId: t.id, name: t.name, delta: count, note: cardNo ? 'Loaded card ' + cardNo : 'Loaded a card' };
+    db.ledger.push(e);
+    ch.teachersUpdated.push(t);
+    ch.ledgerAdded.push(e);
+    return { resp: { ok: true, teacher: t }, changes: ch };
+  }
+
+  function handle(db, req, now, day) {
+    var a = req && req.action;
+    var bad;
+    if (a === 'poll') return { resp: snapshot(db, now), changes: null };
+    if (a === 'addOrder') return addOrder(db, req.order || {}, now, day);
+    if (a === 'setDone') return setDone(db, req, now);
+    if (a === 'verifyPin') return { resp: { ok: true, valid: !!db.pinHash && req.pinHash === db.pinHash }, changes: null };
+    if (a === 'setPin') return setPin(db, req);
+    if (a === 'addTeachers' || a === 'adjust' || a === 'loadCard' || a === 'export') {
+      bad = needPin(db, req);
+      if (bad) return bad;
+      if (a === 'addTeachers') return addTeachers(db, req, now);
+      if (a === 'adjust') return adjust(db, req, now);
+      if (a === 'loadCard') return loadCard(db, req, now);
+      return { resp: { ok: true, data: { teachers: db.teachers, ledger: db.ledger, cards: db.cards, orders: db.orders } }, changes: null };
+    }
+    return fail('unknown-action', 'Unknown request.');
+  }
+
+  return { newDb: newDb, handle: handle, snapshot: snapshot };
+})();
+</script>
 <script>
 (function () {
   'use strict';
@@ -188,57 +410,156 @@
   };
 
   // ---------- state ----------
-  // Orders/queue live in sessionStorage (cleared when the tab closes).
-  // Teachers, punch balances and the PIN live in localStorage (kept on this computer/browser).
-  var ORDERS_KEY = 'coffeeCartOrders.v1';
-  var PUNCH_KEY = 'coffeeCartPunch.v1';
+  // One file, two screens: the order screen (this page) and the queue screen (add ?screen=queue to the address).
+  // Both talk to the coffee cart Google Sheet through an Apps Script web app. With no connection saved the page
+  // runs in TEST MODE and keeps everything in this browser, which is handy for trying it on one computer.
+  var MODE = /[?&]screen=queue\b/.test(location.search) ? 'queue' : 'order';
+  document.body.className = 'mode-' + MODE;
+  if (MODE === 'queue') document.title = 'Coffee Cart Queue';
+  var CONN_KEY = 'coffeeCartConn.v1', DB_KEY = 'coffeeCartDb.v1', OUTBOX_KEY = 'coffeeCartOutbox.v1', OLD_PUNCH_KEY = 'coffeeCartPunch.v1';
+  var POLL_MS = MODE === 'queue' ? 4000 : 10000;
   var state = {
     screen: 'drink', drink: null, step: 0, sel: {}, flavors: [],
     cart: [], name: '', method: null, room: '',
     pay: null, teacherId: null, teacherQuery: '', result: null, focusName: false,
-    prevScreen: 'drink', adminUnlocked: false, changingPin: false, adminMsg: '',
-    orders: [], nextNum: 1, nextId: 1
+    prevScreen: 'drink', adminUnlocked: false, changingPin: false, adminMsg: '', pinHash: null,
+    orders: [], nextId: 1, sending: false, sendError: '',
+    connOpen: false, connUrl: '', connCode: '', connMsg: '', connBusy: false, connFocus: false
   };
-  var punch = { pinHash: null, teachers: [], cards: [], log: [], lastBackup: null, nextTid: 1 };
-  var punchStorageOk = true;
+  var punch = { teachers: [], log: [], hasPin: null };
+  var net = { status: 'connecting', skew: 0, polling: false, gen: 0, sig: '', tsig: '' };
+  var overlay = {}, newUntil = {}, firstPoll = true, pointerDown = false;
+  var conn = null, outbox = [], flushing = false, storageOk = true;
 
-  function loadSession() {
-    try {
-      var raw = sessionStorage.getItem(ORDERS_KEY);
-      if (!raw) return;
-      var saved = JSON.parse(raw);
-      if (saved && Array.isArray(saved.orders)) {
-        state.orders = saved.orders;
-        state.nextNum = saved.nextNum || (saved.orders.length + 1);
-        state.nextId = saved.nextId || (saved.orders.length + 1);
+  function lsGet(key) {
+    try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+    catch (e) { storageOk = false; return null; }
+  }
+  function lsSet(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); } catch (e) { storageOk = false; } }
+  function lsDel(key) { try { localStorage.removeItem(key); } catch (e) { storageOk = false; } }
+  function pad2(n) { return ('0' + n).slice(-2); }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+  function nowMs() { return Date.now() + net.skew; }
+  function copy(x) { return JSON.parse(JSON.stringify(x)); }
+  function extend(a, b) { for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k)) a[k] = b[k]; return a; }
+
+  // ----- test mode: the same rules the Sheet back end uses, but saved in this browser -----
+  function loadLocalDb() {
+    var db = lsGet(DB_KEY);
+    if (db && Array.isArray(db.orders)) return db;
+    db = CartLogic.newDb();
+    var old = lsGet(OLD_PUNCH_KEY); // bring over punch cards from the earlier one-screen version
+    if (old && Array.isArray(old.teachers)) {
+      db.teachers = old.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; });
+      db.nextTid = old.nextTid || (old.teachers.length + 1);
+      db.pinHash = old.pinHash || '';
+      db.cards = (old.cards || []).map(function (c) { return { cardNo: String(c), teacherId: null, t: 0 }; });
+      db.ledger = (old.log || []).slice().reverse().map(function (e) { return { t: e.t, teacherId: null, name: e.name, delta: e.delta, note: e.note }; });
+    }
+    return db;
+  }
+  function localCall(req) {
+    var db = loadLocalDb();
+    var d = new Date();
+    var day = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    var r = CartLogic.handle(db, copy(req), Date.now(), day);
+    if (r.changes) {
+      try { localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+      catch (e) { storageOk = false; throw new Error('This browser is not letting the page save.'); }
+    }
+    return copy(r.resp);
+  }
+
+  // ----- real mode: the Google Apps Script web app -----
+  function remoteCall(url, code, req) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    return fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(extend({ key: code }, req)), signal: ctl ? ctl.signal : undefined
+    }).then(function (r) { return r.text(); }).then(function (t) {
+      clearTimeout(timer);
+      try { return JSON.parse(t); } catch (e) { throw { network: true, why: 'format' }; }
+    }, function () { clearTimeout(timer); throw { network: true, why: 'offline' }; });
+  }
+  function api(req) {
+    if (conn) return remoteCall(conn.url, conn.code, req);
+    return Promise.resolve().then(function () { return localCall(req); });
+  }
+
+  // ----- changes made while offline wait here and are sent when the connection is back -----
+  function saveOutbox() { lsSet(OUTBOX_KEY, outbox); }
+  function outboxHasDone(id) { return outbox.some(function (x) { return x.kind === 'setDone' && x.id === id; }); }
+  function outboxAdd(item) {
+    if (item.kind === 'setDone') outbox = outbox.filter(function (x) { return !(x.kind === 'setDone' && x.id === item.id); });
+    outbox.push(item); saveOutbox();
+  }
+  function flushOutbox() {
+    if (flushing || !outbox.length) return Promise.resolve();
+    flushing = true;
+    function step() {
+      if (!outbox.length) return Promise.resolve();
+      var item = outbox[0];
+      var req = item.kind === 'addOrder' ? { action: 'addOrder', order: item.order } : { action: 'setDone', id: item.id, done: item.done };
+      return api(req).then(function () {
+        outbox.shift(); saveOutbox();
+        if (item.kind === 'setDone') overlay[item.id] = { done: item.done, until: Date.now() + 8000 };
+        return step();
+      }, function (err) {
+        if (err && err.network) throw err;
+        outbox.shift(); saveOutbox(); // a problem that retrying cannot fix: drop it
+        return step();
+      });
+    }
+    return step().catch(function () { /* still offline: try again on the next check */ }).then(function () { flushing = false; });
+  }
+
+  function applyPoll(resp) {
+    net.skew = resp.serverNow - Date.now();
+    punch.teachers = resp.teachers; punch.log = resp.log; punch.hasPin = resp.hasPin;
+    var had = {};
+    state.orders.forEach(function (o) { had[o.id] = true; });
+    state.orders = resp.orders.map(function (o) {
+      var ov = overlay[o.id];
+      if (ov && (outboxHasDone(o.id) || ov.until > Date.now())) { o.done = ov.done; if (!ov.done) o.doneAt = null; }
+      else if (ov) delete overlay[o.id];
+      if (!firstPoll && !had[o.id] && !o.done) newUntil[o.id] = Date.now() + 30000;
+      return o;
+    });
+    firstPoll = false;
+    net.status = 'ok';
+  }
+  function viewSig() {
+    return net.status + '|' + outbox.length + '|' + state.orders.map(function (o) { return o.id + (o.done ? 'd' : 'o'); }).join(',');
+  }
+  function afterPoll() {
+    var sig = viewSig();
+    if (MODE === 'queue') { if (sig !== net.sig && !pointerDown) renderQueue(); }
+    else {
+      if (sig !== net.sig) renderTicket();
+      var tsig = JSON.stringify(punch.teachers);
+      if (tsig !== net.tsig && state.screen === 'pay') {
+        var tl = $('teacherList'); if (tl) tl.innerHTML = teacherListHtml();
+        var pi = $('payInfo'); if (pi) pi.innerHTML = payInfoHtml();
       }
-    } catch (e) { /* storage unavailable: queue just lives in memory */ }
+      net.tsig = tsig;
+    }
+    net.sig = sig;
   }
-  function saveSession() {
-    try {
-      sessionStorage.setItem(ORDERS_KEY, JSON.stringify({ orders: state.orders, nextNum: state.nextNum, nextId: state.nextId }));
-    } catch (e) { /* ignore */ }
-  }
-  function loadPunch() {
-    try {
-      localStorage.setItem('coffeeCartTest', '1'); localStorage.removeItem('coffeeCartTest');
-      var raw = localStorage.getItem(PUNCH_KEY);
-      if (raw) {
-        var p = JSON.parse(raw);
-        if (p && Array.isArray(p.teachers)) {
-          punch.pinHash = p.pinHash || null;
-          punch.teachers = p.teachers;
-          punch.cards = Array.isArray(p.cards) ? p.cards : [];
-          punch.log = Array.isArray(p.log) ? p.log : [];
-          punch.lastBackup = p.lastBackup || null;
-          punch.nextTid = p.nextTid || (p.teachers.length + 1);
-        }
-      }
-    } catch (e) { punchStorageOk = false; }
-  }
-  function savePunch() {
-    try { localStorage.setItem(PUNCH_KEY, JSON.stringify(punch)); }
-    catch (e) { punchStorageOk = false; }
+  function pollNow() {
+    if (net.polling) return Promise.resolve();
+    net.polling = true;
+    var gen = net.gen;
+    return flushOutbox().then(function () { return api({ action: 'poll' }); }).then(function (resp) {
+      net.polling = false;
+      if (gen !== net.gen) return;
+      if (!resp.ok) { net.status = (resp.error === 'bad-key' || resp.error === 'no-key') ? 'badkey' : 'error'; return; }
+      applyPoll(resp);
+    }, function (err) {
+      net.polling = false;
+      if (gen !== net.gen) return;
+      net.status = err && err.network ? 'offline' : 'error';
+    }).then(function () { if (gen === net.gen) afterPoll(); });
   }
 
   // ---------- helpers ----------
@@ -327,9 +648,18 @@
     return Promise.resolve('x' + btoa(s));
   }
 
-  function logPunch(name, delta, note) {
-    punch.log.unshift({ t: Date.now(), name: name, delta: delta, note: note });
-    if (punch.log.length > 300) punch.log.length = 300;
+  function clock(ms) { return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); }
+  function ageText(o) {
+    var m = Math.floor((nowMs() - o.createdAt) / 60000);
+    return m < 1 ? 'just now' : m === 1 ? '1 min ago' : m + ' min ago';
+  }
+  function statusHtml() {
+    var pend = outbox.length ? ' ' + plural(outbox.length, 'change') + ' waiting to send.' : '';
+    if (!conn) return '<div class="banner"><div><b>Test mode.</b> Orders stay in this browser only.</div><button class="small" data-action="openConn">Connect to Google Sheet</button></div>';
+    if (net.status === 'badkey') return '<div class="banner"><div><b>⚠ Access code not accepted.</b></div><button class="small" data-action="openConn">Fix connection</button></div>';
+    if (net.status === 'offline' || net.status === 'error') return '<div class="banner"><div><b>⚠ No connection to the Sheet.</b>' + esc(pend) + ' Orders are kept on this device and will go through when the connection is back.</div></div>';
+    if (net.status === 'connecting') return '<div class="status-ok">Connecting…</div>';
+    return '<div class="status-ok">✓ Connected' + esc(pend) + '</div>';
   }
 
   // ---------- rendering ----------
@@ -372,11 +702,13 @@
   function adminHtml() {
     var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:16px"><h1>Punch cards</h1><button class="secondary" data-action="closeAdmin">Done</button></div>';
     var msg = state.adminMsg ? '<div class="notice" role="status">' + esc(state.adminMsg) + '</div>' : '';
-    if (!punchStorageOk) html += '<div class="notice">This browser is not letting the page save punch cards, so changes will be lost when the tab closes.</div>';
+    if (!storageOk) html += '<div class="notice">This browser is not letting the page save punch cards, so changes will be lost when the tab closes.</div>';
+
+    if (punch.hasPin === null) return html + '<div class="notice">Connecting to the Sheet… If this stays here, check the connection.<br><br><button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="openConn">Connection</button></div>';
 
     // PIN screens
-    if (!punch.pinHash || state.changingPin) {
-      html += msg + '<div class="panel" style="max-width:520px"><h2>' + (punch.pinHash ? 'Change the teacher PIN' : 'Create a teacher PIN') + '</h2>' +
+    if (!punch.hasPin || state.changingPin) {
+      html += msg + '<div class="panel" style="max-width:520px"><h2>' + (punch.hasPin ? 'Change the teacher PIN' : 'Create a teacher PIN') + '</h2>' +
         '<div class="muted" style="font-size:20px;line-height:1.4">4 to 8 numbers. This PIN keeps students from changing punch balances. It is a simple lock, not a vault.</div>' +
         '<label class="field-label" for="pinNew">New PIN</label><input id="pinNew" class="text-input mid" type="password" inputmode="numeric" autocomplete="off" maxlength="8">' +
         '<label class="field-label" for="pinConfirm">Type it again</label><input id="pinConfirm" class="text-input mid" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-enter="pinSaveBtn">' +
@@ -395,8 +727,6 @@
     // unlocked
     html += msg;
     var teachers = punch.teachers.slice().sort(byName);
-    var stale = !punch.lastBackup || (Date.now() - punch.lastBackup) > 7 * 24 * 3600 * 1000;
-    if (stale && punch.teachers.length) html += '<div class="notice">It has been a while since the last backup. Use Export backup below.</div>';
 
     html += '<div class="scroll">';
 
@@ -430,11 +760,11 @@
       return '<div class="logrow"><span class="when">' + esc(whenText(e.t)) + '</span><span><b>' + esc(e.name) + '</b> ' + (e.delta > 0 ? '+' : '') + e.delta + ' · ' + esc(e.note) + '</span></div>';
     }).join('') : '<div class="muted" style="font-size:20px">Nothing yet.</div>') + '</div>';
 
-    html += '<div class="panel"><h2>Backup and PIN</h2>' +
-      '<div class="muted" style="font-size:18px">Last backup: ' + (punch.lastBackup ? esc(whenText(punch.lastBackup)) : 'never') + '. Balances are saved in this browser on this computer. Clearing the browser’s history or switching browsers would lose them, so export a backup now and then.</div>' +
+    html += '<div class="panel"><h2>Backup, PIN and connection</h2>' +
+      '<div class="muted" style="font-size:18px">' + (conn ? 'Everything here is saved in the coffee cart Google Sheet, which is also the backup. Export makes a copy you can keep.' : 'Test mode: balances are saved only in this browser. Connect to the Google Sheet to share them between devices.') + '</div>' +
       '<div class="form-row"><button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="exportBackup">Export backup</button>' +
-      '<label class="secondary" style="display:inline-flex;align-items:center;min-height:56px;font-size:20px;padding:0 24px;cursor:pointer">Restore from backup<input id="restoreFile" type="file" accept=".json,application/json" style="display:none"></label>' +
       '<button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="changePin">Change PIN</button>' +
+      '<button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="openConn">Connection</button>' +
       '<button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="lock">Lock</button></div></div>';
 
     html += '</div>';
@@ -534,21 +864,24 @@
           '<div id="teacherList" class="teacher-list">' + teacherListHtml() + '</div>' +
           '<div id="payInfo" class="info"' + (state.teacherId ? '' : ' hidden') + '>' + payInfoHtml() + '</div>';
       }
+      if (state.sendError) html += '<div class="notice" role="alert">' + esc(state.sendError) + '</div>';
       html += '</div><div class="row"><button class="secondary" data-action="backToReview">Back</button>' +
-        '<button id="sendBtn" class="primary" data-action="send"' + (canSend() ? '' : ' disabled') + '>Send order</button></div>';
+        '<button id="sendBtn" class="primary" data-action="send"' + (canSend() && !state.sending ? '' : ' disabled') + '>' + (state.sending ? 'Sending…' : 'Send order') + '</button></div>';
     }
 
     if (state.screen === 'done') {
       var where = deliveryText(state.method, state.room.trim());
       var res = state.result, notice = '';
-      if (res && res.kind === 'punch') {
+      if (res && res.kind === 'queued') {
+        notice = 'No connection right now. This order is saved on this device and will go to the queue as soon as the connection is back.';
+      } else if (res && res.kind === 'punch') {
         var b = res.balance;
         notice = b >= 2 ? esc(res.name) + ' has ' + plural(b, 'punch') + ' left.' :
           b === 1 ? esc(res.name) + ' has 1 punch left.' :
           b === 0 ? 'That was the last punch! Remind ' + esc(res.name) + ' to bring a new card.' :
           esc(res.name) + ' is out of punches (owes ' + plural(-b, 'punch') + '). Remind them to bring their card to mark off.';
       }
-      html += '<div style="display:flex;align-items:center;gap:16px"><svg width="56" height="56" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="#1F6F5C"/><path d="M10 18.5l5.5 5.5L26 12.5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><h1>Order sent!</h1></div>' +
+      html += '<div style="display:flex;align-items:center;gap:16px"><svg width="56" height="56" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="17" fill="#1F6F5C"/><path d="M10 18.5l5.5 5.5L26 12.5" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><h1>' + (res && res.kind === 'queued' ? 'Order saved' : 'Order sent!') + '</h1>' + (res && res.num ? '<div class="chip">Order #' + res.num + '</div>' : '') + '</div>' +
         (notice ? '<div class="notice" role="status">' + notice + '</div>' : '') +
         '<div class="muted" style="font-size:22px">Cup labels (this is what we could print later)</div>' +
         '<div class="labels">' + state.cart.map(function (c) {
@@ -582,7 +915,7 @@
   function renderTicket() {
     var d = drinkObj();
     var hasCurrent = state.screen === 'options' && d;
-    var html = '<div class="side-title">Order ticket</div>';
+    var html = '<div class="side-title">Order ticket</div>' + statusHtml() + '<div class="info"><b>Queue:</b> ' + (state.orders.filter(function (o) { return !o.done; }).length + outbox.filter(function (x) { return x.kind === 'addOrder'; }).length) + ' waiting</div>';
     if (!state.cart.length && !hasCurrent) html += '<div class="muted" style="font-size:22px;line-height:1.4">Nothing yet. Tap a drink to start.</div>';
     html += state.cart.map(function (c) {
       return '<div class="tcard"><div class="t-title">' + esc(c.title) + '</div><div class="t-detail">' + esc(c.detail) + '</div>' +
@@ -600,35 +933,64 @@
     $('ticket').innerHTML = html;
   }
 
+  function qcardHtml(o) {
+    var pay = payText(o);
+    var isNew = newUntil[o.id] && newUntil[o.id] > Date.now();
+    return '<div class="qcard"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><div class="name">' + esc(o.name) + '</div><div style="font-size:22px;font-weight:700">#' + o.num + '</div></div>' +
+      (isNew ? '<div><span class="newtag">NEW</span></div>' : '') +
+      '<div style="font-size:22px;font-weight:700">' + esc(deliveryText(o.method, o.room)) + '</div>' +
+      (pay ? '<div style="font-size:18px;font-weight:600">' + esc(pay) + '</div>' : '') +
+      '<div class="muted" style="font-size:18px">Sent ' + esc(clock(o.createdAt)) + ' · ' + esc(ageText(o)) + '</div>' +
+      '<div class="items">' + o.items.map(function (i) { return esc(i.title + (i.detail ? ' — ' + i.detail : '')); }).join('\n') + '</div>' +
+      '<button class="finish" data-action="finish" data-v="' + esc(o.id) + '">Mark finished</button></div>';
+  }
   function renderQueue() {
     var open = state.orders.filter(function (o) { return !o.done; });
-    var fin = state.orders.filter(function (o) { return o.done; }).slice(-3).reverse();
-    var html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="side-title">Queue</div><div class="badge">' + open.length + '</div></div>';
-    if (!open.length) html += '<div class="muted" style="font-size:22px;line-height:1.4">No orders waiting.</div>';
-    html += open.map(function (o) {
-      var pay = payText(o);
-      return '<div class="qcard"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><div class="name">' + esc(o.name) + '</div><div style="font-size:22px;font-weight:700">#' + o.num + '</div></div>' +
-        '<div style="font-size:22px;font-weight:700">' + esc(deliveryText(o.method, o.room)) + '</div>' +
-        (pay ? '<div style="font-size:18px;font-weight:600">' + esc(pay) + '</div>' : '') +
-        '<div class="muted" style="font-size:18px">Sent ' + esc(o.time) + '</div>' +
-        '<div class="items">' + o.items.map(function (i) { return esc(i.title + ' — ' + i.detail); }).join('\n') + '</div>' +
-        '<button class="finish" data-action="finish" data-v="' + o.id + '">Mark finished</button></div>';
-    }).join('');
+    var fin = state.orders.filter(function (o) { return o.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); }).slice(0, MODE === 'queue' ? 8 : 3);
+    var html;
+    if (MODE === 'queue') {
+      html = '<div class="qhead"><div class="side-title">Coffee Cart Queue</div><div class="badge" aria-label="' + open.length + ' waiting">' + open.length + '</div><div class="spacer"></div>' +
+        '<button class="small" data-action="openConn">Connection</button></div>' + statusHtml();
+      if (!open.length) html += '<div class="muted" style="font-size:26px;line-height:1.4">No orders waiting.</div>';
+      else html += '<div class="qgrid">' + open.map(qcardHtml).join('') + '</div>';
+    } else {
+      html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="side-title">Queue</div><div class="badge">' + open.length + '</div></div>';
+      html += open.map(qcardHtml).join('');
+    }
     if (fin.length) {
       html += '<div style="font-size:20px;font-weight:700;margin-top:8px;padding-top:12px;border-top:3px solid var(--line)">Finished</div>' + fin.map(function (o) {
-        return '<div class="fin-row"><span><b>' + esc(o.name) + '</b> #' + o.num + '</span><button class="small" data-action="undo" data-v="' + o.id + '" aria-label="Move ' + esc(o.name) + ' back to the queue">Undo</button></div>';
+        return '<div class="fin-row"><span><b>' + esc(o.name) + '</b> #' + o.num + '</span><button class="small" data-action="undo" data-v="' + esc(o.id) + '" aria-label="Move ' + esc(o.name) + ' back to the queue">Undo</button></div>';
       }).join('');
     }
     $('queue').innerHTML = html;
   }
 
-  function render() { renderMain(); renderTicket(); renderQueue(); }
+  function renderOverlay() {
+    var el = $('overlay');
+    if (!state.connOpen) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="connTitle"><h2 id="connTitle">Connection</h2>' +
+      '<div class="muted" style="font-size:19px;line-height:1.4">' + (conn ? 'Connected to the coffee cart Google Sheet.' : 'Test mode: nothing is shared yet.') +
+      ' Paste the web address from Apps Script and type the access code. You only do this once on each device.</div>' +
+      '<label class="field-label" for="connUrl">Web address</label><input id="connUrl" class="text-input mid" type="text" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(state.connUrl) + '">' +
+      '<label class="field-label" for="connCode">Access code</label><input id="connCode" class="text-input mid" type="password" autocomplete="off" value="' + esc(state.connCode) + '" data-enter="connSaveBtn">' +
+      (state.connMsg ? '<div class="notice" role="status">' + esc(state.connMsg) + '</div>' : '') +
+      '<div class="row"><button id="connSaveBtn" class="primary" style="min-height:60px;font-size:22px;padding:0 28px"' + (state.connBusy ? ' disabled' : '') + ' data-action="testSave">' + (state.connBusy ? 'Testing…' : 'Test and save') + '</button>' +
+      '<button class="secondary" style="min-height:60px;font-size:22px;padding:0 28px" data-action="closeConn">Close</button></div>' +
+      (conn ? '<div><button class="small" data-action="disconnect">Disconnect and use test mode</button></div>' : '') + '</div>';
+    if (state.connFocus) { state.connFocus = false; var f = $('connUrl'); if (f) f.focus(); }
+  }
+
+  function render() {
+    if (MODE === 'order') { renderMain(); renderTicket(); } else renderQueue();
+    renderOverlay();
+  }
 
   // ---------- actions ----------
   function resetOrder() {
     state.screen = 'drink'; state.drink = null; state.step = 0; state.sel = {}; state.flavors = [];
     state.cart = []; state.name = ''; state.method = null; state.room = '';
-    state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null;
+    state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null; state.sendError = '';
   }
   function finishDrink() {
     var d = drinkObj();
@@ -640,8 +1002,19 @@
     state.drink = null; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'review'; state.focusName = true;
   }
   function setOrderDone(id, done) {
-    state.orders.forEach(function (o) { if (String(o.id) === String(id)) o.done = done; });
-    saveSession();
+    state.orders.forEach(function (o) { if (o.id === id) { o.done = done; o.doneAt = done ? nowMs() : null; } });
+    overlay[id] = { done: done, until: 0 };
+    outboxAdd({ kind: 'setDone', id: id, done: done });
+    flushOutbox().then(afterPoll);
+  }
+  // run a teacher-PIN action on the back end, then show what happened
+  function adminCall(req, okMsg) {
+    req.pinHash = state.pinHash;
+    api(req).then(function (r) {
+      if (!r.ok) { say(r.message || 'That did not work.'); if (r.error === 'bad-pin') { state.adminUnlocked = false; state.pinHash = null; } return; }
+      say(typeof okMsg === 'function' ? okMsg(r) : okMsg);
+      return pollNow();
+    }).catch(function () { say('Could not reach the Google Sheet. Check the connection and try again.'); }).then(render);
   }
   function say(msg) { state.adminMsg = msg; }
 
@@ -688,28 +1061,25 @@
       state.cart = state.cart.filter(function (c) { return String(c.id) !== String(v); });
     },
     send: function () {
-      if (!canSend()) return;
+      if (!canSend() || state.sending) return;
       var order = {
-        id: state.nextId++, num: state.nextNum++, name: state.name.trim(),
-        method: state.method, room: state.room.trim(),
-        time: new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-        done: false, pay: state.pay,
-        items: state.cart.map(function (c) { return { title: c.title, detail: c.detail }; })
+        id: uid(), name: state.name.trim(), method: state.method, room: state.room.trim(),
+        items: state.cart.map(function (c) { return { title: c.title, detail: c.detail }; }),
+        pay: state.pay, teacherId: state.pay === 'punch' ? state.teacherId : null
       };
-      state.result = null;
-      if (state.pay === 'punch') {
-        var t = teacherById(state.teacherId);
-        var n = state.cart.length;
-        t.punches -= n; // one punch per drink; can go below zero (honor system)
-        logPunch(t.name, -n, 'Order #' + order.num + ' (' + plural(n, 'drink') + ')');
-        savePunch();
-        order.teacherName = t.name;
-        order.balanceAfter = t.punches;
-        state.result = { kind: 'punch', name: t.name, balance: t.punches };
-      }
-      state.orders.push(order);
-      state.screen = 'done';
-      saveSession();
+      state.sending = true; state.sendError = '';
+      api({ action: 'addOrder', order: order }).then(function (r) {
+        state.sending = false;
+        if (!r.ok) { state.sendError = r.message || 'The order did not go through.'; return; }
+        var o = r.order;
+        state.result = o.pay === 'punch' ? { kind: 'punch', num: o.num, name: o.teacherName, balance: o.balanceAfter } : { kind: 'other', num: o.num };
+        state.screen = 'done';
+        return pollNow();
+      }, function (err) {
+        state.sending = false;
+        if (err && err.network) { outboxAdd({ kind: 'addOrder', order: order }); state.result = { kind: 'queued' }; state.screen = 'done'; net.status = 'offline'; }
+        else state.sendError = 'Something went wrong sending the order. Try again.';
+      }).then(render);
     },
     newCustomer: function () { resetOrder(); },
     clearAll: function () { resetOrder(); },
@@ -717,52 +1087,45 @@
     undo: function (v) { setOrderDone(v, false); },
 
     // ----- punch card admin -----
-    openAdmin: function () { state.prevScreen = state.screen; state.screen = 'admin'; state.adminMsg = ''; state.adminUnlocked = false; state.changingPin = false; },
-    closeAdmin: function () { state.screen = state.prevScreen || 'drink'; state.adminUnlocked = false; state.changingPin = false; state.adminMsg = ''; },
-    lock: function () { state.adminUnlocked = false; state.adminMsg = ''; },
+    openAdmin: function () { state.prevScreen = state.screen; state.screen = 'admin'; state.adminMsg = ''; state.adminUnlocked = false; state.changingPin = false; state.pinHash = null; },
+    closeAdmin: function () { state.screen = state.prevScreen || 'drink'; state.adminUnlocked = false; state.changingPin = false; state.adminMsg = ''; state.pinHash = null; },
+    lock: function () { state.adminUnlocked = false; state.adminMsg = ''; state.pinHash = null; },
     changePin: function () { state.changingPin = true; state.adminMsg = ''; },
     cancelPin: function () { state.changingPin = false; state.adminMsg = ''; },
     unlock: function () {
       var entered = val('pinInput');
+      if (!entered) { say('Type the PIN first.'); return; }
       hashPin(entered).then(function (h) {
-        if (h === punch.pinHash) { state.adminUnlocked = true; state.adminMsg = ''; }
-        else state.adminMsg = 'That PIN is not right.';
-        render();
-      });
+        return api({ action: 'verifyPin', pinHash: h }).then(function (r) {
+          if (r.ok && r.valid) { state.pinHash = h; state.adminUnlocked = true; state.adminMsg = ''; }
+          else state.adminMsg = 'That PIN is not right.';
+        });
+      }).catch(function () { state.adminMsg = 'Could not reach the Google Sheet. Try again.'; }).then(render);
     },
     setPin: function () {
       var a = val('pinNew'), b = val('pinConfirm');
       if (!/^\d{4,8}$/.test(a)) { say('The PIN must be 4 to 8 numbers.'); return; }
       if (a !== b) { say('The two PINs did not match. Try again.'); return; }
       hashPin(a).then(function (h) {
-        punch.pinHash = h; savePunch();
-        state.changingPin = false; state.adminUnlocked = true; state.adminMsg = 'PIN saved.';
-        render();
-      });
+        return api({ action: 'setPin', pinHash: state.pinHash, newPinHash: h }).then(function (r) {
+          if (!r.ok) { state.adminMsg = r.message || 'The PIN was not saved.'; return; }
+          state.pinHash = h; state.changingPin = false; state.adminUnlocked = true; state.adminMsg = 'PIN saved.';
+          return pollNow();
+        });
+      }).catch(function () { state.adminMsg = 'Could not reach the Google Sheet. Try again.'; }).then(render);
     },
     addTeacher: function () {
       var name = val('newTeacher').trim();
       var start = parseInt(val('newTeacherStart'), 10) || 0;
       if (!name) { say('Type the teacher’s name first.'); return; }
-      var dupe = punch.teachers.some(function (t) { return t.name.toLowerCase() === name.toLowerCase(); });
-      if (dupe) { say(name + ' is already on the list.'); return; }
-      punch.teachers.push({ id: punch.nextTid++, name: name, punches: start });
-      if (start !== 0) logPunch(name, start, 'Starting balance');
-      savePunch();
-      say('Added ' + name + '.');
+      adminCall({ action: 'addTeachers', names: [name], start: start }, function (r) { return r.added ? 'Added ' + name + '.' : name + ' is already on the list.'; });
     },
     addMany: function () {
       var names = val('bulkTeachers').split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
       if (!names.length) { say('Type or paste some names first, one per line.'); return; }
-      var added = 0, skipped = 0;
-      names.forEach(function (n) {
-        var dupe = punch.teachers.some(function (t) { return t.name.toLowerCase() === n.toLowerCase(); });
-        if (dupe) { skipped++; return; }
-        punch.teachers.push({ id: punch.nextTid++, name: n, punches: 0 });
-        added++;
+      adminCall({ action: 'addTeachers', names: names, start: 0 }, function (r) {
+        return 'Added ' + plural(r.added, 'teacher') + (r.skipped ? ' (' + r.skipped + ' already on the list)' : '') + '.';
       });
-      savePunch();
-      say('Added ' + plural(added, 'teacher') + (skipped ? ' (' + skipped + ' already on the list)' : '') + '.');
     },
     loadCard: function () {
       var t = teacherById(Number(val('loadTeacher')));
@@ -770,36 +1133,62 @@
       var cardNo = val('loadCardNo').trim();
       if (!t) { say('Pick a teacher first.'); return; }
       if (!(count >= 1 && count <= 50)) { say('Punches should be a number from 1 to 50.'); return; }
-      if (cardNo) {
-        var seen = punch.cards.some(function (c) { return c.toLowerCase() === cardNo.toLowerCase(); });
-        if (seen) { say('Card ' + cardNo + ' was already loaded. Nothing was added.'); return; }
-        punch.cards.push(cardNo);
-      }
-      t.punches += count;
-      logPunch(t.name, count, cardNo ? 'Loaded card ' + cardNo : 'Loaded a card');
-      savePunch();
-      say('Added ' + plural(count, 'punch') + ' for ' + t.name + '. Balance: ' + t.punches + '.');
+      adminCall({ action: 'loadCard', teacherId: t.id, count: count, cardNo: cardNo }, function (r) {
+        return 'Added ' + plural(count, 'punch') + ' for ' + t.name + '. Balance: ' + r.teacher.punches + '.';
+      });
     },
     adjust: function (v, key) {
       var t = teacherById(Number(v)); var delta = parseInt(key, 10);
       if (!t || !delta) return;
-      t.punches += delta;
-      logPunch(t.name, delta, 'Adjusted by hand');
-      savePunch();
-      say(t.name + ' now has ' + t.punches + '.');
+      adminCall({ action: 'adjust', teacherId: t.id, delta: delta }, function (r) { return t.name + ' now has ' + r.teacher.punches + '.'; });
     },
     exportBackup: function () {
-      var blob = new Blob([JSON.stringify(punch, null, 2)], { type: 'application/json' });
-      var a = document.createElement('a');
-      var d = new Date();
-      a.href = URL.createObjectURL(blob);
-      a.download = 'coffee-cart-punch-backup-' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + '.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-      punch.lastBackup = Date.now(); savePunch();
-      say('Backup file saved to your Downloads folder.');
+      adminCall({ action: 'export' }, function (r) {
+        var blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
+        var a = document.createElement('a');
+        var d = new Date();
+        a.href = URL.createObjectURL(blob);
+        a.download = 'coffee-cart-backup-' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + '.json';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        return 'Backup file saved to your Downloads folder.';
+      });
+    },
+
+    // ----- connection to the Google Sheet -----
+    openConn: function () { state.connOpen = true; state.connMsg = ''; state.connUrl = conn ? conn.url : ''; state.connCode = conn ? conn.code : ''; state.connFocus = true; },
+    closeConn: function () { state.connOpen = false; },
+    testSave: function () {
+      var url = state.connUrl.trim(), code = state.connCode.trim();
+      if (!url || !code) { state.connMsg = 'Paste the web address and type the access code.'; return; }
+      if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { state.connMsg = 'That does not look like an Apps Script web address. It should start with https://script.google.com/'; return; }
+      state.connBusy = true; state.connMsg = '';
+      remoteCall(url, code, { action: 'poll' }).then(function (r) {
+        state.connBusy = false;
+        if (r.ok) {
+          conn = { url: url, code: code }; lsSet(CONN_KEY, conn);
+          resetConnectionState();
+          state.connOpen = false; state.adminUnlocked = false; state.pinHash = null;
+          pollNow();
+        } else state.connMsg = (r.error === 'bad-key' || r.error === 'no-key') ? 'The web address works, but the access code was not accepted.' : (r.message || 'The Sheet answered with a problem.');
+      }, function () {
+        state.connBusy = false;
+        state.connMsg = 'Could not reach that address. Check that it was copied completely and that the web app is shared with “Anyone”.';
+      }).then(render);
+    },
+    disconnect: function () {
+      if (!window.confirm('Disconnect from the Google Sheet and go back to test mode on this device?')) return;
+      conn = null; lsDel(CONN_KEY);
+      resetConnectionState();
+      state.connOpen = false; state.adminUnlocked = false; state.pinHash = null;
+      pollNow();
     }
   };
+  function resetConnectionState() {
+    net.gen++; net.polling = false; net.status = 'connecting'; net.sig = ''; net.tsig = '';
+    punch.teachers = []; punch.log = []; punch.hasPin = null;
+    state.orders = []; overlay = {}; newUntil = {}; firstPoll = true;
+  }
 
   document.addEventListener('click', function (e) {
     var el = e.target.closest('[data-action]');
@@ -815,6 +1204,8 @@
     var id = e.target.id;
     if (id === 'customerName') { state.name = e.target.value; var s1 = $('toPayBtn'); if (s1) s1.disabled = !canProceed(); }
     else if (id === 'roomNumber') { state.room = e.target.value; var s2 = $('toPayBtn'); if (s2) s2.disabled = !canProceed(); }
+    else if (id === 'connUrl') { state.connUrl = e.target.value; }
+    else if (id === 'connCode') { state.connCode = e.target.value; }
     else if (id === 'drinkNotes') { state.sel.typed = e.target.value; renderTicket(); }
     else if (id === 'teacherSearch') { state.teacherQuery = e.target.value; var tl = $('teacherList'); if (tl) tl.innerHTML = teacherListHtml(); e.target.scrollIntoView({ block: 'start' }); }
   });
@@ -831,31 +1222,19 @@
     if (target && $(target)) { e.preventDefault(); $(target).click(); }
   });
 
-  document.addEventListener('change', function (e) {
-    if (e.target.id !== 'restoreFile' || !e.target.files || !e.target.files[0]) return;
-    var reader = new FileReader();
-    reader.onload = function () {
-      try {
-        var p = JSON.parse(reader.result);
-        if (!p || !Array.isArray(p.teachers)) throw new Error('bad file');
-        if (!window.confirm('Replace all punch card data on this computer with this backup?')) return;
-        punch.pinHash = p.pinHash || punch.pinHash;
-        punch.teachers = p.teachers;
-        punch.cards = Array.isArray(p.cards) ? p.cards : [];
-        punch.log = Array.isArray(p.log) ? p.log : [];
-        punch.lastBackup = p.lastBackup || null;
-        punch.nextTid = p.nextTid || (p.teachers.length + 1);
-        savePunch();
-        say('Backup restored.');
-      } catch (err) { say('That file is not a coffee cart backup.'); }
-      render();
-    };
-    reader.readAsText(e.target.files[0]);
-  });
+  document.addEventListener('pointerdown', function () { pointerDown = true; });
+  document.addEventListener('pointerup', function () { pointerDown = false; });
+  document.addEventListener('pointercancel', function () { pointerDown = false; });
 
-  loadSession();
-  loadPunch();
+  var saved = lsGet(CONN_KEY);
+  if (saved && saved.url && saved.code) conn = saved;
+  outbox = lsGet(OUTBOX_KEY) || [];
   render();
+  pollNow();
+  setInterval(pollNow, POLL_MS);
+  window.addEventListener('online', pollNow);
+  window.addEventListener('storage', function (e) { if (!conn && e.key === DB_KEY) pollNow(); });
+  if (MODE === 'queue') setInterval(function () { if (!pointerDown && !state.connOpen) renderQueue(); }, 15000);
 })();
 </script>
 </body>
