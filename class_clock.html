@@ -1,0 +1,357 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Class Clock</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;500;700;800&display=swap">
+<style>
+  /* Layout: one centered stack (message, time, date) that fills the screen; controls fade away when idle. */
+  :root {
+    --bg: #F6F7F9;
+    --fg: #0A0C10;
+    --muted: #4A5260;
+    --line: #C9CED8;
+    --panel: #FFFFFF;
+    --accent: #1F4FD8;
+    --font: "Lexend", "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #090B0F;
+      --fg: #F4F6FA;
+      --muted: #A3ABBA;
+      --line: #2B313C;
+      --panel: #12151B;
+      --accent: #8FB0FF;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #090B0F;
+    --fg: #F4F6FA;
+    --muted: #A3ABBA;
+    --line: #2B313C;
+    --panel: #12151B;
+    --accent: #8FB0FF;
+    color-scheme: dark;
+  }
+
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-block: 2vh;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  body.idle { cursor: none; }
+
+  .stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.2vh;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  .msg {
+    font-size: clamp(22px, min(5.2vw, 7vh), 96px);
+    font-weight: 500;
+    line-height: 1.15;
+    max-width: 92vw;
+    outline: none;
+    border-radius: 8px;
+    padding: 0.1em 0.4em;
+    text-wrap: balance;
+    min-height: 1.15em;
+  }
+  .msg:empty { visibility: hidden; }
+  body:not(.idle) .msg:empty { visibility: visible; }
+  body:not(.idle) .msg:empty::before {
+    content: "Click here to add a message";
+    color: var(--muted);
+    font-weight: 400;
+  }
+  .msg:hover { box-shadow: 0 0 0 2px var(--line); }
+  .msg:focus { box-shadow: 0 0 0 3px var(--accent); }
+
+  .time {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 0.12em;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-size: min(24vw, 46vh);
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+    white-space: nowrap;
+  }
+  .stage.secs .time { font-size: min(15.5vw, 34vh); }
+  .ampm {
+    font-size: 0.26em;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+  }
+  .date {
+    font-size: clamp(18px, min(3.4vw, 5vh), 64px);
+    font-weight: 500;
+    color: var(--muted);
+  }
+
+  .controls {
+    position: fixed;
+    left: 0; right: 0;
+    bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    transition: opacity 0.4s ease;
+    z-index: 5;
+  }
+  body.idle .controls { opacity: 0; }
+  body.idle .controls:hover,
+  body.idle .controls:focus-within { opacity: 1; }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    max-width: 100%;
+  }
+  .bar button {
+    font: inherit;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--fg);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 14px;
+    cursor: pointer;
+    min-height: 40px;
+  }
+  .bar button:hover { border-color: var(--fg); }
+  .bar button[aria-pressed="true"] {
+    background: var(--fg);
+    color: var(--bg);
+    border-color: var(--fg);
+  }
+  .bar button:focus-visible,
+  .msg:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .hint {
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 1.3em;
+  }
+
+  @media (max-width: 480px) {
+    .time { font-size: min(22vw, 40vh); }
+    .stage.secs .time { font-size: min(14vw, 30vh); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .controls { transition: none; }
+  }
+</style>
+
+<main class="stage" id="stage">
+  <div class="msg" id="msg" contenteditable="true" spellcheck="false" role="textbox" aria-label="Message shown above the clock"></div>
+  <div class="time" role="timer" aria-live="off"><span id="digits">12:00</span><span class="ampm" id="ampm">PM</span></div>
+  <div class="date" id="date"></div>
+</main>
+
+<div class="controls" id="controls">
+  <div class="bar" role="group" aria-label="Clock options">
+    <button type="button" id="bSecs" aria-pressed="false">Seconds</button>
+    <button type="button" id="b24" aria-pressed="false">24-hour</button>
+    <button type="button" id="bMsg" aria-pressed="true">Message</button>
+    <button type="button" id="bDate" aria-pressed="true">Date</button>
+    <button type="button" id="bTheme">Theme: Auto</button>
+    <button type="button" id="bFull">Fullscreen</button>
+    <button type="button" id="bPip" hidden>Pop out</button>
+  </div>
+  <div class="hint" id="hint">Click the message to edit it. Keys: F fullscreen, S seconds, M message.</div>
+</div>
+
+<script>
+(function () {
+  var KEY = "classclock.v1";
+  var $ = function (id) { return document.getElementById(id); };
+  var stage = $("stage"), msg = $("msg"), digits = $("digits"), ampm = $("ampm"),
+      dateEl = $("date"), hint = $("hint");
+  var DEFAULT_HINT = hint.textContent;
+  var state = { seconds: false, h24: false, date: true, showMsg: true, theme: "auto", msg: "We start at 8:15" };
+
+  try {
+    var saved = JSON.parse(localStorage.getItem(KEY) || "null");
+    if (saved && typeof saved === "object") {
+      for (var k in state) if (k in saved && typeof saved[k] === typeof state[k]) state[k] = saved[k];
+    }
+  } catch (e) {}
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  function pad(n) { return n < 10 ? "0" + n : "" + n; }
+  var DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  function render() {
+    var now = new Date(), h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    var hh = state.h24 ? pad(h) : String(h % 12 || 12);
+    digits.textContent = hh + ":" + pad(m) + (state.seconds ? ":" + pad(s) : "");
+    ampm.textContent = state.h24 ? "" : (h < 12 ? "AM" : "PM");
+    ampm.hidden = state.h24;
+    dateEl.textContent = DAYS[now.getDay()] + ", " + MONTHS[now.getMonth()] + " " + now.getDate();
+    dateEl.hidden = !state.date;
+    stage.classList.toggle("secs", state.seconds);
+  }
+  function tick() {
+    render();
+    setTimeout(tick, 1000 - (Date.now() % 1000) + 5);
+  }
+
+  /* message */
+  msg.textContent = state.msg;
+  msg.addEventListener("input", function () { state.msg = msg.textContent; save(); });
+  msg.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); msg.blur(); }
+    e.stopPropagation();
+  });
+  msg.addEventListener("paste", function (e) {
+    e.preventDefault();
+    var t = (e.clipboardData || window.clipboardData).getData("text").replace(/\s+/g, " ");
+    document.execCommand("insertText", false, t);
+  });
+
+  /* toggles */
+  function sync() {
+    $("bSecs").setAttribute("aria-pressed", state.seconds);
+    $("b24").setAttribute("aria-pressed", state.h24);
+    $("bDate").setAttribute("aria-pressed", state.date);
+    $("bMsg").setAttribute("aria-pressed", state.showMsg);
+    msg.hidden = !state.showMsg;
+    $("bTheme").textContent = "Theme: " + state.theme.charAt(0).toUpperCase() + state.theme.slice(1);
+    var root = document.documentElement;
+    if (state.theme === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", state.theme);
+    render();
+  }
+  function toggle(name) { state[name] = !state[name]; save(); sync(); }
+  $("bSecs").onclick = function () { toggle("seconds"); };
+  $("b24").onclick = function () { toggle("h24"); };
+  $("bDate").onclick = function () { toggle("date"); };
+  $("bMsg").onclick = function () { toggle("showMsg"); };
+  $("bTheme").onclick = function () {
+    var order = ["auto", "light", "dark"];
+    state.theme = order[(order.indexOf(state.theme) + 1) % 3];
+    save(); sync();
+  };
+
+  var hintTimer;
+  function say(text) {
+    hint.textContent = text;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { hint.textContent = DEFAULT_HINT; }, 6000);
+  }
+
+  /* fullscreen */
+  function fullscreen() {
+    try {
+      if (document.fullscreenElement) { document.exitFullscreen(); return; }
+      var p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(function () { say("Fullscreen isn't available here. Press F11 in your browser instead."); });
+    } catch (e) { say("Fullscreen isn't available here. Press F11 in your browser instead."); }
+  }
+  $("bFull").onclick = fullscreen;
+
+  /* pop-out window (Chrome's floating window) */
+  if ("documentPictureInPicture" in window) {
+    $("bPip").hidden = false;
+    $("bPip").onclick = function () {
+      window.documentPictureInPicture.requestWindow({ width: 440, height: 230 }).then(function (pip) {
+        Array.prototype.forEach.call(document.styleSheets, function (ss) {
+          try {
+            var st = pip.document.createElement("style");
+            st.textContent = Array.prototype.map.call(ss.cssRules, function (r) { return r.cssText; }).join("\n");
+            pip.document.head.appendChild(st);
+          } catch (e) {
+            if (ss.href) {
+              var l = pip.document.createElement("link");
+              l.rel = "stylesheet"; l.href = ss.href;
+              pip.document.head.appendChild(l);
+            }
+          }
+        });
+        var th = document.documentElement.getAttribute("data-theme");
+        if (th) pip.document.documentElement.setAttribute("data-theme", th);
+        pip.document.body.appendChild(stage);
+        pip.addEventListener("pagehide", function () { document.body.insertBefore(stage, document.body.firstChild); });
+      }).catch(function () {
+        say("Pop-out isn't available in this view. Open the clock in its own browser tab and try again.");
+      });
+    };
+  }
+
+  /* keyboard */
+  document.addEventListener("keydown", function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key.toLowerCase();
+    if (k === "f") fullscreen();
+    else if (k === "s") toggle("seconds");
+    else if (k === "m") toggle("showMsg");
+  });
+
+  /* hide the controls when idle */
+  var idleTimer;
+  function wake() {
+    document.body.classList.remove("idle");
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(function () {
+      if (document.activeElement === msg) return;
+      document.body.classList.add("idle");
+    }, 3500);
+  }
+  ["mousemove", "mousedown", "touchstart", "keydown"].forEach(function (ev) {
+    document.addEventListener(ev, wake, { passive: true });
+  });
+
+  /* keep the screen awake while the clock is showing */
+  var lock = null;
+  function keepAwake() {
+    try {
+      if (navigator.wakeLock && document.visibilityState === "visible") {
+        navigator.wakeLock.request("screen").then(function (l) { lock = l; }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") { keepAwake(); render(); }
+  });
+
+  sync();
+  tick();
+  wake();
+  keepAwake();
+})();
+</script>
+
+</body></html>
