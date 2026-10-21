@@ -11,6 +11,7 @@
     body.red   { background: #f8d7da; }
     body.neutral { background: #f1efec; }
     body.locked { background: #4A0E0E; }
+    body.reserved { background: #6B4A00; }
 
     .top-bar { padding: 16px 20px 8px; text-align: center; }
     .top-bar h1 { margin: 0; font-size: 22px; font-weight: 700; color: #2C2C2A; }
@@ -20,6 +21,7 @@
     .badge-red   { background: #791F1F; color: #ffffff; }
     .badge-neutral { background: #737B8C; color: #ffffff; }
     .badge-locked { background: #2B0808; color: #ffffff; }
+    .badge-reserved { background: #4A3300; color: #ffffff; }
 
     .student-grid { display: grid; grid-template-columns: repeat(auto-fill,minmax(140px,1fr)); gap: 10px; padding: 12px 16px; flex: 1; }
 
@@ -392,18 +394,22 @@ function renderGrid() {
 
   var passOut = countCappedPassesOut();
 
-  if (passOut === 0) {
-    document.body.className = 'green';
-    document.getElementById('status-badge').textContent = 'Pass available';
-    document.getElementById('status-badge').className = 'status-badge badge-green';
-  } else if (passOut < PASS_CAP) {
-    document.body.className = 'green';
-    document.getElementById('status-badge').textContent = '1 student out';
-    document.getElementById('status-badge').className = 'status-badge badge-green';
-  } else {
+  if (passOut >= PASS_CAP) {
     document.body.className = 'locked';
     document.getElementById('status-badge').textContent = '\u{1F512} Locked \u2014 '+passOut+' out, wait for someone to return';
     document.getElementById('status-badge').className = 'status-badge badge-locked';
+  } else if (waitlist.length > 0) {
+    document.body.className = 'reserved';
+    document.getElementById('status-badge').textContent = '\u{1F7E1} Spot open \u2014 reserved for the line';
+    document.getElementById('status-badge').className = 'status-badge badge-reserved';
+  } else if (passOut === 0) {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = 'Pass available';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
+  } else {
+    document.body.className = 'green';
+    document.getElementById('status-badge').textContent = '1 student out';
+    document.getElementById('status-badge').className = 'status-badge badge-green';
   }
 
   document.getElementById('out-count-bar').textContent = passOut > 0
@@ -517,10 +523,15 @@ function openPanel(name) {
     document.getElementById('panel-status').textContent = "You're #"+(waitlist.indexOf(name)+1)+" in line. We'll flag your name here when it's your turn.";
     document.getElementById('panel-buttons').innerHTML =
       '<button class="big-btn btn-other" onclick="leaveWaitlist(\''+name+'\')">Leave waitlist</button>';
-  } else if (countCappedPassesOut() >= PASS_CAP) {
-    document.getElementById('panel-status').textContent = 'No bathroom or water passes right now.';
+  } else if (countCappedPassesOut() >= PASS_CAP || waitlist.length > 0) {
+    var atCap = countCappedPassesOut() >= PASS_CAP;
+    document.getElementById('panel-status').textContent = atCap
+      ? 'No bathroom or water passes right now.'
+      : "A spot just opened, but it's reserved for the line.";
     document.getElementById('panel-buttons').innerHTML =
-      '<div class="locked-msg">\u{1F512} '+PASS_CAP+' students are already out.<br>Wait for someone to come back.</div>'
+      '<div class="locked-msg">' + (atCap
+        ? '\u{1F512} '+PASS_CAP+' students are already out.<br>Wait for someone to come back.'
+        : '\u{1F7E1} Reserved for whoever\'s next in line.<br>Join the waitlist to hold your spot.') + '</div>'
       +'<button class="big-btn btn-waitlist" onclick="joinWaitlist(\''+name+'\')">Join Waitlist</button>'
       +'<button class="big-btn btn-other" onclick="showDestPicker()">Other</button>';
   } else {
