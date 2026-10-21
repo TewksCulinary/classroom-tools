@@ -36,6 +36,21 @@
   .btn-pick { background: #185FA5; color: #ffffff; font-size: 22px; padding: 18px 44px; }
   .btn-pick:disabled { background: #2A3F52; color: #6B7B8C; cursor: default; }
   .btn-reset { background: transparent; color: #9A9890; border: 1.5px solid #3A3A3A; font-size: 14px; padding: 18px 20px; }
+
+  .mode-tabs { display: flex; gap: 8px; justify-content: center; margin-top: 10px; }
+  .mode-tab { background: transparent; border: 1.5px solid #3A3A3A; color: #9A9890; border-radius: 8px; padding: 6px 14px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .mode-tab.active { background: #185FA5; border-color: #185FA5; color: #ffffff; }
+
+  #groups-stage { display: none; flex-direction: column; align-items: center; justify-content: center; width: 100%; max-width: 900px; padding: 0 20px; }
+  #groups-status-line { font-size: 16px; color: #9A9890; margin-bottom: 18px; min-height: 22px; }
+  #groups-display { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px,1fr)); gap: 16px; width: 100%; }
+  .group-card { background: #1E1E1E; border: 1.5px solid #3A3A3A; border-radius: 12px; padding: 14px; text-align: left; }
+  .group-card-title { font-size: 13px; font-weight: 700; color: #9A9890; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .group-card-names { font-size: 19px; font-weight: 600; color: #F1EFE8; line-height: 1.5; }
+  .group-card-empty { color: #6B6963; font-size: 14px; font-weight: 400; }
+
+  #group-count-input { width: 60px; border: 1.5px solid #3A3A3A; border-radius: 8px; padding: 10px; font-size: 16px; text-align: center; background: #121212; color: #F1EFE8; }
+  .groups-label { color: #D7D5CE; font-size: 14px; align-self: center; }
 </style>
 </head>
 <body>
@@ -43,6 +58,10 @@
 <div class="top-bar">
   <h1>Random Picker</h1>
   <p id="class-name">Connecting...</p>
+  <div class="mode-tabs" id="mode-tabs" style="display:none;">
+    <button class="mode-tab active" id="tab-name" onclick="setMode('name')">Pick a Name</button>
+    <button class="mode-tab" id="tab-groups" onclick="setMode('groups')">Make Groups</button>
+  </div>
 </div>
 
 <div id="setup-screen" class="setup-box" style="display:none;">
@@ -67,9 +86,20 @@
   <div id="hint">&nbsp;</div>
 </div>
 
-<div class="controls" id="controls" style="display:none;">
+<div id="groups-stage">
+  <div id="groups-status-line">&nbsp;</div>
+  <div id="groups-display"></div>
+</div>
+
+<div class="controls" id="name-controls" style="display:none;">
   <button class="btn btn-reset" onclick="resetPicker()">Reset round</button>
   <button class="btn btn-pick" id="pick-btn" onclick="drawPickerName()">&#127922; Pick a name</button>
+</div>
+
+<div class="controls" id="groups-controls" style="display:none;">
+  <label class="groups-label">Groups:</label>
+  <input type="number" id="group-count-input" min="2" max="20" value="4" />
+  <button class="btn btn-pick" onclick="generateGroups()">&#127922; Make Groups</button>
 </div>
 
 <script>
@@ -121,6 +151,7 @@ var todayTrips = {};         // name -> [{type,out,back}, ...] for today
 var pollInterval = null;
 var pickerPicked = {};       // pickerPicked[classId][dateKey] = [names already drawn this round]
 var drawing = false;
+var mode = 'name';           // 'name' or 'groups' -- which half of the tool is showing
 
 function todayKey(){ return new Date().toISOString().slice(0,10); }
 
@@ -191,6 +222,8 @@ function poll() {
       var nd = document.getElementById('name-display');
       nd.textContent = ' '; nd.classList.remove('landed');
       document.getElementById('hint').textContent = ' ';
+      document.getElementById('groups-status-line').textContent = ' ';
+      document.getElementById('groups-display').innerHTML = '';
     }
 
     readTodayTrips();
@@ -254,15 +287,28 @@ function pickerPool() {
 function showWaiting() {
   document.getElementById('loading-state').style.display = 'flex';
   document.getElementById('stage').style.display = 'none';
-  document.getElementById('controls').style.display = 'none';
+  document.getElementById('groups-stage').style.display = 'none';
+  document.getElementById('name-controls').style.display = 'none';
+  document.getElementById('groups-controls').style.display = 'none';
+  document.getElementById('mode-tabs').style.display = 'none';
   document.getElementById('class-name').textContent = 'Waiting for teacher...';
   activeClassId = null;
 }
 
 function showStage() {
   document.getElementById('loading-state').style.display = 'none';
-  document.getElementById('stage').style.display = 'flex';
-  document.getElementById('controls').style.display = 'flex';
+  document.getElementById('mode-tabs').style.display = 'flex';
+  setMode(mode);
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-name').classList.toggle('active', m === 'name');
+  document.getElementById('tab-groups').classList.toggle('active', m === 'groups');
+  document.getElementById('stage').style.display = m === 'name' ? 'flex' : 'none';
+  document.getElementById('groups-stage').style.display = m === 'groups' ? 'flex' : 'none';
+  document.getElementById('name-controls').style.display = m === 'name' ? 'flex' : 'none';
+  document.getElementById('groups-controls').style.display = m === 'groups' ? 'flex' : 'none';
 }
 
 function renderStatus() {
@@ -324,6 +370,46 @@ function resetPicker() {
   nd.textContent = ' '; nd.classList.remove('landed');
   document.getElementById('hint').textContent = ' ';
   renderStatus();
+}
+
+// ============================================================
+// RANDOM GROUPS -- same present-student pool as the name picker,
+// split as evenly as possible across however many groups the teacher
+// asks for. Nothing here writes to the Sheet; purely a display action.
+// ============================================================
+function shuffledPresentStudents() {
+  var arr = presentStudents().slice();
+  for (var i = arr.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+  }
+  return arr;
+}
+function makeGroups(arr, n) {
+  var groups = [];
+  for (var i = 0; i < n; i++) groups.push([]);
+  arr.forEach(function(name, i){ groups[i % n].push(name); });
+  return groups;
+}
+function renderGroups(groups) {
+  var el = document.getElementById('groups-display'); if (!el) return;
+  el.innerHTML = groups.map(function(g, i) {
+    var names = g.length ? g.join('<br>') : '<span class="group-card-empty">(empty)</span>';
+    return '<div class="group-card"><div class="group-card-title">Group ' + (i + 1) + '</div><div class="group-card-names">' + names + '</div></div>';
+  }).join('');
+}
+function generateGroups() {
+  if (!activeClassId) return;
+  var inp = document.getElementById('group-count-input');
+  var n = parseInt(inp.value, 10);
+  var statusEl = document.getElementById('groups-status-line');
+  if (!n || n < 2) { statusEl.textContent = 'Enter a number of groups (2 or more).'; return; }
+  var present = presentStudents();
+  if (!present.length) { statusEl.textContent = 'No students marked Present yet'; renderGroups([]); return; }
+  if (n > present.length) { statusEl.textContent = 'Only ' + present.length + ' student' + (present.length !== 1 ? 's are' : ' is') + ' present \u2014 try a smaller number.'; return; }
+  var groups = makeGroups(shuffledPresentStudents(), n);
+  statusEl.textContent = present.length + ' present student' + (present.length !== 1 ? 's' : '') + ' split into ' + n + ' groups';
+  renderGroups(groups);
 }
 
 // ============================================================

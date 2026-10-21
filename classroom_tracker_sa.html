@@ -245,6 +245,14 @@
       <p style="font-size:11px;color:#5F5E5A;margin-bottom:10px;" id="picker-status">&nbsp;</p>
       <div id="picker-result" style="min-height:14px;"></div>
       <button class="primary-btn" onclick="drawPickerName()">&#127922; Pick a name</button>
+      <div style="margin-top:14px;padding-top:12px;border-top:1.5px solid #E3E1D9;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <label style="font-size:12px;color:#5F5E5A;">Groups:</label>
+          <input type="number" id="group-count-input" min="2" max="20" value="4" style="width:54px;border:1.5px solid #B4B2A9;border-radius:6px;padding:5px 6px;font-size:13px;text-align:center;" />
+          <button class="small-btn" onclick="generateGroups()">Make Groups</button>
+        </div>
+        <div id="group-result"></div>
+      </div>
     </div>
 
     <!-- Kiosk control -->
@@ -966,7 +974,7 @@ function renderClassTabs(){
     return '<button class="period-tab '+(c.id===activeClassId?'active':'')+'" onclick="switchClass(\''+c.id+'\')">'+c.name+'</button>';
   }).join('');
 }
-function switchClass(id){activeClassId=id;var pr=document.getElementById('picker-result');if(pr)pr.innerHTML='';renderAll();}
+function switchClass(id){activeClassId=id;var pr=document.getElementById('picker-result');if(pr)pr.innerHTML='';var gr=document.getElementById('group-result');if(gr)gr.innerHTML='';renderAll();}
 
 function toggleAbsentMode(){
   if(clockInMode) toggleClockInMode();
@@ -1557,6 +1565,42 @@ function resetPicker(){
   savePickerState();
   var el=document.getElementById('picker-result'); if(el) el.innerHTML='';
   renderPickerStatus();
+}
+
+// ============================================================
+// RANDOM GROUPS -- same "present" pool as the name picker, split
+// as evenly as possible across however many groups the teacher asks
+// for. Ephemeral like the picker's displayed result: regenerating
+// (or switching class) just replaces what's shown, nothing persists
+// across a reload.
+// ============================================================
+function shuffledPresentStudents(classId){
+  var arr=presentStudentsForPicker(classId).slice();
+  for(var i=arr.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=arr[i];arr[i]=arr[j];arr[j]=tmp;}
+  return arr;
+}
+function makeGroups(arr,n){
+  var groups=[];for(var i=0;i<n;i++)groups.push([]);
+  arr.forEach(function(name,i){groups[i%n].push(name);});
+  return groups;
+}
+function renderGroupResult(groups){
+  var el=document.getElementById('group-result'); if(!el) return;
+  if(!groups||!groups.length){el.innerHTML='';return;}
+  el.innerHTML=groups.map(function(g,i){
+    return '<div style="margin-bottom:8px;"><div style="font-size:11px;font-weight:700;color:#5F5E5A;margin-bottom:3px;">Group '+(i+1)+'</div><div style="font-size:13px;color:#2C2C2A;">'+(g.length?g.join(', '):'<span style="color:#888780;">(empty)</span>')+'</div></div>';
+  }).join('');
+}
+function generateGroups(){
+  if(!activeClassId) return;
+  var inp=document.getElementById('group-count-input');
+  var n=parseInt(inp.value,10);
+  if(!n||n<2){alert('Enter a number of groups (2 or more).');renderGroupResult([]);return;}
+  var present=presentStudentsForPicker(activeClassId);
+  if(!present.length){alert('No students are marked Present right now \u2014 clock someone in first (use the Mark Present button above).');renderGroupResult([]);return;}
+  if(n>present.length){alert('You asked for '+n+' groups but only '+present.length+' student'+(present.length!==1?'s are':' is')+' present. Try a smaller number.');renderGroupResult([]);return;}
+  var groups=makeGroups(shuffledPresentStudents(activeClassId),n);
+  renderGroupResult(groups);
 }
 
 // INIT
