@@ -202,7 +202,7 @@ var CartLogic = (function () {
     return n + ' ' + (Math.abs(n) === 1 ? word : many);
   }
 
-  function snapshot(db, now) {
+  function snapshot(db, now, day) {
     var cutoff = now - 3 * 3600 * 1000;
     var orders = db.orders.filter(function (o) { return !o.done || (o.doneAt || 0) >= cutoff; });
     orders.sort(function (a, b) { return a.createdAt - b.createdAt; });
@@ -210,10 +210,22 @@ var CartLogic = (function () {
     return {
       ok: true,
       serverNow: now,
+      today: day,
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
       log: db.ledger.slice(-15).reverse()
+    };
+  }
+
+  // for the punch-card page: teachers and recent activity only, no orders
+  function punchSnapshot(db, now) {
+    return {
+      ok: true,
+      serverNow: now,
+      teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
+      hasPin: !!db.pinHash,
+      log: db.ledger.slice(-40).reverse()
     };
   }
 
@@ -223,12 +235,16 @@ var CartLogic = (function () {
       if (db.orders[i].id === o.id) return { resp: { ok: true, order: db.orders[i], duplicate: true }, changes: null };
     }
     if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
+    // an order can be for a later day (teacher orders); numbers count up within the day it is FOR
+    var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : day;
     var num = 0;
-    db.orders.forEach(function (x) { if (x.day === day && x.num > num) num = x.num; });
+    db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
     var order = {
       id: String(o.id).slice(0, 60),
       num: num + 1,
       day: day,
+      forDate: forDate,
+      source: o.source === 'form' ? 'form' : '',
       createdAt: now,
       name: String(o.name || '').slice(0, 60),
       method: o.method === 'delivery' ? 'delivery' : 'pickup',
@@ -245,8 +261,19 @@ var CartLogic = (function () {
     };
     var ch = emptyChanges();
     if (order.pay === 'punch') {
-      var t = teacherById(db, o.teacherId);
-      if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      var t = o.teacherId !== null && o.teacherId !== undefined && o.teacherId !== '' ? teacherById(db, o.teacherId) : null;
+      if (!t && o.teacherName) {
+        var want = lower(String(o.teacherName).trim());
+        for (var k = 0; k < db.teachers.length; k++) if (lower(db.teachers[k].name) === want) { t = db.teachers[k]; break; }
+      }
+      if (!t && order.source === 'form') {
+        // a teacher order whose name is no longer on the list: still make the drink, but do not use a punch
+        order.pay = 'other';
+        var first = order.items[0];
+        first.detail = (first.detail ? first.detail + ' \u00B7 ' : '') + 'Wanted to pay by punch card, but the name was not found';
+      } else if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+    }
+    if (order.pay === 'punch') {
       var n = order.items.length;
       t.punches -= n; // one punch per drink; going below zero is allowed (honor system)
       var entry = { t: now, teacherId: t.id, name: t.name, delta: -n, note: 'Order #' + order.num + ' (' + plural(n, 'drink') + ')' };
@@ -354,7 +381,8 @@ var CartLogic = (function () {
   function handle(db, req, now, day) {
     var a = req && req.action;
     var bad;
-    if (a === 'poll') return { resp: snapshot(db, now), changes: null };
+    if (a === 'poll') return { resp: snapshot(db, now, day), changes: null };
+    if (a === 'punchPoll') return { resp: punchSnapshot(db, now), changes: null };
     if (a === 'addOrder') return addOrder(db, req.order || {}, now, day);
     if (a === 'setDone') return setDone(db, req, now);
     if (a === 'verifyPin') return { resp: { ok: true, valid: !!db.pinHash && req.pinHash === db.pinHash }, changes: null };
@@ -384,7 +412,7 @@ var CartLogic = (function () {
     { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'flavor'], sauceOnFlavor: true },
     { id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['milk', 'flavor'], sauceOnFlavor: true },
     { id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['milk', 'flavor'], sauceOnFlavor: true },
-    { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], sfOnly: true, icon: 'iced' },
+    { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], icon: 'iced' },
     { id: 'soda',      name: 'Italian Soda',       color: '#7FB8DA', steps: ['flavor'], icon: 'iced' },
     { id: 'tea',       name: 'Tea',                color: '#9DB86A', steps: ['temp', 'tea', 'flavor'] }
   ];
@@ -427,7 +455,7 @@ var CartLogic = (function () {
     connOpen: false, connUrl: '', connCode: '', connMsg: '', connBusy: false, connFocus: false
   };
   var punch = { teachers: [], log: [], hasPin: null };
-  var net = { status: 'connecting', skew: 0, polling: false, gen: 0, sig: '', tsig: '' };
+  var net = { status: 'connecting', skew: 0, polling: false, gen: 0, sig: '', tsig: '', today: '' };
   var overlay = {}, newUntil = {}, firstPoll = true, pointerDown = false;
   var conn = null, outbox = [], flushing = false, storageOk = true;
 
@@ -516,6 +544,7 @@ var CartLogic = (function () {
 
   function applyPoll(resp) {
     net.skew = resp.serverNow - Date.now();
+    net.today = resp.today || '';
     punch.teachers = resp.teachers; punch.log = resp.log; punch.hasPin = resp.hasPin;
     var had = {};
     state.orders.forEach(function (o) { had[o.id] = true; });
@@ -529,6 +558,8 @@ var CartLogic = (function () {
     firstPoll = false;
     net.status = 'ok';
   }
+  // an order for a later day waits until its day
+  function isDue(o) { return !o.forDate || !net.today || o.forDate <= net.today; }
   function viewSig() {
     return net.status + '|' + outbox.length + '|' + state.orders.map(function (o) { return o.id + (o.done ? 'd' : 'o'); }).join(',');
   }
@@ -652,6 +683,11 @@ var CartLogic = (function () {
   function ageText(o) {
     var m = Math.floor((nowMs() - o.createdAt) / 60000);
     return m < 1 ? 'just now' : m === 1 ? '1 min ago' : m + ' min ago';
+  }
+  function sentText(o) {
+    var placed = new Date(o.createdAt), today = new Date(nowMs());
+    if (placed.toDateString() === today.toDateString()) return 'Sent ' + clock(o.createdAt) + ' · ' + ageText(o);
+    return 'Placed ' + placed.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   }
   function statusHtml() {
     var pend = outbox.length ? ' ' + plural(outbox.length, 'change') + ' waiting to send.' : '';
@@ -915,7 +951,7 @@ var CartLogic = (function () {
   function renderTicket() {
     var d = drinkObj();
     var hasCurrent = state.screen === 'options' && d;
-    var html = '<div class="side-title">Order ticket</div>' + statusHtml() + '<div class="info"><b>Queue:</b> ' + (state.orders.filter(function (o) { return !o.done; }).length + outbox.filter(function (x) { return x.kind === 'addOrder'; }).length) + ' waiting</div>';
+    var html = '<div class="side-title">Order ticket</div>' + statusHtml() + '<div class="info"><b>Queue:</b> ' + (state.orders.filter(function (o) { return !o.done && isDue(o); }).length + outbox.filter(function (x) { return x.kind === 'addOrder'; }).length) + ' waiting</div>';
     if (!state.cart.length && !hasCurrent) html += '<div class="muted" style="font-size:22px;line-height:1.4">Nothing yet. Tap a drink to start.</div>';
     html += state.cart.map(function (c) {
       return '<div class="tcard"><div class="t-title">' + esc(c.title) + '</div><div class="t-detail">' + esc(c.detail) + '</div>' +
@@ -937,15 +973,16 @@ var CartLogic = (function () {
     var pay = payText(o);
     var isNew = newUntil[o.id] && newUntil[o.id] > Date.now();
     return '<div class="qcard"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><div class="name">' + esc(o.name) + '</div><div style="font-size:22px;font-weight:700">#' + o.num + '</div></div>' +
-      (isNew ? '<div><span class="newtag">NEW</span></div>' : '') +
+      ((isNew || o.source === 'form') ? '<div>' + (isNew ? '<span class="newtag">NEW</span> ' : '') + (o.source === 'form' ? '<span class="newtag">TEACHER ORDER</span>' : '') + '</div>' : '') +
       '<div style="font-size:22px;font-weight:700">' + esc(deliveryText(o.method, o.room)) + '</div>' +
       (pay ? '<div style="font-size:18px;font-weight:600">' + esc(pay) + '</div>' : '') +
-      '<div class="muted" style="font-size:18px">Sent ' + esc(clock(o.createdAt)) + ' · ' + esc(ageText(o)) + '</div>' +
+      '<div class="muted" style="font-size:18px">' + esc(sentText(o)) + '</div>' +
       '<div class="items">' + o.items.map(function (i) { return esc(i.title + (i.detail ? ' — ' + i.detail : '')); }).join('\n') + '</div>' +
       '<button class="finish" data-action="finish" data-v="' + esc(o.id) + '">Mark finished</button></div>';
   }
   function renderQueue() {
-    var open = state.orders.filter(function (o) { return !o.done; });
+    var open = state.orders.filter(function (o) { return !o.done && isDue(o); });
+    var later = state.orders.filter(function (o) { return !o.done && !isDue(o); }).length;
     var fin = state.orders.filter(function (o) { return o.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); }).slice(0, MODE === 'queue' ? 8 : 3);
     var html;
     if (MODE === 'queue') {
@@ -953,6 +990,7 @@ var CartLogic = (function () {
         '<button class="small" data-action="openConn">Connection</button></div>' + statusHtml();
       if (!open.length) html += '<div class="muted" style="font-size:26px;line-height:1.4">No orders waiting.</div>';
       else html += '<div class="qgrid">' + open.map(qcardHtml).join('') + '</div>';
+      if (later) html += '<div class="muted" style="font-size:20px">Coming up on later days: ' + plural(later, 'order') + '</div>';
     } else {
       html = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div class="side-title">Queue</div><div class="badge">' + open.length + '</div></div>';
       html += open.map(qcardHtml).join('');

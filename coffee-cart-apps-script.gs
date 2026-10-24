@@ -49,7 +49,7 @@ var CartLogic = (function () {
     return n + ' ' + (Math.abs(n) === 1 ? word : many);
   }
 
-  function snapshot(db, now) {
+  function snapshot(db, now, day) {
     var cutoff = now - 3 * 3600 * 1000;
     var orders = db.orders.filter(function (o) { return !o.done || (o.doneAt || 0) >= cutoff; });
     orders.sort(function (a, b) { return a.createdAt - b.createdAt; });
@@ -57,10 +57,22 @@ var CartLogic = (function () {
     return {
       ok: true,
       serverNow: now,
+      today: day,
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
       log: db.ledger.slice(-15).reverse()
+    };
+  }
+
+  // for the punch-card page: teachers and recent activity only, no orders
+  function punchSnapshot(db, now) {
+    return {
+      ok: true,
+      serverNow: now,
+      teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
+      hasPin: !!db.pinHash,
+      log: db.ledger.slice(-40).reverse()
     };
   }
 
@@ -70,12 +82,16 @@ var CartLogic = (function () {
       if (db.orders[i].id === o.id) return { resp: { ok: true, order: db.orders[i], duplicate: true }, changes: null };
     }
     if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
+    // an order can be for a later day (teacher orders); numbers count up within the day it is FOR
+    var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : day;
     var num = 0;
-    db.orders.forEach(function (x) { if (x.day === day && x.num > num) num = x.num; });
+    db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
     var order = {
       id: String(o.id).slice(0, 60),
       num: num + 1,
       day: day,
+      forDate: forDate,
+      source: o.source === 'form' ? 'form' : '',
       createdAt: now,
       name: String(o.name || '').slice(0, 60),
       method: o.method === 'delivery' ? 'delivery' : 'pickup',
@@ -92,8 +108,19 @@ var CartLogic = (function () {
     };
     var ch = emptyChanges();
     if (order.pay === 'punch') {
-      var t = teacherById(db, o.teacherId);
-      if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      var t = o.teacherId !== null && o.teacherId !== undefined && o.teacherId !== '' ? teacherById(db, o.teacherId) : null;
+      if (!t && o.teacherName) {
+        var want = lower(String(o.teacherName).trim());
+        for (var k = 0; k < db.teachers.length; k++) if (lower(db.teachers[k].name) === want) { t = db.teachers[k]; break; }
+      }
+      if (!t && order.source === 'form') {
+        // a teacher order whose name is no longer on the list: still make the drink, but do not use a punch
+        order.pay = 'other';
+        var first = order.items[0];
+        first.detail = (first.detail ? first.detail + ' \u00B7 ' : '') + 'Wanted to pay by punch card, but the name was not found';
+      } else if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+    }
+    if (order.pay === 'punch') {
       var n = order.items.length;
       t.punches -= n; // one punch per drink; going below zero is allowed (honor system)
       var entry = { t: now, teacherId: t.id, name: t.name, delta: -n, note: 'Order #' + order.num + ' (' + plural(n, 'drink') + ')' };
@@ -201,7 +228,8 @@ var CartLogic = (function () {
   function handle(db, req, now, day) {
     var a = req && req.action;
     var bad;
-    if (a === 'poll') return { resp: snapshot(db, now), changes: null };
+    if (a === 'poll') return { resp: snapshot(db, now, day), changes: null };
+    if (a === 'punchPoll') return { resp: punchSnapshot(db, now), changes: null };
     if (a === 'addOrder') return addOrder(db, req.order || {}, now, day);
     if (a === 'setDone') return setDone(db, req, now);
     if (a === 'verifyPin') return { resp: { ok: true, valid: !!db.pinHash && req.pinHash === db.pinHash }, changes: null };
@@ -223,14 +251,14 @@ var CartLogic = (function () {
 // ---- end shared rules ----
 
 var TABS = {
-  orders: ['id', 'num', 'day', 'createdAt', 'time', 'name', 'method', 'room', 'items', 'itemsText', 'pay', 'teacherId', 'teacherName', 'balanceAfter', 'status', 'doneAt'],
+  orders: ['id', 'num', 'day', 'createdAt', 'time', 'name', 'method', 'room', 'items', 'itemsText', 'pay', 'teacherId', 'teacherName', 'balanceAfter', 'status', 'doneAt', 'forDate', 'source'],
   teachers: ['id', 'name', 'punches'],
   punches: ['t', 'time', 'teacherId', 'name', 'delta', 'note'],
   cards: ['cardNo', 'teacherId', 't', 'time'],
   config: ['key', 'value']
 };
 var TEXT_COLS = {
-  orders: [1, 3, 5, 6, 7, 8, 9, 10, 11, 13, 15],
+  orders: [1, 3, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 18],
   teachers: [2],
   punches: [4, 6],
   cards: [1],
@@ -264,7 +292,7 @@ function doPost(e) {
 
 function run_(req) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var readOnly = req.action === 'poll' || req.action === 'verifyPin';
+  var readOnly = req.action === 'poll' || req.action === 'punchPoll' || req.action === 'verifyPin';
   var lock = null;
   if (!readOnly) {
     lock = LockService.getScriptLock();
@@ -275,7 +303,7 @@ function run_(req) {
     var now = Date.now();
     var tz = ss.getSpreadsheetTimeZone();
     var day = Utilities.formatDate(new Date(now), tz, 'yyyy-MM-dd');
-    var loaded = loadDb_(ss, tz, req.action === 'export');
+    var loaded = loadDb_(ss, tz, req.action === 'export' ? 'full' : req.action === 'punchPoll' ? 'punch' : 'normal');
     var result = CartLogic.handle(loaded.db, req, now, day);
     if (result.changes) saveChanges_(ss, tz, loaded, result.changes);
     return result.resp;
@@ -288,6 +316,10 @@ function run_(req) {
 function ensureTabs_(ss) {
   Object.keys(TABS).forEach(function (name) {
     var sh = ss.getSheetByName(name);
+    if (sh && sh.getLastColumn() < TABS[name].length) { // an older sheet is missing newer columns: add their headings
+      var have = Math.max(sh.getLastColumn(), 1);
+      sh.getRange(1, have + 1, 1, TABS[name].length - have).setValues([TABS[name].slice(have)]);
+    }
     if (!sh) {
       sh = ss.insertSheet(name);
       sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]);
@@ -319,14 +351,15 @@ function readRows_(sh, firstRow, count, cols) {
   return sh.getRange(firstRow, 1, count, cols).getValues();
 }
 
-function loadDb_(ss, tz, full) {
+function loadDb_(ss, tz, mode) {
+  var full = mode === 'full';
   var db = CartLogic.newDb();
   var rows = {};
 
   var os = ss.getSheetByName('orders');
   var oLast = os.getLastRow();
   var oFirst = full ? 2 : Math.max(2, oLast - RECENT_ORDER_ROWS + 1);
-  var oRows = oLast >= 2 ? readRows_(os, oFirst, oLast - oFirst + 1, TABS.orders.length) : [];
+  var oRows = (mode !== 'punch' && oLast >= 2) ? readRows_(os, oFirst, oLast - oFirst + 1, TABS.orders.length) : [];
   rows.orders = {};
   oRows.forEach(function (r, i) {
     if (!r[0]) return;
@@ -337,7 +370,8 @@ function loadDb_(ss, tz, full) {
       name: text_(r[5]), method: text_(r[6]), room: text_(r[7]), items: items,
       pay: text_(r[10]) || 'other', teacherId: r[11] === '' ? null : num_(r[11], null),
       teacherName: text_(r[12]), balanceAfter: r[13] === '' ? null : num_(r[13], null),
-      done: text_(r[14]) === 'done', doneAt: r[15] === '' ? null : num_(r[15], null)
+      done: text_(r[14]) === 'done', doneAt: r[15] === '' ? null : num_(r[15], null),
+      forDate: r[16] === '' ? dayText_(r[2], tz) : dayText_(r[16], tz), source: text_(r[17])
     };
     db.orders.push(order);
     rows.orders[order.id] = oFirst + i;
@@ -359,7 +393,7 @@ function loadDb_(ss, tz, full) {
 
   var ps = ss.getSheetByName('punches');
   var pLast = ps.getLastRow();
-  var pFirst = full ? 2 : Math.max(2, pLast - 14);
+  var pFirst = full ? 2 : Math.max(2, pLast - (mode === 'punch' ? 39 : 14));
   var pRows = pLast >= 2 ? readRows_(ps, pFirst, pLast - pFirst + 1, 6) : [];
   pRows.forEach(function (r) {
     if (r[0] === '') return;
@@ -393,7 +427,8 @@ function itemsText_(items) {
 function orderRow_(o, tz) {
   return [o.id, o.num, o.day, o.createdAt, clock_(o.createdAt, tz), o.name, o.method, o.room,
     JSON.stringify(o.items), itemsText_(o.items), o.pay, o.teacherId === null ? '' : o.teacherId,
-    o.teacherName, o.balanceAfter === null ? '' : o.balanceAfter, o.done ? 'done' : 'open', o.doneAt === null ? '' : o.doneAt];
+    o.teacherName, o.balanceAfter === null ? '' : o.balanceAfter, o.done ? 'done' : 'open', o.doneAt === null ? '' : o.doneAt,
+    o.forDate, o.source || ''];
 }
 function appendRows_(sh, rows) {
   if (!rows.length) return;
@@ -407,6 +442,7 @@ function saveChanges_(ss, tz, loaded, ch) {
   var ts = ss.getSheetByName('teachers');
 
   appendRows_(ts, ch.teachersAdded.map(function (t) { return [t.id, t.name, t.punches]; }));
+  if (ch.teachersAdded.length) refreshFormTeachers_(ss);
   ch.teachersUpdated.forEach(function (t) {
     var r = rows.teachers[t.id];
     if (r) ts.getRange(r, 3).setValue(t.punches);
@@ -430,5 +466,161 @@ function saveChanges_(ss, tz, loaded, ch) {
     var r = rows.config.pinHash;
     if (r) cf.getRange(r, 2).setValue(ch.pinHash);
     else appendRows_(cf, [['pinHash', ch.pinHash]]);
+  }
+}
+
+
+// =====================================================================
+// Teacher order form
+// Run createTeacherForm() once. It makes a Google Form for teachers, sends its answers to this
+// Sheet, and every new answer becomes an order in the queue (for the day the teacher picked).
+// =====================================================================
+var MENU = {
+  sauces: ['Mocha', 'Sugar Free White Mocha'],
+  milks: ['Regular', 'Fat Free', 'Half & Half', 'Almond', 'Oat'],
+  teas: ['Earl Grey', 'Decaf Earl Grey', 'Green Tea', 'English Breakfast'],
+  flavors: ['Caramel', 'Hazelnut', 'Vanilla', 'Raspberry', 'Strawberry', 'Sour Gummy Worm'],
+  sfFlavors: ['Raspberry', 'Strawberry', 'Vanilla'],
+  drinks: [
+    { id: 'mocha', name: 'Mocha', steps: ['temp', 'sauce', 'milk', 'flavor'], sauceRequired: true },
+    { id: 'latte', name: 'Latte', steps: ['temp', 'milk', 'flavor', 'sauce'] },
+    { id: 'americano', name: 'Americano', steps: ['temp', 'flavor', 'sauce'] },
+    { id: 'hotchoc', name: 'Hot Chocolate', steps: ['milk', 'flavor', 'sauce'] },
+    { id: 'steamer', name: 'Steamer', steps: ['milk', 'flavor', 'sauce'] },
+    { id: 'lotus', name: 'Lotus (sugar free)', steps: ['flavor'] },
+    { id: 'soda', name: 'Italian Soda', steps: ['flavor'] },
+    { id: 'tea', name: 'Tea', steps: ['temp', 'tea', 'flavor'] }
+  ]
+};
+var PAY_PUNCH = 'Punch card';
+var PAY_OTHER = 'Another way (cash or other)';
+
+function flavorChoices_(d) {
+  var sf = MENU.sfFlavors.map(function (f) { return 'Sugar Free ' + f; });
+  return d.sfOnly ? sf : MENU.flavors.concat(sf);
+}
+function teacherNames_(ss) {
+  var ts = ss.getSheetByName('teachers');
+  var last = ts ? ts.getLastRow() : 0;
+  if (last < 2) return [];
+  return ts.getRange(2, 2, last - 1, 1).getValues().map(function (r) { return String(r[0]); }).filter(function (n) { return n; })
+    .sort(function (a, b) { return lastNameKey_(a) < lastNameKey_(b) ? -1 : 1; });
+}
+function lastNameKey_(n) { var p = n.trim().split(/\s+/); return (p[p.length - 1] + ' ' + n).toLowerCase(); }
+
+function createTeacherForm() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  ensureTabs_(ss);
+  var props = PropertiesService.getScriptProperties();
+  var existing = props.getProperty('FORM_ID');
+  if (existing) {
+    var f = FormApp.openById(existing);
+    return 'The teacher form already exists. Share this link with teachers: ' + f.getPublishedUrl();
+  }
+  var names = teacherNames_(ss);
+  var form = FormApp.create('Coffee Cart: Teacher Orders');
+  form.setDescription('Order a drink from the Life Skills coffee cart. Students make and deliver it during delivery hour. Submit the form once for each drink.');
+  try { form.setCollectEmail(true); form.setRequireLogin(true); } catch (e) { /* only some accounts allow this */ }
+  form.setLimitOneResponsePerUser(false);
+  form.setAllowResponseEdits(false);
+  form.setShowLinkToRespondAgain(true);
+  form.setConfirmationMessage('Thank you! Your order is in. It will show up on the coffee cart queue on the day you picked.');
+  form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
+
+  var map = { drinks: {} };
+  map.teacher = form.addListItem().setTitle('Your name').setChoiceValues(names.length ? names : ['(no teachers on the list yet)']).setRequired(true).getId();
+  map.room = form.addTextItem().setTitle('Room number').setHelpText('Where should we deliver it?').setRequired(true).getId();
+  map.date = form.addDateItem().setTitle('What day should it be delivered?').setRequired(true).getId();
+  map.pay = form.addMultipleChoiceItem().setTitle('How are you paying?').setChoiceValues([PAY_PUNCH, PAY_OTHER]).setRequired(true).getId();
+  var drinkQ = form.addMultipleChoiceItem().setTitle('Which drink would you like?').setRequired(true);
+  map.drink = drinkQ.getId();
+
+  var choices = [];
+  MENU.drinks.forEach(function (d) {
+    var page = form.addPageBreakItem().setTitle(d.name);
+    page.setGoToPage(FormApp.PageNavigationType.SUBMIT); // after this drink's questions, finish the form
+    var ids = {};
+    d.steps.forEach(function (step) {
+      if (step === 'temp') ids.temp = form.addMultipleChoiceItem().setTitle('Hot or iced?').setChoiceValues(['Hot', 'Iced']).setRequired(true).getId();
+      if (step === 'sauce') {
+        var q = form.addMultipleChoiceItem().setTitle(d.sauceRequired ? 'Sauce' : 'Add a sauce? (optional)').setChoiceValues(MENU.sauces).setRequired(!!d.sauceRequired);
+        ids.sauce = q.getId();
+      }
+      if (step === 'milk') ids.milk = form.addMultipleChoiceItem().setTitle('Milk').setChoiceValues(MENU.milks).setRequired(true).getId();
+      if (step === 'tea') ids.tea = form.addMultipleChoiceItem().setTitle('Which tea?').setChoiceValues(MENU.teas).setRequired(true).getId();
+      if (step === 'flavor') ids.flavor = form.addCheckboxItem().setTitle('Flavors (optional, pick any)').setChoiceValues(flavorChoices_(d)).setRequired(false).getId();
+    });
+    ids.notes = form.addTextItem().setTitle('Notes (optional)').setHelpText('For example: just a splash of milk').setRequired(false).getId();
+    map.drinks[d.id] = ids;
+    choices.push(drinkQ.createChoice(d.name, page));
+  });
+  drinkQ.setChoices(choices);
+
+  props.setProperty('FORM_ID', form.getId());
+  props.setProperty('FORM_MAP', JSON.stringify(map));
+  ScriptApp.newTrigger('onTeacherFormSubmit').forForm(form).onFormSubmit().create();
+  ScriptApp.newTrigger('refreshTeacherChoices').timeBased().everyHours(1).create();
+
+  var cf = ss.getSheetByName('config');
+  appendRows_(cf, [['teacherFormLink', form.getPublishedUrl()], ['teacherFormEditLink', form.getEditUrl()]]);
+  return 'Teacher form created. Share this link with teachers: ' + form.getPublishedUrl() + '   (edit it here: ' + form.getEditUrl() + ')';
+}
+
+function refreshTeacherChoices() { refreshFormTeachers_(SpreadsheetApp.getActiveSpreadsheet()); }
+function refreshFormTeachers_(ss) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var id = props.getProperty('FORM_ID'), map = props.getProperty('FORM_MAP');
+    if (!id || !map) return;
+    var names = teacherNames_(ss);
+    if (!names.length) return;
+    FormApp.openById(id).getItemById(JSON.parse(map).teacher).asListItem().setChoiceValues(names);
+  } catch (err) { /* the form is a convenience: never let it block saving teachers */ }
+}
+
+// Turn one form answer into an order request. answers = { <form item id>: response }
+function buildFormRequest_(map, answers, responseId) {
+  var drinkName = answers[map.drink];
+  var d = null;
+  MENU.drinks.forEach(function (x) { if (x.name === drinkName) d = x; });
+  if (!d) throw new Error('Unknown drink: ' + drinkName);
+  var ids = map.drinks[d.id];
+  var get = function (k) { return ids[k] ? answers[ids[k]] : undefined; };
+  var temp = get('temp') || '';
+  var flavors = get('flavor') || [];
+  var lines = [];
+  var sauce = get('sauce');
+  if (sauce) lines.push('Sauce: ' + sauce);
+  if (get('milk')) lines.push('Milk: ' + get('milk'));
+  if (get('tea')) lines.push('Tea: ' + get('tea'));
+  if (flavors.length) lines.push('Flavor: ' + flavors.join(', '));
+  var notes = String(get('notes') || '').trim();
+  if (notes) lines.push('Notes: ' + notes);
+  var pay = answers[map.pay] === PAY_PUNCH ? 'punch' : 'other';
+  var name = String(answers[map.teacher] || '').trim();
+  return {
+    action: 'addOrder',
+    order: {
+      id: 'form-' + responseId, name: name, method: 'delivery', room: String(answers[map.room] || '').trim(),
+      forDate: String(answers[map.date] || ''), source: 'form',
+      items: [{ title: (temp ? temp + ' ' : '') + d.name, detail: lines.length ? lines.join(' · ') : 'Plain' }],
+      pay: pay, teacherName: pay === 'punch' ? name : ''
+    }
+  };
+}
+
+function onTeacherFormSubmit(e) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var props = PropertiesService.getScriptProperties();
+  try {
+    var map = JSON.parse(props.getProperty('FORM_MAP'));
+    var answers = {};
+    e.response.getItemResponses().forEach(function (ir) { answers[ir.getItem().getId()] = ir.getResponse(); });
+    var out = run_(buildFormRequest_(map, answers, e.response.getId()));
+    if (!out.ok) throw new Error(out.message || out.error);
+  } catch (err) {
+    // leave a note where the lead teacher can see it
+    var cf = ss.getSheetByName('config');
+    appendRows_(cf, [['formError ' + new Date().toISOString(), String(err && err.message ? err.message : err)]]);
   }
 }
