@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coffee Cart Punch Cards</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink: #2B1D14; --ground: #FAF6F0; --line: #D9CBB8; --muted: #5A4A3D; --go: #1F6F5C; --pick: #FFE3A3; --panel: #F1E7D8; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { font-family: Lexend, system-ui, sans-serif; background: var(--ground); color: var(--ink); }
+  button, input { font-family: inherit; }
+  button:focus-visible, input:focus-visible { outline: 4px solid var(--go); outline-offset: 2px; }
+  #app { max-width: 1100px; margin: 0 auto; padding: 20px 24px 60px; display: flex; flex-direction: column; gap: 14px; }
+  h1 { margin: 0; font-size: 34px; line-height: 1.1; }
+  h2 { margin: 0; font-size: 24px; }
+  .muted { color: var(--muted); }
+  .top { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .spacer { flex: 1; }
+  .btn { min-height: 44px; padding: 0 18px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; color: var(--ink); font-size: 18px; font-weight: 600; cursor: pointer; }
+  .btn.go { background: var(--go); border-color: var(--go); color: #fff; font-weight: 700; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn.on { background: var(--pick); border-width: 4px; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 16px; font-weight: 600; }
+  .inp { height: 48px; padding: 0 14px; font-size: 20px; border-radius: 12px; border: 3px solid var(--ink); background: #fff; color: var(--ink); min-width: 0; }
+  .panel { background: #fff; border: 3px solid var(--ink); border-radius: 16px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .notice { border: 4px solid var(--ink); border-radius: 14px; padding: 12px 16px; background: var(--pick); font-size: 19px; font-weight: 600; line-height: 1.35; }
+  .status-ok { font-size: 16px; color: var(--muted); }
+  .list { background: #fff; border: 3px solid var(--ink); border-radius: 16px; overflow: hidden; }
+  .row { display: grid; grid-template-columns: minmax(150px, 1fr) 100px minmax(110px, 170px) 96px 68px 68px; gap: 10px; align-items: center; padding: 8px 14px; border-bottom: 2px solid var(--line); }
+  .row:last-child { border-bottom: none; }
+  .row.head { position: sticky; top: 0; background: var(--panel); font-weight: 700; font-size: 16px; z-index: 1; }
+  .nm { font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+  .bl b { font-size: 26px; }
+  .bl small { display: block; font-size: 14px; color: var(--muted); font-weight: 600; }
+  .row .inp { height: 44px; font-size: 18px; width: 100%; }
+  .row .btn { padding: 0 6px; width: 100%; }
+  .logrow { font-size: 16px; display: flex; gap: 10px; padding: 3px 0; }
+  .logrow .when { color: var(--muted); min-width: 130px; }
+  details summary { font-size: 20px; font-weight: 700; cursor: pointer; min-height: 44px; display: flex; align-items: center; }
+  #overlay[hidden] { display: none; }
+  #overlay { position: fixed; inset: 0; background: rgba(43, 29, 20, 0.6); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 50; }
+  .modal { background: #fff; border: 4px solid var(--ink); border-radius: 20px; padding: 24px; max-width: 640px; width: 100%; max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  @media (max-width: 760px) { .row { grid-template-columns: 1fr auto; } .row.head { display: none; } .row .inp { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="overlay" hidden></div>
+<script>
+(function () {
+  'use strict';
+  var CONN_KEY = 'coffeeCartConn.v1';
+  var IDLE_MS = 10 * 60 * 1000;
+  var S = {
+    conn: null, pinHash: null, unlocked: false, hasPin: null, teachers: [], log: [], status: 'connecting',
+    q: '', filter: 'all', perCard: '5', adjustBy: '1', drafts: {}, msg: '', busy: false, last: Date.now(),
+    pinMsg: '', newName: '', newStart: '0',
+    connOpen: false, connUrl: '', connCode: '', connMsg: '', connBusy: false, connFocus: false
+  };
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  function $(id) { return document.getElementById(id); }
+  function lsGet(k) { try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ignore */ } }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
+  function extend(a, b) { for (var k in b) if (Object.prototype.hasOwnProperty.call(b, k)) a[k] = b[k]; return a; }
+  function plural(n, w) { var many = w === 'punch' ? 'punches' : w + 's'; return n + ' ' + (Math.abs(n) === 1 ? w : many); }
+  function whenText(t) { return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+  function sortKey(n) { var p = n.trim().split(/\s+/); return (p[p.length - 1] + ' ' + n).toLowerCase(); } // by last name
+  function byName(a, b) { var x = sortKey(a.name), y = sortKey(b.name); return x < y ? -1 : x > y ? 1 : 0; }
+  function teacherById(id) { return S.teachers.filter(function (t) { return t.id === id; })[0] || null; }
+  function count(n, dflt) { var v = parseInt(n, 10); return isNaN(v) ? dflt : v; }
+
+  function hashPin(p) {
+    var s = 'coffee-cart:' + p;
+    if (window.crypto && window.crypto.subtle && window.TextEncoder) {
+      return window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)).then(function (buf) {
+        return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+      });
+    }
+    return Promise.resolve('x' + btoa(s));
+  }
+
+  function remoteCall(url, code, req) {
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 15000);
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(extend({ key: code }, req)), signal: ctl ? ctl.signal : undefined })
+      .then(function (r) { return r.text(); })
+      .then(function (t) { clearTimeout(timer); try { return JSON.parse(t); } catch (e) { throw { network: true }; } },
+            function () { clearTimeout(timer); throw { network: true }; });
+  }
+  function api(req) { return S.conn ? remoteCall(S.conn.url, S.conn.code, req) : Promise.reject({ network: true }); }
+
+  function refresh() {
+    if (!S.conn) return Promise.resolve();
+    return api({ action: 'punchPoll' }).then(function (r) {
+      if (!r.ok && r.error === 'unknown-action') return api({ action: 'poll' }); // older back end
+      return r;
+    }).then(function (r) {
+      if (!r.ok) { S.status = (r.error === 'bad-key' || r.error === 'no-key') ? 'badkey' : 'error'; return; }
+      S.teachers = r.teachers; S.log = r.log; S.hasPin = r.hasPin; S.status = 'ok';
+    }, function () { S.status = 'offline'; });
+  }
+
+  // run a teacher-PIN action, then show what happened
+  function act(req, okMsg, after) {
+    if (S.busy) return;
+    S.busy = true; req.pinHash = S.pinHash; S.last = Date.now();
+    api(req).then(function (r) {
+      if (!r.ok) { S.msg = r.message || 'That did not work.'; if (r.error === 'bad-pin') lock(); return; }
+      S.msg = okMsg(r); if (after) after();
+      return refresh();
+    }).catch(function () { S.msg = 'Could not reach the Google Sheet. Nothing was changed. Check the connection and try again.'; })
+      .then(function () { S.busy = false; render(); });
+  }
+  function lock() { S.unlocked = false; S.pinHash = null; }
+
+  function statusHtml() {
+    if (!S.conn) return '';
+    if (S.status === 'badkey') return '<div class="notice"><b>⚠ Access code not accepted.</b> Tap Connection to fix it.</div>';
+    if (S.status === 'offline' || S.status === 'error') return '<div class="notice"><b>⚠ No connection to the Sheet.</b> Changes will not save until it is back. The list shown may be out of date.</div>';
+    if (S.status === 'connecting') return '<div class="status-ok">Connecting…</div>';
+    return '<div class="status-ok">✓ Connected</div>';
+  }
+
+  function filtered() {
+    var q = S.q.trim().toLowerCase();
+    return S.teachers.slice().sort(byName).filter(function (t) {
+      if (q && t.name.toLowerCase().indexOf(q) < 0) return false;
+      if (S.filter === 'low') return t.punches <= 1;
+      if (S.filter === 'owes') return t.punches < 0;
+      return true;
+    });
+  }
+  function listHtml() {
+    var per = Math.min(50, Math.max(1, count(S.perCard, 5))), adj = Math.min(50, Math.max(1, count(S.adjustBy, 1)));
+    var list = filtered();
+    if (!S.teachers.length) return '<div class="panel">No teachers yet. Add the first one above.</div>';
+    if (!list.length) return '<div class="panel">No teachers match.</div>';
+    return '<div class="list"><div class="row head"><div>Teacher</div><div>Punches</div><div>Card number</div><div></div><div></div><div></div></div>' + list.map(function (t) {
+      var note = t.punches < 0 ? 'owes ' + (-t.punches) : t.punches === 0 ? 'none left' : t.punches === 1 ? 'last one' : '';
+      return '<div class="row"><div class="nm">' + esc(t.name) + '</div>' +
+        '<div class="bl"><b>' + t.punches + '</b>' + (note ? '<small>' + esc(note) + '</small>' : '') + '</div>' +
+        '<input class="inp card" data-id="' + t.id + '" type="text" autocomplete="off" placeholder="Card #" aria-label="Card number for ' + esc(t.name) + '" value="' + esc(S.drafts[t.id] || '') + '">' +
+        '<button class="btn go" data-action="load" data-v="' + t.id + '" aria-label="Load a card of ' + plural(per, 'punch') + ' for ' + esc(t.name) + '">Load ' + per + '</button>' +
+        '<button class="btn" data-action="adj" data-v="' + t.id + '" data-key="-1" aria-label="Take ' + plural(adj, 'punch') + ' off ' + esc(t.name) + '">−' + adj + '</button>' +
+        '<button class="btn" data-action="adj" data-v="' + t.id + '" data-key="1" aria-label="Add ' + plural(adj, 'punch') + ' to ' + esc(t.name) + '">+' + adj + '</button></div>';
+    }).join('') + '</div>';
+  }
+  function renderList() { var el = $('list'); if (el) el.innerHTML = listHtml(); }
+
+  function chip(id, label, n) {
+    var on = S.filter === id;
+    return '<button class="btn' + (on ? ' on' : '') + '" aria-pressed="' + on + '" data-action="filter" data-v="' + id + '">' + (on ? '✓ ' : '') + esc(label) + ' (' + n + ')</button>';
+  }
+
+  function render() {
+    var h = '<div class="top"><h1>Coffee Cart Punch Cards</h1><div class="spacer"></div>' +
+      (S.unlocked ? '<button class="btn" data-action="lock">Lock</button>' : '') +
+      '<button class="btn" data-action="openConn">Connection</button></div><div id="status">' + statusHtml() + '</div>';
+    if (S.msg && S.unlocked) h += '<div class="notice" role="status">' + esc(S.msg) + '</div>';
+
+    if (!S.conn) {
+      h += '<div class="panel"><h2>Connect first</h2><div>This page needs the web address and access code for the coffee cart Google Sheet. If another coffee cart page on this device is already connected, this page uses that connection.</div><div><button class="btn go" data-action="openConn">Connection</button></div></div>';
+    } else if (S.hasPin === null) {
+      h += '<div class="panel">Connecting to the Sheet…</div>';
+    } else if (!S.hasPin) {
+      h += '<div class="notice">There is no teacher PIN yet. Create one first on the order screen: Punch cards (teacher PIN).</div>';
+    } else if (!S.unlocked) {
+      h += '<div class="panel" style="max-width:480px"><h2>Teacher PIN</h2>' + (S.pinMsg ? '<div class="notice" role="status">' + esc(S.pinMsg) + '</div>' : '') +
+        '<label class="field-label" for="pinInput" style="font-weight:600">Enter the PIN</label>' +
+        '<input id="pinInput" class="inp" type="password" inputmode="numeric" autocomplete="off" maxlength="8" data-enter="unlockBtn">' +
+        '<button id="unlockBtn" class="btn go" data-action="unlock">Unlock</button></div>';
+    } else {
+      var all = S.teachers, low = all.filter(function (t) { return t.punches <= 1; }).length, owes = all.filter(function (t) { return t.punches < 0; }).length;
+      h += '<div class="panel"><div class="bar">' +
+        '<div class="field" style="flex:1;min-width:200px"><label for="q">Find a teacher</label><input id="q" class="inp" type="text" autocomplete="off" value="' + esc(S.q) + '" placeholder="Start typing a name"></div>' +
+        '<div class="field" style="width:110px"><label for="perCard">Punches per card</label><input id="perCard" class="inp" type="number" min="1" max="50" value="' + esc(S.perCard) + '"></div>' +
+        '<div class="field" style="width:110px"><label for="adjustBy">+ / − changes by</label><input id="adjustBy" class="inp" type="number" min="1" max="50" value="' + esc(S.adjustBy) + '"></div></div>' +
+        '<div class="bar">' + chip('all', 'All', all.length) + chip('low', 'Low (1 or less)', low) + chip('owes', 'Owes punches', owes) + '<div class="spacer"></div><button class="btn" data-action="csv">Download balances (CSV)</button></div></div>';
+      h += '<div id="list">' + listHtml() + '</div>';
+      h += '<div class="panel"><h2>Add a teacher</h2><div class="bar">' +
+        '<div class="field" style="flex:1;min-width:200px"><label for="newName">Name</label><input id="newName" class="inp" type="text" autocomplete="off" value="' + esc(S.newName) + '" data-enter="addBtn"></div>' +
+        '<div class="field" style="width:130px"><label for="newStart">Starting punches</label><input id="newStart" class="inp" type="number" value="' + esc(S.newStart) + '"></div>' +
+        '<button id="addBtn" class="btn go" data-action="addTeacher">Add teacher</button></div></div>';
+      h += '<details class="panel"><summary>Recent activity</summary>' + (S.log.length ? S.log.map(function (e) {
+        return '<div class="logrow"><span class="when">' + esc(whenText(e.t)) + '</span><span><b>' + esc(e.name) + '</b> ' + (e.delta > 0 ? '+' : '') + e.delta + ' · ' + esc(e.note) + '</span></div>';
+      }).join('') : '<div class="muted">Nothing yet.</div>') + '<div class="muted" style="font-size:15px">The full history is on the punches tab of the Google Sheet.</div></details>';
+    }
+    $('app').innerHTML = h;
+    renderOverlay();
+    if (!S.unlocked && S.hasPin) { var p = $('pinInput'); if (p && !S.connOpen) p.focus(); }
+  }
+
+  function renderOverlay() {
+    var el = $('overlay');
+    if (!S.connOpen) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-labelledby="connTitle"><h2 id="connTitle">Connection</h2>' +
+      '<div class="muted">' + (S.conn ? 'Connected to the coffee cart Google Sheet.' : 'Not connected yet.') + ' Paste the web address and type the access code. You only do this once on each device.</div>' +
+      '<label for="connUrl" style="font-weight:600">Web address</label><input id="connUrl" class="inp" type="text" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec" value="' + esc(S.connUrl) + '">' +
+      '<label for="connCode" style="font-weight:600">Access code</label><input id="connCode" class="inp" type="password" autocomplete="off" value="' + esc(S.connCode) + '" data-enter="connSaveBtn">' +
+      (S.connMsg ? '<div class="notice" role="status">' + esc(S.connMsg) + '</div>' : '') +
+      '<div class="top"><button id="connSaveBtn" class="btn go"' + (S.connBusy ? ' disabled' : '') + ' data-action="testSave">' + (S.connBusy ? 'Testing…' : 'Test and save') + '</button><button class="btn" data-action="closeConn">Close</button></div>' +
+      (S.conn ? '<div><button class="btn" data-action="disconnect">Disconnect this device</button></div>' : '') + '</div>';
+    if (S.connFocus) { S.connFocus = false; var f = $('connUrl'); if (f) f.focus(); }
+  }
+
+  var actions = {
+    filter: function (v) { S.filter = v; render(); },
+    lock: function () { lock(); S.msg = ''; render(); },
+    unlock: function () {
+      var entered = ($('pinInput') || {}).value;
+      if (!entered) { S.pinMsg = 'Type the PIN first.'; render(); return; }
+      hashPin(entered).then(function (h) {
+        return api({ action: 'verifyPin', pinHash: h }).then(function (r) {
+          if (r.ok && r.valid) { S.pinHash = h; S.unlocked = true; S.pinMsg = ''; S.msg = ''; S.last = Date.now(); return refresh(); }
+          S.pinMsg = 'That PIN is not right.';
+        });
+      }).catch(function () { S.pinMsg = 'Could not reach the Google Sheet. Try again.'; }).then(render);
+    },
+    load: function (v) {
+      var t = teacherById(Number(v)); if (!t) return;
+      var n = count(S.perCard, 0);
+      if (n < 1 || n > 50) { S.msg = 'Punches per card should be a number from 1 to 50.'; render(); return; }
+      var cardNo = (S.drafts[t.id] || '').trim();
+      act({ action: 'loadCard', teacherId: t.id, count: n, cardNo: cardNo }, function (r) { return 'Added ' + plural(n, 'punch') + ' for ' + t.name + '. Balance: ' + r.teacher.punches + '.'; }, function () { delete S.drafts[t.id]; });
+    },
+    adj: function (v, key) {
+      var t = teacherById(Number(v)); if (!t) return;
+      var n = count(S.adjustBy, 0);
+      if (n < 1 || n > 50) { S.msg = 'The change amount should be a number from 1 to 50.'; render(); return; }
+      var d = (parseInt(key, 10) < 0 ? -1 : 1) * n;
+      act({ action: 'adjust', teacherId: t.id, delta: d, note: 'Adjusted by hand' }, function (r) { return t.name + ' now has ' + r.teacher.punches + '.'; });
+    },
+    addTeacher: function () {
+      var name = S.newName.trim(), start = count(S.newStart, 0);
+      if (!name) { S.msg = 'Type the teacher’s name first.'; render(); return; }
+      act({ action: 'addTeachers', names: [name], start: start }, function (r) { return r.added ? 'Added ' + name + '.' : name + ' is already on the list.'; }, function () { S.newName = ''; S.newStart = '0'; });
+    },
+    csv: function () {
+      var rows = [['Teacher', 'Punches']].concat(S.teachers.slice().sort(byName).map(function (t) { return [t.name, t.punches]; }));
+      var text = rows.map(function (r) { return r.map(function (c) { return '"' + String(c).replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+      var a = document.createElement('a'), d = new Date();
+      a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
+      a.download = 'coffee-cart-punch-balances-' + d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2) + '.csv';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      S.msg = 'Balances saved to your Downloads folder.'; render();
+    },
+    openConn: function () { S.connOpen = true; S.connMsg = ''; S.connUrl = S.conn ? S.conn.url : ''; S.connCode = S.conn ? S.conn.code : ''; S.connFocus = true; render(); },
+    closeConn: function () { S.connOpen = false; render(); },
+    testSave: function () {
+      var url = S.connUrl.trim(), code = S.connCode.trim();
+      if (!url || !code) { S.connMsg = 'Paste the web address and type the access code.'; render(); return; }
+      if (!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)) { S.connMsg = 'That does not look like an Apps Script web address. It should start with https://script.google.com/'; render(); return; }
+      S.connBusy = true; S.connMsg = ''; render();
+      remoteCall(url, code, { action: 'verifyPin' }).then(function (r) {
+        S.connBusy = false;
+        if (r.ok) { S.conn = { url: url, code: code }; lsSet(CONN_KEY, S.conn); S.connOpen = false; S.status = 'connecting'; S.hasPin = null; lock(); return refresh(); }
+        S.connMsg = (r.error === 'bad-key' || r.error === 'no-key') ? 'The web address works, but the access code was not accepted.' : (r.message || 'The Sheet answered with a problem.');
+      }, function () {
+        S.connBusy = false; S.connMsg = 'Could not reach that address. Check that it was copied completely and that the web app is shared with “Anyone”.';
+      }).then(render);
+    },
+    disconnect: function () {
+      if (!window.confirm('Disconnect this device from the Google Sheet?')) return;
+      S.conn = null; lsDel(CONN_KEY); lock(); S.teachers = []; S.log = []; S.hasPin = null; S.connOpen = false; render();
+    }
+  };
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-action]');
+    if (!el || el.disabled) return;
+    S.last = Date.now();
+    var fn = actions[el.getAttribute('data-action')];
+    if (fn) fn(el.getAttribute('data-v'), el.getAttribute('data-key'));
+  });
+  document.addEventListener('input', function (e) {
+    var t = e.target, id = t.id;
+    S.last = Date.now();
+    if (id === 'q') { S.q = t.value; renderList(); }
+    else if (id === 'perCard') { S.perCard = t.value; renderList(); }
+    else if (id === 'adjustBy') { S.adjustBy = t.value; renderList(); }
+    else if (id === 'newName') S.newName = t.value;
+    else if (id === 'newStart') S.newStart = t.value;
+    else if (id === 'connUrl') S.connUrl = t.value;
+    else if (id === 'connCode') S.connCode = t.value;
+    else if (t.classList && t.classList.contains('card')) S.drafts[t.getAttribute('data-id')] = t.value;
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    var t = e.target;
+    if (t.classList && t.classList.contains('card')) { e.preventDefault(); actions.load(t.getAttribute('data-id')); return; }
+    var target = t.getAttribute && t.getAttribute('data-enter');
+    if (target && $(target)) { e.preventDefault(); $(target).click(); }
+  });
+
+  var saved = lsGet(CONN_KEY);
+  if (saved && saved.url && saved.code) S.conn = saved;
+  render();
+  refresh().then(render);
+  setInterval(function () {
+    refresh().then(function () {
+      var a = document.activeElement;
+      if (a && a.tagName === 'INPUT' && !S.connOpen) { var st = $('status'); if (st) st.innerHTML = statusHtml(); return; } // do not disturb typing
+      if (S.connOpen) return;
+      render();
+    });
+  }, 15000);
+  setInterval(function () { if (S.unlocked && Date.now() - S.last > IDLE_MS) { lock(); S.msg = ''; S.pinMsg = 'Locked after 10 minutes without use.'; render(); } }, 20000);
+})();
+</script>
+</body>
+</html>
