@@ -109,16 +109,31 @@ var CartLogic = (function () {
     var ch = emptyChanges();
     if (order.pay === 'punch') {
       var t = o.teacherId !== null && o.teacherId !== undefined && o.teacherId !== '' ? teacherById(db, o.teacherId) : null;
-      if (!t && o.teacherName) {
-        var want = lower(String(o.teacherName).trim());
-        for (var k = 0; k < db.teachers.length; k++) if (lower(db.teachers[k].name) === want) { t = db.teachers[k]; break; }
+      var email = String(o.teacherEmail || '').trim().toLowerCase();
+      var wantName = String(o.teacherName || '').trim();
+      var added = false;
+      if (!t && email) {
+        for (var e = 0; e < db.teachers.length; e++) if (lower(db.teachers[e].email || '') === email) { t = db.teachers[e]; break; }
       }
-      if (!t && order.source === 'form') {
-        // a teacher order whose name is no longer on the list: still make the drink, but do not use a punch
-        order.pay = 'other';
-        var first = order.items[0];
-        first.detail = (first.detail ? first.detail + ' \u00B7 ' : '') + 'Wanted to pay by punch card, but the name was not found';
-      } else if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      if (!t && wantName) {
+        for (var k = 0; k < db.teachers.length; k++) {
+          if (lower(db.teachers[k].name) !== lower(wantName)) continue;
+          var theirs = lower(db.teachers[k].email || '');
+          if (!theirs || !email || theirs === email) { t = db.teachers[k]; if (email && !theirs) t.email = email; }
+          break;
+        }
+      }
+      if (!t && order.source === 'form' && wantName) {
+        // first order from this teacher: add them to the list automatically
+        var taken = db.teachers.some(function (x) { return lower(x.name) === lower(wantName); });
+        var nm = taken && email ? wantName + ' (' + email.split('@')[0] + ')' : wantName;
+        t = { id: db.nextTid++, name: nm.slice(0, 60), punches: 0, email: email };
+        db.teachers.push(t);
+        ch.teachersAdded.push(t);
+        added = true;
+      }
+      if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      if (!added && email && t.email === email) ch.teachersUpdated.push(t); // keeps a newly learned email on the Sheet
     }
     if (order.pay === 'punch') {
       var n = order.items.length;
@@ -252,14 +267,14 @@ var CartLogic = (function () {
 
 var TABS = {
   orders: ['id', 'num', 'day', 'createdAt', 'time', 'name', 'method', 'room', 'items', 'itemsText', 'pay', 'teacherId', 'teacherName', 'balanceAfter', 'status', 'doneAt', 'forDate', 'source'],
-  teachers: ['id', 'name', 'punches'],
+  teachers: ['id', 'name', 'punches', 'email'],
   punches: ['t', 'time', 'teacherId', 'name', 'delta', 'note'],
   cards: ['cardNo', 'teacherId', 't', 'time'],
   config: ['key', 'value']
 };
 var TEXT_COLS = {
   orders: [1, 3, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 18],
-  teachers: [2],
+  teachers: [2, 4],
   punches: [4, 6],
   cards: [1],
   config: [1, 2]
@@ -379,13 +394,13 @@ function loadDb_(ss, tz, mode) {
 
   var ts = ss.getSheetByName('teachers');
   var tLast = ts.getLastRow();
-  var tRows = tLast >= 2 ? readRows_(ts, 2, tLast - 1, 3) : [];
+  var tRows = tLast >= 2 ? readRows_(ts, 2, tLast - 1, 4) : [];
   rows.teachers = {};
   var maxId = 0;
   tRows.forEach(function (r, i) {
     if (r[0] === '' || r[1] === '') return;
     var id = num_(r[0], 0);
-    db.teachers.push({ id: id, name: text_(r[1]), punches: num_(r[2], 0) });
+    db.teachers.push({ id: id, name: text_(r[1]), punches: num_(r[2], 0), email: text_(r[3]).toLowerCase() });
     rows.teachers[id] = i + 2;
     if (id > maxId) maxId = id;
   });
@@ -441,11 +456,10 @@ function saveChanges_(ss, tz, loaded, ch) {
   var os = ss.getSheetByName('orders');
   var ts = ss.getSheetByName('teachers');
 
-  appendRows_(ts, ch.teachersAdded.map(function (t) { return [t.id, t.name, t.punches]; }));
-  if (ch.teachersAdded.length) refreshFormTeachers_(ss);
+  appendRows_(ts, ch.teachersAdded.map(function (t) { return [t.id, t.name, t.punches, t.email || '']; }));
   ch.teachersUpdated.forEach(function (t) {
     var r = rows.teachers[t.id];
-    if (r) ts.getRange(r, 3).setValue(t.punches);
+    if (r) ts.getRange(r, 3, 1, 2).setValues([[t.punches, t.email || '']]);
   });
 
   appendRows_(os, ch.ordersAdded.map(function (o) { return orderRow_(o, tz); }));
@@ -499,15 +513,6 @@ function flavorChoices_(d) {
   var sf = MENU.sfFlavors.map(function (f) { return 'Sugar Free ' + f; });
   return d.sfOnly ? sf : MENU.flavors.concat(sf);
 }
-function teacherNames_(ss) {
-  var ts = ss.getSheetByName('teachers');
-  var last = ts ? ts.getLastRow() : 0;
-  if (last < 2) return [];
-  return ts.getRange(2, 2, last - 1, 1).getValues().map(function (r) { return String(r[0]); }).filter(function (n) { return n; })
-    .sort(function (a, b) { return lastNameKey_(a) < lastNameKey_(b) ? -1 : 1; });
-}
-function lastNameKey_(n) { var p = n.trim().split(/\s+/); return (p[p.length - 1] + ' ' + n).toLowerCase(); }
-
 function createTeacherForm() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTabs_(ss);
@@ -517,7 +522,6 @@ function createTeacherForm() {
     var f = FormApp.openById(existing);
     return 'The teacher form already exists. Share this link with teachers: ' + f.getPublishedUrl();
   }
-  var names = teacherNames_(ss);
   var form = FormApp.create('Coffee Cart: Teacher Orders');
   form.setDescription('Order a drink from the Life Skills coffee cart. Students make and deliver it during delivery hour. Submit the form once for each drink.');
   try { form.setCollectEmail(true); form.setRequireLogin(true); } catch (e) { /* only some accounts allow this */ }
@@ -528,7 +532,7 @@ function createTeacherForm() {
   form.setDestination(FormApp.DestinationType.SPREADSHEET, ss.getId());
 
   var map = { drinks: {} };
-  map.teacher = form.addListItem().setTitle('Your name').setChoiceValues(names.length ? names : ['(no teachers on the list yet)']).setRequired(true).getId();
+  map.teacher = form.addTextItem().setTitle('Your name').setHelpText('First and last name. Your school email is recorded too, so your punch card follows you.').setRequired(true).getId();
   map.room = form.addTextItem().setTitle('Room number').setHelpText('Where should we deliver it?').setRequired(true).getId();
   map.date = form.addDateItem().setTitle('What day should it be delivered?').setRequired(true).getId();
   map.pay = form.addMultipleChoiceItem().setTitle('How are you paying?').setChoiceValues([PAY_PUNCH, PAY_OTHER]).setRequired(true).getId();
@@ -559,27 +563,14 @@ function createTeacherForm() {
   props.setProperty('FORM_ID', form.getId());
   props.setProperty('FORM_MAP', JSON.stringify(map));
   ScriptApp.newTrigger('onTeacherFormSubmit').forForm(form).onFormSubmit().create();
-  ScriptApp.newTrigger('refreshTeacherChoices').timeBased().everyHours(1).create();
 
   var cf = ss.getSheetByName('config');
   appendRows_(cf, [['teacherFormLink', form.getPublishedUrl()], ['teacherFormEditLink', form.getEditUrl()]]);
   return 'Teacher form created. Share this link with teachers: ' + form.getPublishedUrl() + '   (edit it here: ' + form.getEditUrl() + ')';
 }
 
-function refreshTeacherChoices() { refreshFormTeachers_(SpreadsheetApp.getActiveSpreadsheet()); }
-function refreshFormTeachers_(ss) {
-  try {
-    var props = PropertiesService.getScriptProperties();
-    var id = props.getProperty('FORM_ID'), map = props.getProperty('FORM_MAP');
-    if (!id || !map) return;
-    var names = teacherNames_(ss);
-    if (!names.length) return;
-    FormApp.openById(id).getItemById(JSON.parse(map).teacher).asListItem().setChoiceValues(names);
-  } catch (err) { /* the form is a convenience: never let it block saving teachers */ }
-}
-
 // Turn one form answer into an order request. answers = { <form item id>: response }
-function buildFormRequest_(map, answers, responseId) {
+function buildFormRequest_(map, answers, responseId, email) {
   var drinkName = answers[map.drink];
   var d = null;
   MENU.drinks.forEach(function (x) { if (x.name === drinkName) d = x; });
@@ -604,7 +595,7 @@ function buildFormRequest_(map, answers, responseId) {
       id: 'form-' + responseId, name: name, method: 'delivery', room: String(answers[map.room] || '').trim(),
       forDate: String(answers[map.date] || ''), source: 'form',
       items: [{ title: (temp ? temp + ' ' : '') + d.name, detail: lines.length ? lines.join(' · ') : 'Plain' }],
-      pay: pay, teacherName: pay === 'punch' ? name : ''
+      pay: pay, teacherName: pay === 'punch' ? name : '', teacherEmail: pay === 'punch' ? String(email || '').trim().toLowerCase() : ''
     }
   };
 }
@@ -616,11 +607,23 @@ function onTeacherFormSubmit(e) {
     var map = JSON.parse(props.getProperty('FORM_MAP'));
     var answers = {};
     e.response.getItemResponses().forEach(function (ir) { answers[ir.getItem().getId()] = ir.getResponse(); });
-    var out = run_(buildFormRequest_(map, answers, e.response.getId()));
+    var out = run_(buildFormRequest_(map, answers, e.response.getId(), e.response.getRespondentEmail()));
     if (!out.ok) throw new Error(out.message || out.error);
   } catch (err) {
     // leave a note where the lead teacher can see it
     var cf = ss.getSheetByName('config');
     appendRows_(cf, [['formError ' + new Date().toISOString(), String(err && err.message ? err.message : err)]]);
   }
+}
+
+// Start the teacher form over (for example after changing the questions). Delete the old form from Google Drive yourself.
+function recreateTeacherForm() {
+  var props = PropertiesService.getScriptProperties();
+  ScriptApp.getProjectTriggers().forEach(function (tr) {
+    var fn = tr.getHandlerFunction();
+    if (fn === 'onTeacherFormSubmit' || fn === 'refreshTeacherChoices') ScriptApp.deleteTrigger(tr);
+  });
+  props.deleteProperty('FORM_ID');
+  props.deleteProperty('FORM_MAP');
+  return createTeacherForm();
 }

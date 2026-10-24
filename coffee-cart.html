@@ -262,16 +262,31 @@ var CartLogic = (function () {
     var ch = emptyChanges();
     if (order.pay === 'punch') {
       var t = o.teacherId !== null && o.teacherId !== undefined && o.teacherId !== '' ? teacherById(db, o.teacherId) : null;
-      if (!t && o.teacherName) {
-        var want = lower(String(o.teacherName).trim());
-        for (var k = 0; k < db.teachers.length; k++) if (lower(db.teachers[k].name) === want) { t = db.teachers[k]; break; }
+      var email = String(o.teacherEmail || '').trim().toLowerCase();
+      var wantName = String(o.teacherName || '').trim();
+      var added = false;
+      if (!t && email) {
+        for (var e = 0; e < db.teachers.length; e++) if (lower(db.teachers[e].email || '') === email) { t = db.teachers[e]; break; }
       }
-      if (!t && order.source === 'form') {
-        // a teacher order whose name is no longer on the list: still make the drink, but do not use a punch
-        order.pay = 'other';
-        var first = order.items[0];
-        first.detail = (first.detail ? first.detail + ' \u00B7 ' : '') + 'Wanted to pay by punch card, but the name was not found';
-      } else if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      if (!t && wantName) {
+        for (var k = 0; k < db.teachers.length; k++) {
+          if (lower(db.teachers[k].name) !== lower(wantName)) continue;
+          var theirs = lower(db.teachers[k].email || '');
+          if (!theirs || !email || theirs === email) { t = db.teachers[k]; if (email && !theirs) t.email = email; }
+          break;
+        }
+      }
+      if (!t && order.source === 'form' && wantName) {
+        // first order from this teacher: add them to the list automatically
+        var taken = db.teachers.some(function (x) { return lower(x.name) === lower(wantName); });
+        var nm = taken && email ? wantName + ' (' + email.split('@')[0] + ')' : wantName;
+        t = { id: db.nextTid++, name: nm.slice(0, 60), punches: 0, email: email };
+        db.teachers.push(t);
+        ch.teachersAdded.push(t);
+        added = true;
+      }
+      if (!t) return fail('no-teacher', 'That teacher is not on the list.');
+      if (!added && email && t.email === email) ch.teachersUpdated.push(t); // keeps a newly learned email on the Sheet
     }
     if (order.pay === 'punch') {
       var n = order.items.length;
