@@ -94,7 +94,12 @@
   .badge { min-width: 44px; text-align: center; padding: 6px 14px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 24px; font-weight: 700; }
   .qcard { border: 4px solid var(--ink); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; background: #FFF8E6; }
   .qcard .name { font-size: 30px; font-weight: 700; line-height: 1.1; }
-  .qcard .items { font-size: 20px; line-height: 1.4; white-space: pre-line; }
+  .qcard .items { font-size: 20px; line-height: 1.4; }
+  .qcard .idrink { font-size: 26px; font-weight: 800; }
+  .qcard .steps { margin: 4px 0 6px; padding-left: 30px; }
+  .qcard .steps li { margin: 3px 0; padding-left: 4px; }
+  .qcard .inote { font-weight: 600; background: #FFE9A8; border-radius: 8px; padding: 4px 8px; margin-top: 4px; }
+  .qcard .idiv { border: 0; border-top: 3px dashed var(--line); margin: 10px 0; width: 100%; }
   .qcard .finish { min-height: 60px; margin-top: 4px; border-radius: 14px; border: none; background: var(--go); color: #fff; font-size: 22px; font-weight: 700; cursor: pointer; }
   .fin-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 20px; color: var(--muted); }
 
@@ -180,7 +185,58 @@ var CartLogic = (function () {
   //   changes = what the Apps Script must write to the Sheet (the browser version just saves db)
 
   function newDb() {
-    return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1 };
+    return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
+      config: { maxDrinks: 20, daysAhead: 5, lastDay: '' }, daysOff: [] };
+  }
+
+  // ---------- days and capacity ----------
+  function parseDay(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
+  function fmtDay(dt) {
+    return dt.getUTCFullYear() + '-' + ('0' + (dt.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + dt.getUTCDate()).slice(-2);
+  }
+  function addDays(d, n) {
+    var dt = parseDay(d);
+    dt.setUTCDate(dt.getUTCDate() + n);
+    return fmtDay(dt);
+  }
+  // school day = Monday to Friday, not on the days-off list, not after the last day of school
+  function isSchoolDay(db, d) {
+    var dt = parseDay(d);
+    if (!dt) return false;
+    var wd = dt.getUTCDay();
+    if (wd === 0 || wd === 6) return false;
+    if ((db.daysOff || []).indexOf(d) >= 0) return false;
+    if (db.config && db.config.lastDay && d > db.config.lastDay) return false;
+    return true;
+  }
+  function maxDrinks(db) {
+    var n = parseInt(db.config && db.config.maxDrinks, 10);
+    return isNaN(n) || n < 1 ? 0 : n; // 0 means no limit
+  }
+  // drinks promised for a day (cancelled orders do not count)
+  function drinksOn(db, d) {
+    var n = 0;
+    db.orders.forEach(function (o) {
+      if (!o.cancelled && (o.forDate || o.day) === d) n += o.items.length;
+    });
+    return n;
+  }
+  // the next few school days (today first, when it is one) with how full each is
+  function openDays(db, today) {
+    var ahead = parseInt(db.config && db.config.daysAhead, 10);
+    if (isNaN(ahead) || ahead < 1) ahead = 5;
+    var max = maxDrinks(db), out = [], d = today, guard = 0;
+    while (out.length < ahead && guard++ < 120) {
+      if (isSchoolDay(db, d)) {
+        var c = drinksOn(db, d);
+        out.push({ date: d, count: c, max: max, left: max ? Math.max(max - c, 0) : null, full: !!max && c >= max });
+      }
+      d = addDays(d, 1);
+    }
+    return out;
   }
   function fail(code, message) {
     return { resp: { ok: false, error: code, message: message }, changes: null };
@@ -204,13 +260,14 @@ var CartLogic = (function () {
 
   function snapshot(db, now, day) {
     var cutoff = now - 3 * 3600 * 1000;
-    var orders = db.orders.filter(function (o) { return !o.done || (o.doneAt || 0) >= cutoff; });
+    var orders = db.orders.filter(function (o) { return !o.cancelled && (!o.done || (o.doneAt || 0) >= cutoff); });
     orders.sort(function (a, b) { return a.createdAt - b.createdAt; });
     if (orders.length > 80) orders = orders.slice(orders.length - 80);
     return {
       ok: true,
       serverNow: now,
       today: day,
+      cap: { max: maxDrinks(db), today: drinksOn(db, day), todayFull: !!maxDrinks(db) && drinksOn(db, day) >= maxDrinks(db) },
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
@@ -229,7 +286,7 @@ var CartLogic = (function () {
     };
   }
 
-  function addOrder(db, o, now, day) {
+  function addOrder(db, o, now, day, canOverride) {
     if (!o.id) return fail('bad-order', 'The order has no id.');
     for (var i = 0; i < db.orders.length; i++) {
       if (db.orders[i].id === o.id) return { resp: { ok: true, order: db.orders[i], duplicate: true }, changes: null };
@@ -237,6 +294,20 @@ var CartLogic = (function () {
     if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
     // an order can be for a later day (teacher orders); numbers count up within the day it is FOR
     var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : day;
+    var asked = o.source === 'form' ? 'form' : '';
+    if (asked === 'form' && !isSchoolDay(db, forDate)) {
+      return fail('closed', 'There are no coffee cart orders on that day.');
+    }
+    var max = maxDrinks(db);
+    if (max && !canOverride) {
+      var have = drinksOn(db, forDate), want = Math.min(o.items.length, 20);
+      if (have + want > max) {
+        var res = fail('full', have >= max ? 'The coffee cart is full for that day (' + have + ' of ' + max + ' drinks).'
+          : 'Only ' + (max - have) + ' more ' + (max - have === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + have + ' of ' + max + ' taken).');
+        res.resp.date = forDate; res.resp.count = have; res.resp.max = max;
+        return res;
+      }
+    }
     var num = 0;
     db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
     var order = {
@@ -257,6 +328,7 @@ var CartLogic = (function () {
       teacherName: '',
       balanceAfter: null,
       done: false,
+      cancelled: false,
       doneAt: null
     };
     var ch = emptyChanges();
@@ -398,7 +470,12 @@ var CartLogic = (function () {
     var bad;
     if (a === 'poll') return { resp: snapshot(db, now, day), changes: null };
     if (a === 'punchPoll') return { resp: punchSnapshot(db, now), changes: null };
-    if (a === 'addOrder') return addOrder(db, req.order || {}, now, day);
+    if (a === 'addOrder') {
+      var ro = req.order || {};
+      var pinOk = !!(ro.override && db.pinHash && req.pinHash === db.pinHash);
+      if (ro.override && !pinOk) return fail('bad-pin', 'That PIN is not right.');
+      return addOrder(db, ro, now, day, pinOk || !!ro.late);
+    }
     if (a === 'setDone') return setDone(db, req, now);
     if (a === 'verifyPin') return { resp: { ok: true, valid: !!db.pinHash && req.pinHash === db.pinHash }, changes: null };
     if (a === 'setPin') return setPin(db, req);
@@ -413,7 +490,7 @@ var CartLogic = (function () {
     return fail('unknown-action', 'Unknown request.');
   }
 
-  return { newDb: newDb, handle: handle, snapshot: snapshot };
+  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
 })();
 </script>
 <script>
@@ -438,7 +515,7 @@ var CartLogic = (function () {
   var TEAS = ['Earl Grey', 'Decaf Earl Grey', 'Green Tea', 'English Breakfast'];
   var FLAVORS = ['Caramel', 'Hazelnut', 'Vanilla', 'Raspberry', 'Strawberry', 'Sour Gummy Worm'];
   var SF_FLAVORS = ['Raspberry', 'Strawberry', 'Vanilla'];
-  var QUICK_NOTES = ['Splash of milk', 'Extra hot', 'Not too hot', 'Extra sauce'];
+  var QUICK_NOTES = ['Splash of milk', 'Extra hot', 'Not too hot', 'Extra sauce', 'Whipped cream', 'Half & half on top'];
   var PUNCHES_PER_CARD = 5; // default number of punches on a card
 
   var TEMPS = ['Hot', 'Iced'];
@@ -543,7 +620,7 @@ var CartLogic = (function () {
     function step() {
       if (!outbox.length) return Promise.resolve();
       var item = outbox[0];
-      var req = item.kind === 'addOrder' ? { action: 'addOrder', order: item.order } : { action: 'setDone', id: item.id, done: item.done };
+      var req = item.kind === 'addOrder' ? { action: 'addOrder', order: extend({ late: true }, item.order) } : { action: 'setDone', id: item.id, done: item.done };
       return api(req).then(function () {
         outbox.shift(); saveOutbox();
         if (item.kind === 'setDone') overlay[item.id] = { done: item.done, until: Date.now() + 8000 };
@@ -560,6 +637,7 @@ var CartLogic = (function () {
   function applyPoll(resp) {
     net.skew = resp.serverNow - Date.now();
     net.today = resp.today || '';
+    net.cap = resp.cap || null;
     punch.teachers = resp.teachers; punch.log = resp.log; punch.hasPin = resp.hasPin;
     var had = {};
     state.orders.forEach(function (o) { had[o.id] = true; });
@@ -698,6 +776,12 @@ var CartLogic = (function () {
   function ageText(o) {
     var m = Math.floor((nowMs() - o.createdAt) / 60000);
     return m < 1 ? 'just now' : m === 1 ? '1 min ago' : m + ' min ago';
+  }
+  function capInfoHtml() {
+    var c = net.cap;
+    if (!c || !c.max) return '';
+    var full = c.today >= c.max;
+    return '<div class="info"' + (full ? ' style="background:#FBE3E0;border-color:#B3261E"' : '') + '><b>Today:</b> ' + c.today + ' of ' + c.max + ' drinks' + (full ? ' · <b>FULL</b>' : '') + '</div>';
   }
   function sentText(o) {
     var placed = new Date(o.createdAt), today = new Date(nowMs());
@@ -915,7 +999,7 @@ var CartLogic = (function () {
           '<div id="teacherList" class="teacher-list">' + teacherListHtml() + '</div>' +
           '<div id="payInfo" class="info"' + (state.teacherId ? '' : ' hidden') + '>' + payInfoHtml() + '</div>';
       }
-      if (state.sendError) html += '<div class="notice" role="alert">' + esc(state.sendError) + '</div>';
+      if (state.sendError) html += '<div class="notice" role="alert">' + esc(state.sendError) + (state.fullErr ? '<br><br>A teacher can approve it anyway. Teacher PIN: <input id="ovPin" type="password" inputmode="numeric" autocomplete="off" class="text-input mid" style="max-width:220px;display:inline-block"> <button class="secondary" style="min-height:56px;font-size:20px;padding:0 24px" data-action="overrideSend">Approve and send</button>' : '') + '</div>';
       html += '</div><div class="row"><button class="secondary" data-action="backToReview">Back</button>' +
         '<button id="sendBtn" class="primary" data-action="send"' + (canSend() && !state.sending ? '' : ' disabled') + '>' + (state.sending ? 'Sending…' : 'Send order') + '</button></div>';
     }
@@ -966,7 +1050,7 @@ var CartLogic = (function () {
   function renderTicket() {
     var d = drinkObj();
     var hasCurrent = state.screen === 'options' && d;
-    var html = '<div class="side-title">Order ticket</div>' + statusHtml() + '<div class="info"><b>Queue:</b> ' + (state.orders.filter(function (o) { return !o.done && isDue(o); }).length + outbox.filter(function (x) { return x.kind === 'addOrder'; }).length) + ' waiting</div>';
+    var html = '<div class="side-title">Order ticket</div>' + statusHtml() + '<div class="info"><b>Queue:</b> ' + (state.orders.filter(function (o) { return !o.done && isDue(o); }).length + outbox.filter(function (x) { return x.kind === 'addOrder'; }).length) + ' waiting</div>' + capInfoHtml();
     if (!state.cart.length && !hasCurrent) html += '<div class="muted" style="font-size:22px;line-height:1.4">Nothing yet. Tap a drink to start.</div>';
     html += state.cart.map(function (c) {
       return '<div class="tcard"><div class="t-title">' + esc(c.title) + '</div><div class="t-detail">' + esc(c.detail) + '</div>' +
@@ -984,6 +1068,58 @@ var CartLogic = (function () {
     $('ticket').innerHTML = html;
   }
 
+  // ---------- build sheet: the steps for each drink, in order ----------
+  // EDIT HERE to change a recipe. A step that comes back empty is left off the slip.
+  // "___" means the amount has not been decided yet.
+  var BLANK = '___';
+  function recipeContext(it) {
+    var m = /^Hot Chocolate/.test(it.title || '') ? null : /^(Hot|Iced)\s+(.+)$/.exec(it.title || '');
+    var c = { iced: !!m && m[1] === 'Iced', temp: m ? m[1] : '', drink: m ? m[2] : (it.title || ''), sauce: '', milk: '', tea: '', flavors: [], notes: '' };
+    String(it.detail || '').split(' · ').forEach(function (part) {
+      var k = part.indexOf(': '), key = k < 0 ? '' : part.slice(0, k), v = k < 0 ? '' : part.slice(k + 2);
+      if (key === 'Sauce') c.sauce = v; else if (key === 'Milk') c.milk = v; else if (key === 'Tea') c.tea = v;
+      else if (key === 'Flavor') c.flavors = v.split(', ');
+      else if (key === 'Notes') c.notes = v;
+      else if (part && part !== 'Plain') c.notes += (c.notes ? ', ' : '') + part;
+    });
+    return c;
+  }
+  function milkStep(c) {
+    if (!c.milk) return null;
+    var m = c.milk === 'Regular' ? 'regular milk' : c.milk === 'Half & Half' ? 'half & half' : c.milk.toLowerCase() + ' milk';
+    return c.iced ? 'Add ice, then pour in cold ' + m : 'Steam ' + m + ' with the thermometer, until the needle is in the green area';
+  }
+  function syrupStep(c, per) { return c.flavors.length ? 'Syrup, ' + per + ' of each: ' + c.flavors.join(', ') : null; }
+  function sauceStep(c, amount) { return c.sauce ? c.sauce + ' sauce, ' + amount : null; }
+  function mochaSauceStep(c) {
+    if (!c.sauce) return null;
+    return c.sauce === 'Mocha' ? 'Mocha (milk chocolate) sauce, 2 pumps' : c.sauce + ' sauce, 2 to 3 pumps';
+  }
+  function toppingStep(c) {
+    var t = [];
+    if (/whip/i.test(c.notes)) t.push('whipped cream');
+    if (/half/i.test(c.notes)) t.push('half & half');
+    return t.length ? 'Top with ' + t.join(' and ') : null;
+  }
+  var RECIPES = {
+    'Mocha': function (c) { return ['Espresso, 2 shots', milkStep(c), mochaSauceStep(c), syrupStep(c, '2 pumps'), toppingStep(c)]; },
+    'Latte': function (c) { return ['Espresso, 2 shots', syrupStep(c, BLANK + ' pumps'), sauceStep(c, BLANK + ' pumps'), milkStep(c), toppingStep(c)]; },
+    'Americano': function (c) { return ['Espresso, 2 shots', syrupStep(c, BLANK + ' pumps'), sauceStep(c, BLANK + ' pumps'), c.iced ? 'Add ice, then cold water' : 'Add hot water', toppingStep(c)]; },
+    'Hot Chocolate': function (c) { return ['Milk chocolate sauce, 2 pumps', sauceStep(c, BLANK + ' pumps'), syrupStep(c, BLANK + ' pumps'), milkStep(c), toppingStep(c)]; },
+    'Steamer': function (c) { return [syrupStep(c, BLANK + ' pumps'), sauceStep(c, BLANK + ' pumps'), milkStep(c), toppingStep(c)]; },
+    'Lotus': function (c) { return ['Lotus, 1½ pumps', syrupStep(c, '2 pumps'), 'Add ice', 'Fill with club soda', toppingStep(c)]; },
+    'Italian Soda': function (c) { return [syrupStep(c, BLANK + ' pumps'), 'Add ice', 'Fill with soda water', toppingStep(c)]; },
+    'Tea': function (c) { return [(c.tea ? c.tea + ' tea' : 'Tea') + (c.iced ? ': steep in hot water, then pour over ice' : ': steep in hot water'), syrupStep(c, BLANK + ' pumps'), toppingStep(c)]; }
+  };
+  function itemHtml(it) {
+    var c = recipeContext(it);
+    var key = Object.keys(RECIPES).filter(function (k) { return c.drink.indexOf(k) === 0; })[0];
+    if (!key) return '<div class="idrink">' + esc(it.title) + '</div>' + (it.detail ? '<div class="inote">' + esc(it.detail) + '</div>' : '');
+    var steps = RECIPES[key](c).filter(Boolean);
+    return '<div class="idrink">' + esc((c.temp ? c.temp + ' · ' : '') + c.drink) + '</div>' +
+      '<ol class="steps">' + steps.map(function (st) { return '<li>' + esc(st) + '</li>'; }).join('') + '</ol>' +
+      (c.notes ? '<div class="inote"><b>Notes:</b> ' + esc(c.notes) + '</div>' : '');
+  }
   function qcardHtml(o) {
     var pay = payText(o);
     var isNew = newUntil[o.id] && newUntil[o.id] > Date.now();
@@ -992,7 +1128,7 @@ var CartLogic = (function () {
       '<div style="font-size:22px;font-weight:700">' + esc(deliveryText(o.method, o.room)) + '</div>' +
       (pay ? '<div style="font-size:18px;font-weight:600">' + esc(pay) + '</div>' : '') +
       '<div class="muted" style="font-size:18px">' + esc(sentText(o)) + '</div>' +
-      '<div class="items">' + o.items.map(function (i) { return esc(i.title + (i.detail ? ' — ' + i.detail : '')); }).join('\n') + '</div>' +
+      '<div class="items">' + o.items.map(itemHtml).join('<hr class="idiv">') + '</div>' +
       '<button class="finish" data-action="finish" data-v="' + esc(o.id) + '">Mark finished</button></div>';
   }
   function renderQueue() {
@@ -1001,7 +1137,7 @@ var CartLogic = (function () {
     var fin = state.orders.filter(function (o) { return o.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); }).slice(0, MODE === 'queue' ? 8 : 3);
     var html;
     if (MODE === 'queue') {
-      html = '<div class="qhead"><div class="side-title">Coffee Cart Queue</div><div class="badge" aria-label="' + open.length + ' waiting">' + open.length + '</div><div class="spacer"></div>' +
+      html = '<div class="qhead"><div class="side-title">Coffee Cart Queue</div><div class="badge" aria-label="' + open.length + ' waiting">' + open.length + '</div>' + (net.cap && net.cap.max ? '<div style="font-size:24px;font-weight:700;color:' + (net.cap.today >= net.cap.max ? '#B3261E' : 'inherit') + '">Today ' + net.cap.today + ' of ' + net.cap.max + ' drinks' + (net.cap.today >= net.cap.max ? ' · FULL' : '') + '</div>' : '') + '<div class="spacer"></div>' +
         '<button class="small" data-action="openConn">Connection</button></div>' + statusHtml();
       if (!open.length) html += '<div class="muted" style="font-size:26px;line-height:1.4">No orders waiting.</div>';
       else html += '<div class="qgrid">' + open.map(qcardHtml).join('') + '</div>';
@@ -1043,7 +1179,7 @@ var CartLogic = (function () {
   function resetOrder() {
     state.screen = 'drink'; state.drink = null; state.step = 0; state.sel = {}; state.flavors = [];
     state.cart = []; state.name = ''; state.method = null; state.room = '';
-    state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null; state.sendError = '';
+    state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null; state.sendError = ''; state.fullErr = false;
   }
   function finishDrink() {
     var d = drinkObj();
@@ -1070,6 +1206,29 @@ var CartLogic = (function () {
     }).catch(function () { say('Could not reach the Google Sheet. Check the connection and try again.'); }).then(render);
   }
   function say(msg) { state.adminMsg = msg; }
+
+  function sendOrder(ovHash) {
+      if (!canSend() || state.sending) return;
+      var order = {
+        id: uid(), name: state.name.trim(), method: state.method, room: state.room.trim(),
+        items: state.cart.map(function (c) { return { title: c.title, detail: c.detail }; }),
+        pay: state.pay, teacherId: state.pay === 'punch' ? state.teacherId : null
+      };
+      state.sending = true; state.sendError = '';
+      api(ovHash ? { action: 'addOrder', order: extend(order, { override: true }), pinHash: ovHash } : { action: 'addOrder', order: order }).then(function (r) {
+        state.sending = false;
+        if (!r.ok) { state.sendError = r.message || 'The order did not go through.'; state.fullErr = r.error === 'full' || (r.error === 'bad-pin' && !!ovHash); return; }
+        var o = r.order;
+        state.result = o.pay === 'punch' ? { kind: 'punch', num: o.num, name: o.teacherName, balance: o.balanceAfter } : { kind: 'other', num: o.num };
+        state.screen = 'done';
+        return pollNow();
+      }, function (err) {
+        state.sending = false;
+        if (err && err.network) { outboxAdd({ kind: 'addOrder', order: order }); state.result = { kind: 'queued' }; state.screen = 'done'; net.status = 'offline'; }
+        else state.sendError = 'Something went wrong sending the order. Try again.';
+      }).then(render);
+    
+  }
 
   var actions = {
     pickDrink: function (v) { state.drink = v; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'options'; },
@@ -1113,26 +1272,11 @@ var CartLogic = (function () {
     removeCart: function (v) {
       state.cart = state.cart.filter(function (c) { return String(c.id) !== String(v); });
     },
-    send: function () {
-      if (!canSend() || state.sending) return;
-      var order = {
-        id: uid(), name: state.name.trim(), method: state.method, room: state.room.trim(),
-        items: state.cart.map(function (c) { return { title: c.title, detail: c.detail }; }),
-        pay: state.pay, teacherId: state.pay === 'punch' ? state.teacherId : null
-      };
-      state.sending = true; state.sendError = '';
-      api({ action: 'addOrder', order: order }).then(function (r) {
-        state.sending = false;
-        if (!r.ok) { state.sendError = r.message || 'The order did not go through.'; return; }
-        var o = r.order;
-        state.result = o.pay === 'punch' ? { kind: 'punch', num: o.num, name: o.teacherName, balance: o.balanceAfter } : { kind: 'other', num: o.num };
-        state.screen = 'done';
-        return pollNow();
-      }, function (err) {
-        state.sending = false;
-        if (err && err.network) { outboxAdd({ kind: 'addOrder', order: order }); state.result = { kind: 'queued' }; state.screen = 'done'; net.status = 'offline'; }
-        else state.sendError = 'Something went wrong sending the order. Try again.';
-      }).then(render);
+    send: function () { sendOrder(null); },
+    overrideSend: function () {
+      var pin = val('ovPin');
+      if (!pin) { state.sendError = 'Type the teacher PIN, then tap Approve and send.'; state.fullErr = true; return; }
+      hashPin(pin).then(function (ph) { sendOrder(ph); }).then(render);
     },
     newCustomer: function () { resetOrder(); },
     clearAll: function () { resetOrder(); },

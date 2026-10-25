@@ -27,7 +27,58 @@ var CartLogic = (function () {
   //   changes = what the Apps Script must write to the Sheet (the browser version just saves db)
 
   function newDb() {
-    return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1 };
+    return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
+      config: { maxDrinks: 20, daysAhead: 5, lastDay: '' }, daysOff: [] };
+  }
+
+  // ---------- days and capacity ----------
+  function parseDay(d) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(d || ''));
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
+  }
+  function fmtDay(dt) {
+    return dt.getUTCFullYear() + '-' + ('0' + (dt.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + dt.getUTCDate()).slice(-2);
+  }
+  function addDays(d, n) {
+    var dt = parseDay(d);
+    dt.setUTCDate(dt.getUTCDate() + n);
+    return fmtDay(dt);
+  }
+  // school day = Monday to Friday, not on the days-off list, not after the last day of school
+  function isSchoolDay(db, d) {
+    var dt = parseDay(d);
+    if (!dt) return false;
+    var wd = dt.getUTCDay();
+    if (wd === 0 || wd === 6) return false;
+    if ((db.daysOff || []).indexOf(d) >= 0) return false;
+    if (db.config && db.config.lastDay && d > db.config.lastDay) return false;
+    return true;
+  }
+  function maxDrinks(db) {
+    var n = parseInt(db.config && db.config.maxDrinks, 10);
+    return isNaN(n) || n < 1 ? 0 : n; // 0 means no limit
+  }
+  // drinks promised for a day (cancelled orders do not count)
+  function drinksOn(db, d) {
+    var n = 0;
+    db.orders.forEach(function (o) {
+      if (!o.cancelled && (o.forDate || o.day) === d) n += o.items.length;
+    });
+    return n;
+  }
+  // the next few school days (today first, when it is one) with how full each is
+  function openDays(db, today) {
+    var ahead = parseInt(db.config && db.config.daysAhead, 10);
+    if (isNaN(ahead) || ahead < 1) ahead = 5;
+    var max = maxDrinks(db), out = [], d = today, guard = 0;
+    while (out.length < ahead && guard++ < 120) {
+      if (isSchoolDay(db, d)) {
+        var c = drinksOn(db, d);
+        out.push({ date: d, count: c, max: max, left: max ? Math.max(max - c, 0) : null, full: !!max && c >= max });
+      }
+      d = addDays(d, 1);
+    }
+    return out;
   }
   function fail(code, message) {
     return { resp: { ok: false, error: code, message: message }, changes: null };
@@ -51,13 +102,14 @@ var CartLogic = (function () {
 
   function snapshot(db, now, day) {
     var cutoff = now - 3 * 3600 * 1000;
-    var orders = db.orders.filter(function (o) { return !o.done || (o.doneAt || 0) >= cutoff; });
+    var orders = db.orders.filter(function (o) { return !o.cancelled && (!o.done || (o.doneAt || 0) >= cutoff); });
     orders.sort(function (a, b) { return a.createdAt - b.createdAt; });
     if (orders.length > 80) orders = orders.slice(orders.length - 80);
     return {
       ok: true,
       serverNow: now,
       today: day,
+      cap: { max: maxDrinks(db), today: drinksOn(db, day), todayFull: !!maxDrinks(db) && drinksOn(db, day) >= maxDrinks(db) },
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
@@ -76,7 +128,7 @@ var CartLogic = (function () {
     };
   }
 
-  function addOrder(db, o, now, day) {
+  function addOrder(db, o, now, day, canOverride) {
     if (!o.id) return fail('bad-order', 'The order has no id.');
     for (var i = 0; i < db.orders.length; i++) {
       if (db.orders[i].id === o.id) return { resp: { ok: true, order: db.orders[i], duplicate: true }, changes: null };
@@ -84,6 +136,20 @@ var CartLogic = (function () {
     if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
     // an order can be for a later day (teacher orders); numbers count up within the day it is FOR
     var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : day;
+    var asked = o.source === 'form' ? 'form' : '';
+    if (asked === 'form' && !isSchoolDay(db, forDate)) {
+      return fail('closed', 'There are no coffee cart orders on that day.');
+    }
+    var max = maxDrinks(db);
+    if (max && !canOverride) {
+      var have = drinksOn(db, forDate), want = Math.min(o.items.length, 20);
+      if (have + want > max) {
+        var res = fail('full', have >= max ? 'The coffee cart is full for that day (' + have + ' of ' + max + ' drinks).'
+          : 'Only ' + (max - have) + ' more ' + (max - have === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + have + ' of ' + max + ' taken).');
+        res.resp.date = forDate; res.resp.count = have; res.resp.max = max;
+        return res;
+      }
+    }
     var num = 0;
     db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
     var order = {
@@ -104,6 +170,7 @@ var CartLogic = (function () {
       teacherName: '',
       balanceAfter: null,
       done: false,
+      cancelled: false,
       doneAt: null
     };
     var ch = emptyChanges();
@@ -245,7 +312,12 @@ var CartLogic = (function () {
     var bad;
     if (a === 'poll') return { resp: snapshot(db, now, day), changes: null };
     if (a === 'punchPoll') return { resp: punchSnapshot(db, now), changes: null };
-    if (a === 'addOrder') return addOrder(db, req.order || {}, now, day);
+    if (a === 'addOrder') {
+      var ro = req.order || {};
+      var pinOk = !!(ro.override && db.pinHash && req.pinHash === db.pinHash);
+      if (ro.override && !pinOk) return fail('bad-pin', 'That PIN is not right.');
+      return addOrder(db, ro, now, day, pinOk || !!ro.late);
+    }
     if (a === 'setDone') return setDone(db, req, now);
     if (a === 'verifyPin') return { resp: { ok: true, valid: !!db.pinHash && req.pinHash === db.pinHash }, changes: null };
     if (a === 'setPin') return setPin(db, req);
@@ -260,7 +332,7 @@ var CartLogic = (function () {
     return fail('unknown-action', 'Unknown request.');
   }
 
-  return { newDb: newDb, handle: handle, snapshot: snapshot };
+  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
 })();
 
 // ---- end shared rules ----
@@ -270,16 +342,36 @@ var TABS = {
   teachers: ['id', 'name', 'punches', 'email'],
   punches: ['t', 'time', 'teacherId', 'name', 'delta', 'note'],
   cards: ['cardNo', 'teacherId', 't', 'time'],
-  config: ['key', 'value']
+  config: ['key', 'value'],
+  daysoff: ['date', 'note']
 };
+// First-time contents. After that the lead teacher edits these on the Sheet.
+var CONFIG_DEFAULTS = [
+  ['maxDrinks', '20'],   // most drinks the cart can make on one day (counter orders and teacher orders together)
+  ['daysAhead', '5'],    // how many school days ahead teachers can order
+  ['lastDay', '2027-06-15'] // last day of school: no orders after this
+];
+// Weekends are skipped automatically. These are the no-school days from the 2026-27 Reynolds calendar.
+var DAYS_OFF_SEED = [
+  ['2026-10-09', 'No school'], ['2026-10-19', 'No school'], ['2026-11-06', 'No school'], ['2026-11-11', 'No school'],
+  ['2026-11-23', 'No school'], ['2026-11-24', 'Conferences, no school'], ['2026-11-25', 'Conferences, no school'],
+  ['2026-11-26', 'No school'], ['2026-11-27', 'No school'],
+  ['2026-12-21', 'Winter break'], ['2026-12-22', 'Winter break'], ['2026-12-23', 'Winter break'], ['2026-12-24', 'Winter break'],
+  ['2026-12-25', 'Winter break'], ['2026-12-28', 'Winter break'], ['2026-12-29', 'Winter break'], ['2026-12-30', 'Winter break'],
+  ['2026-12-31', 'Winter break'], ['2027-01-01', 'Winter break'], ['2027-01-18', 'No school'], ['2027-02-01', 'No school'],
+  ['2027-02-15', 'No school'], ['2027-03-22', 'Spring break'], ['2027-03-23', 'Spring break'], ['2027-03-24', 'Spring break'],
+  ['2027-03-25', 'Spring break'], ['2027-03-26', 'Spring break'], ['2027-03-29', 'Spring break'], ['2027-04-09', 'No school'],
+  ['2027-04-19', 'No school'], ['2027-05-10', 'No school'], ['2027-05-31', 'No school']
+];
 var TEXT_COLS = {
   orders: [1, 3, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 18],
   teachers: [2, 4],
   punches: [4, 6],
   cards: [1],
-  config: [1, 2]
+  config: [1, 2],
+  daysoff: [2]
 };
-var RECENT_ORDER_ROWS = 300;
+var RECENT_ORDER_ROWS = 500;
 
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -321,6 +413,14 @@ function run_(req) {
     var loaded = loadDb_(ss, tz, req.action === 'export' ? 'full' : req.action === 'punchPoll' ? 'punch' : 'normal');
     var result = CartLogic.handle(loaded.db, req, now, day);
     if (result.changes) saveChanges_(ss, tz, loaded, result.changes);
+    if (req.action === 'addOrder' && result.resp.ok && result.changes && result.changes.ordersAdded.length) {
+      var oa = result.changes.ordersAdded[0];
+      var mx = CartLogic.maxDrinks(loaded.db);
+      // a day just filled up: take it off the teacher form
+      if (mx && CartLogic.drinksOn(loaded.db, oa.forDate) >= mx) {
+        try { refreshForm_(loaded.db, day, tz); } catch (x) { /* the form is only a convenience */ }
+      }
+    }
     return result.resp;
   } finally {
     if (lock) lock.releaseLock();
@@ -339,11 +439,25 @@ function ensureTabs_(ss) {
       sh = ss.insertSheet(name);
       sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]);
       sh.setFrozenRows(1);
+      if (name === 'daysoff') {
+        sh.getRange(2, 1, DAYS_OFF_SEED.length, 2).setValues(DAYS_OFF_SEED);
+        sh.setColumnWidth(2, 220);
+        sh.getRange(1, 4).setValue('Add a row for any day with no coffee cart (field trip, assembly...). Weekends are skipped automatically.');
+      }
     }
     (TEXT_COLS[name] || []).forEach(function (c) {
       sh.getRange(2, c, Math.max(sh.getMaxRows() - 1, 1), 1).setNumberFormat('@');
     });
   });
+  var cf = ss.getSheetByName('config');
+  var haveKeys = {};
+  if (cf.getLastRow() >= 2) cf.getRange(2, 1, cf.getLastRow() - 1, 1).getValues().forEach(function (r) { haveKeys[String(r[0])] = true; });
+  CONFIG_DEFAULTS.forEach(function (kv) {
+    if (!haveKeys[kv[0]]) appendRows_(cf, [kv]);
+  });
+  var os = ss.getSheetByName('orders'); // lets the lead teacher pick open / done / cancelled from a list
+  os.getRange(2, 15, Math.max(os.getMaxRows() - 1, 1), 1).setDataValidation(
+    SpreadsheetApp.newDataValidation().requireValueInList(['open', 'done', 'cancelled'], true).setAllowInvalid(true).build());
   var blank = ss.getSheetByName('Sheet1');
   if (blank && blank.getLastRow() === 0 && ss.getSheets().length > 1) ss.deleteSheet(blank);
 }
@@ -356,6 +470,14 @@ function text_(v) {
 function dayText_(v, tz) {
   if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
   return String(v);
+}
+function normDay_(v, tz) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+  var s = String(v === null || v === undefined ? '' : v).trim();
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(s)) { var a = s.split('-'); return a[0] + '-' + ('0' + a[1]).slice(-2) + '-' + ('0' + a[2]).slice(-2); }
+  var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s);
+  if (m) return m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2);
+  return '';
 }
 function num_(v, dflt) {
   var n = parseInt(v, 10);
@@ -385,7 +507,7 @@ function loadDb_(ss, tz, mode) {
       name: text_(r[5]), method: text_(r[6]), room: text_(r[7]), items: items,
       pay: text_(r[10]) || 'other', teacherId: r[11] === '' ? null : num_(r[11], null),
       teacherName: text_(r[12]), balanceAfter: r[13] === '' ? null : num_(r[13], null),
-      done: text_(r[14]) === 'done', doneAt: r[15] === '' ? null : num_(r[15], null),
+      done: text_(r[14]) === 'done', cancelled: text_(r[14]) === 'cancelled', doneAt: r[15] === '' ? null : num_(r[15], null),
       forDate: r[16] === '' ? dayText_(r[2], tz) : dayText_(r[16], tz), source: text_(r[17])
     };
     db.orders.push(order);
@@ -430,6 +552,15 @@ function loadDb_(ss, tz, mode) {
   fRows.forEach(function (r, i) {
     rows.config[text_(r[0])] = i + 2;
     if (r[0] === 'pinHash') db.pinHash = text_(r[1]);
+    if (r[0] === 'maxDrinks') db.config.maxDrinks = text_(r[1]);
+    if (r[0] === 'daysAhead') db.config.daysAhead = text_(r[1]);
+    if (r[0] === 'lastDay') db.config.lastDay = normDay_(r[1], tz);
+  });
+  var ds = ss.getSheetByName('daysoff');
+  var dLast = ds.getLastRow();
+  (dLast >= 2 ? readRows_(ds, 2, dLast - 1, 1) : []).forEach(function (r) {
+    var d = normDay_(r[0], tz);
+    if (d) db.daysOff.push(d);
   });
 
   return { db: db, rows: rows };
@@ -442,7 +573,7 @@ function itemsText_(items) {
 function orderRow_(o, tz) {
   return [o.id, o.num, o.day, o.createdAt, clock_(o.createdAt, tz), o.name, o.method, o.room,
     JSON.stringify(o.items), itemsText_(o.items), o.pay, o.teacherId === null ? '' : o.teacherId,
-    o.teacherName, o.balanceAfter === null ? '' : o.balanceAfter, o.done ? 'done' : 'open', o.doneAt === null ? '' : o.doneAt,
+    o.teacherName, o.balanceAfter === null ? '' : o.balanceAfter, o.cancelled ? 'cancelled' : o.done ? 'done' : 'open', o.doneAt === null ? '' : o.doneAt,
     o.forDate, o.source || ''];
 }
 function appendRows_(sh, rows) {
@@ -534,7 +665,7 @@ function createTeacherForm() {
   var map = { drinks: {} };
   map.teacher = form.addTextItem().setTitle('Your name').setHelpText('First and last name. Your school email is recorded too, so your punch card follows you.').setRequired(true).getId();
   map.room = form.addTextItem().setTitle('Room number').setHelpText('Where should we deliver it?').setRequired(true).getId();
-  map.date = form.addDateItem().setTitle('What day should it be delivered?').setRequired(true).getId();
+  map.date = form.addListItem().setTitle('What day should it be delivered?').setHelpText('Days that are full are not listed.').setChoiceValues(['(loading)']).setRequired(true).getId();
   map.pay = form.addMultipleChoiceItem().setTitle('How are you paying?').setChoiceValues([PAY_PUNCH, PAY_OTHER]).setRequired(true).getId();
   var drinkQ = form.addMultipleChoiceItem().setTitle('Which drink would you like?').setRequired(true);
   map.drink = drinkQ.getId();
@@ -563,14 +694,88 @@ function createTeacherForm() {
   props.setProperty('FORM_ID', form.getId());
   props.setProperty('FORM_MAP', JSON.stringify(map));
   ScriptApp.newTrigger('onTeacherFormSubmit').forForm(form).onFormSubmit().create();
+  ensureDailyRefresh_();
 
   var cf = ss.getSheetByName('config');
   appendRows_(cf, [['teacherFormLink', form.getPublishedUrl()], ['teacherFormEditLink', form.getEditUrl()]]);
-  return 'Teacher form created. Share this link with teachers: ' + form.getPublishedUrl() + '   (edit it here: ' + form.getEditUrl() + ')';
+  var shown = refreshTeacherChoices();
+  return 'Teacher form created. Share this link with teachers: ' + form.getPublishedUrl() + '   (edit it here: ' + form.getEditUrl() + ')  ' + shown;
+}
+
+// ---------- which days the form offers ----------
+function dayLabel_(iso, tz) {
+  return Utilities.formatDate(new Date(iso + 'T12:00:00'), tz, 'EEE, MMM d');
+}
+function dayChoiceLabel_(d, tz) {
+  var base = dayLabel_(d.date, tz);
+  return d.max && d.left <= 5 ? base + ' \u00B7 ' + d.left + (d.left === 1 ? ' drink left' : ' drinks left') : base;
+}
+// the form answer is a label such as "Tue, Oct 27"; find the date it means
+function labelToDate_(answer, tz, today) {
+  var a = String(answer || '').trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(a)) return a;
+  a = a.split(' \u00B7 ')[0];
+  var d = today;
+  for (var i = 0; i < 60; i++) {
+    if (dayLabel_(d, tz) === a) return d;
+    d = CartLogic.addDays(d, 1);
+  }
+  return a;
+}
+function refreshForm_(db, day, tz) {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('FORM_ID');
+  if (!id) return 'There is no teacher form yet.';
+  var map = JSON.parse(props.getProperty('FORM_MAP'));
+  var form = FormApp.openById(id);
+  var open = CartLogic.openDays(db, day).filter(function (d) { return !d.full; });
+  if (!open.length) {
+    form.setAcceptingResponses(false);
+    form.setCustomClosedFormMessage('The coffee cart is full for the next few school days. Please check back soon.');
+    return 'The form is closed: every upcoming day is full.';
+  }
+  form.getItemById(map.date).asListItem().setChoiceValues(open.map(function (d) { return dayChoiceLabel_(d, tz); }));
+  if (!form.isAcceptingResponses()) form.setAcceptingResponses(true);
+  return 'The form offers ' + open.length + ' day(s).';
+}
+// Re-reads the Sheet and updates the days on the form. Runs by itself each morning and after a day fills up.
+// Run it by hand (or use the Coffee Cart menu) after you change days off, the limit, or cancel an order.
+function refreshTeacherChoices() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var tz = ss.getSpreadsheetTimeZone();
+  ensureTabs_(ss);
+  var day = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+  return refreshForm_(loadDb_(ss, tz, 'normal').db, day, tz);
+}
+function ensureDailyRefresh_() {
+  var have = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'refreshTeacherChoices'; });
+  if (!have) ScriptApp.newTrigger('refreshTeacherChoices').timeBased().everyDays(1).atHour(5).create();
+}
+// Run this once if your teacher form was made before the day limit existed. It swaps the date picker for the list of open days.
+function upgradeTeacherForm() {
+  var props = PropertiesService.getScriptProperties();
+  var id = props.getProperty('FORM_ID');
+  if (!id) return 'There is no teacher form yet. Run createTeacherForm instead.';
+  var map = JSON.parse(props.getProperty('FORM_MAP'));
+  var form = FormApp.openById(id);
+  var old = form.getItemById(map.date);
+  if (old && old.getType() !== FormApp.ItemType.LIST) {
+    var at = old.getIndex();
+    form.deleteItem(old);
+    var li = form.addListItem().setTitle('What day should it be delivered?').setHelpText('Days that are full are not listed.').setChoiceValues(['(loading)']).setRequired(true);
+    form.moveItem(li.getIndex(), at);
+    map.date = li.getId();
+    props.setProperty('FORM_MAP', JSON.stringify(map));
+  }
+  ensureDailyRefresh_();
+  return 'Form upgraded. ' + refreshTeacherChoices();
+}
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('Coffee Cart').addItem('Update the days on the teacher form', 'refreshTeacherChoices').addToUi();
 }
 
 // Turn one form answer into an order request. answers = { <form item id>: response }
-function buildFormRequest_(map, answers, responseId, email) {
+function buildFormRequest_(map, answers, responseId, email, tz, today) {
   var drinkName = answers[map.drink];
   var d = null;
   MENU.drinks.forEach(function (x) { if (x.name === drinkName) d = x; });
@@ -593,7 +798,7 @@ function buildFormRequest_(map, answers, responseId, email) {
     action: 'addOrder',
     order: {
       id: 'form-' + responseId, name: name, method: 'delivery', room: String(answers[map.room] || '').trim(),
-      forDate: String(answers[map.date] || ''), source: 'form',
+      forDate: tz && today ? labelToDate_(answers[map.date], tz, today) : String(answers[map.date] || ''), source: 'form',
       items: [{ title: (temp ? temp + ' ' : '') + d.name, detail: lines.length ? lines.join(' · ') : 'Plain' }],
       pay: pay, teacherName: pay === 'punch' ? name : '', teacherEmail: pay === 'punch' ? String(email || '').trim().toLowerCase() : ''
     }
@@ -607,13 +812,36 @@ function onTeacherFormSubmit(e) {
     var map = JSON.parse(props.getProperty('FORM_MAP'));
     var answers = {};
     e.response.getItemResponses().forEach(function (ir) { answers[ir.getItem().getId()] = ir.getResponse(); });
-    var out = run_(buildFormRequest_(map, answers, e.response.getId(), e.response.getRespondentEmail()));
-    if (!out.ok) throw new Error(out.message || out.error);
+    var tz = ss.getSpreadsheetTimeZone();
+    var today = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
+    var email = e.response.getRespondentEmail();
+    var req = buildFormRequest_(map, answers, e.response.getId(), email, tz, today);
+    var out = run_(req);
+    if (!out.ok && (out.error === 'full' || out.error === 'closed')) {
+      notifyNotPlaced_(ss, tz, today, req.order, email, out);
+    } else if (!out.ok) throw new Error(out.message || out.error);
+    try { refreshTeacherChoices(); } catch (x) { /* the days on the form catch up at the next submission or the morning refresh */ }
   } catch (err) {
     // leave a note where the lead teacher can see it
     var cf = ss.getSheetByName('config');
     appendRows_(cf, [['formError ' + new Date().toISOString(), String(err && err.message ? err.message : err)]]);
   }
+}
+
+// A drink could not be placed because its day filled up: tell the teacher, and offer other days.
+function notifyNotPlaced_(ss, tz, today, order, email, out) {
+  var cf = ss.getSheetByName('config');
+  var what = order.items[0].title;
+  appendRows_(cf, [['notPlaced ' + new Date().toISOString(), order.name + ' / ' + what + ' / ' + order.forDate + ': ' + out.message]]);
+  if (!email) return;
+  var open = CartLogic.openDays(loadDb_(ss, tz, 'normal').db, today).filter(function (d) { return !d.full; });
+  var link = PropertiesService.getScriptProperties().getProperty('FORM_ID') ? FormApp.openById(PropertiesService.getScriptProperties().getProperty('FORM_ID')).getPublishedUrl() : '';
+  var body = 'Hi ' + (order.name || 'there') + ',\n\n' +
+    'Your ' + what + ' for ' + dayLabel_(order.forDate, tz) + ' could not be placed, because the coffee cart is already full that day. You were not charged a punch.\n\n' +
+    (open.length ? 'These days still have room: ' + open.map(function (d) { return dayLabel_(d.date, tz); }).join(', ') + '.\nPlease order again and pick one of them' + (link ? ': ' + link : '.') :
+      'Every day in the next few school days is full right now. Please try again in a day or two' + (link ? ': ' + link : '.')) +
+    '\n\nThank you,\nThe Life Skills Coffee Cart';
+  MailApp.sendEmail(email, 'Coffee cart: your ' + what + ' could not be placed', body);
 }
 
 // Start the teacher form over (for example after changing the questions). Delete the old form from Google Drive yourself.
