@@ -186,7 +186,7 @@ var CartLogic = (function () {
 
   function newDb() {
     return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
-      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '', orderDay: 'today' }, daysOff: [] };
+      menu: [], config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '', orderDay: 'today' }, daysOff: [] };
   }
 
   // ---------- days and capacity ----------
@@ -299,6 +299,7 @@ var CartLogic = (function () {
       ok: true,
       serverNow: now,
       today: day,
+      menu: db.menu || [],
       orderDay: orderDay(db, day),
       cap: capOf(db, orderDay(db, day)),
       capToday: capOf(db, day),
@@ -561,7 +562,7 @@ var CartLogic = (function () {
   var MILKS = ['Regular', 'Fat Free', 'Half & Half', 'Almond', 'Oat'];
   var TEAS = ['Earl Grey', 'Decaf Earl Grey', 'Green Tea', 'English Breakfast'];
   var FLAVORS = ['Caramel', 'Hazelnut', 'Vanilla', 'Raspberry', 'Strawberry', 'Sour Gummy Worm'];
-  var SF_FLAVORS = ['Raspberry', 'Strawberry', 'Vanilla'];
+  var SF_FLAVORS = ['Sugar Free Raspberry', 'Sugar Free Strawberry', 'Sugar Free Vanilla'];
   var QUICK_NOTES = ['Splash of milk', 'Extra hot', 'Not too hot', 'Extra sauce', 'Whipped cream', 'Half & half on top'];
   var PUNCHES_PER_CARD = 5; // default number of punches on a card
 
@@ -682,7 +683,26 @@ var CartLogic = (function () {
     return step().catch(function () { /* still offline: try again on the next check */ }).then(function () { flushing = false; });
   }
 
+  // the syrup and sauce choices can be edited on the Sheet's menu tab; the lists above are the fallback
+  var menuKey = '';
+  function applyMenu(menu) {
+    if (!menu || !menu.length) return;
+    var key = JSON.stringify(menu);
+    if (key === menuKey) return;
+    menuKey = key;
+    function pick(list, who, sf) {
+      return menu.filter(function (r) { return r.list === list && r[who] && (sf === undefined || !!r.sugarFree === sf); }).map(function (r) { return r.option; });
+    }
+    function setList(arr, vals) { if (!vals.length) return; arr.length = 0; vals.forEach(function (v) { arr.push(v); }); }
+    setList(FLAVORS, pick('syrup', 'teachers', false));
+    setList(SF_FLAVORS, pick('syrup', 'teachers', true));
+    setList(STUDENT_SYRUPS, pick('syrup', 'students'));
+    setList(SAUCES, pick('sauce', 'teachers'));
+    var ss = pick('sauce', 'students');
+    STUDENT_DRINKS.forEach(function (d) { if (d.defaults && ss.length) d.defaults.sauce = ss[0]; });
+  }
   function applyPoll(resp) {
+    applyMenu(resp.menu);
     net.skew = resp.serverNow - Date.now();
     net.today = resp.today || '';
     net.cap = resp.cap || null;
@@ -1003,7 +1023,7 @@ var CartLogic = (function () {
         var noneOn = state.flavors.length === 0 && !(withSauce && state.sel.sauce);
         var none = tile(withSauce ? 'No flavor or sauce' : 'No flavor', noneOn, 'noFlavor', 'none');
         var regTiles = FLAVORS.map(function (f) { return tile(f, state.flavors.indexOf(f) >= 0, 'toggleFlavor', f); });
-        var sfTiles = SF_FLAVORS.map(function (f) { return tile(f, state.flavors.indexOf('Sugar Free ' + f) >= 0, 'toggleFlavor', 'Sugar Free ' + f); });
+        var sfTiles = SF_FLAVORS.map(function (f) { return tile(f, state.flavors.indexOf(f) >= 0, 'toggleFlavor', f); });
         body += '<div style="display:flex;flex-direction:column;gap:12px">';
         if (showReg) {
           body += '<div class="section-label">Flavors</div><div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + none + regTiles.join('') + '</div>';
@@ -1306,7 +1326,8 @@ var CartLogic = (function () {
         var o = r.order;
         state.result = o.pay === 'punch' ? { kind: 'punch', num: o.num, forDate: o.forDate, name: o.teacherName, balance: o.balanceAfter } : { kind: 'other', num: o.num, forDate: o.forDate };
         state.screen = 'done';
-        return pollNow();
+        render(); pollNow().then(render);
+        return;
       }, function (err) {
         state.sending = false;
         if (err && err.network) { outboxAdd({ kind: 'addOrder', order: order }); state.result = { kind: 'queued' }; state.screen = 'done'; net.status = 'offline'; }

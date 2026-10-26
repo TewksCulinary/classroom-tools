@@ -28,7 +28,7 @@ var CartLogic = (function () {
 
   function newDb() {
     return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
-      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '', orderDay: 'today' }, daysOff: [] };
+      menu: [], config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '', orderDay: 'today' }, daysOff: [] };
   }
 
   // ---------- days and capacity ----------
@@ -141,6 +141,7 @@ var CartLogic = (function () {
       ok: true,
       serverNow: now,
       today: day,
+      menu: db.menu || [],
       orderDay: orderDay(db, day),
       cap: capOf(db, orderDay(db, day)),
       capToday: capOf(db, day),
@@ -383,7 +384,8 @@ var TABS = {
   punches: ['t', 'time', 'teacherId', 'name', 'delta', 'note'],
   cards: ['cardNo', 'teacherId', 't', 'time'],
   config: ['key', 'value'],
-  daysoff: ['date', 'note']
+  daysoff: ['date', 'note'],
+  menu: ['list', 'option', 'teachers', 'students', 'sugarFree']
 };
 // First-time contents. After that the lead teacher edits these on the Sheet.
 var CONFIG_DEFAULTS = [
@@ -394,6 +396,15 @@ var CONFIG_DEFAULTS = [
   ['lastDay', '2027-06-15'] // last day of school: no orders after this
 ];
 // Weekends are skipped automatically. These are the no-school days from the 2026-27 Reynolds calendar.
+// The syrup and sauce choices. After this they are edited on the Sheet's "menu" tab.
+// teachers / students: yes = offered to that group. sugarFree: yes = shown under "Sugar free".
+var MENU_SEED = [
+  ['syrup', 'Caramel', 'yes', '', ''], ['syrup', 'Hazelnut', 'yes', '', ''], ['syrup', 'Vanilla', 'yes', '', ''],
+  ['syrup', 'Raspberry', 'yes', '', ''], ['syrup', 'Strawberry', 'yes', 'yes', ''], ['syrup', 'Sour Gummy Worm', 'yes', 'yes', ''],
+  ['syrup', 'Blue Raspberry', '', 'yes', ''],
+  ['syrup', 'Sugar Free Raspberry', 'yes', '', 'yes'], ['syrup', 'Sugar Free Strawberry', 'yes', '', 'yes'], ['syrup', 'Sugar Free Vanilla', 'yes', '', 'yes'],
+  ['sauce', 'Mocha', 'yes', 'yes', ''], ['sauce', 'Sugar Free White Mocha', 'yes', '', '']
+];
 var DAYS_OFF_SEED = [
   ['2026-10-09', 'No school'], ['2026-10-19', 'No school'], ['2026-11-06', 'No school'], ['2026-11-11', 'No school'],
   ['2026-11-23', 'No school'], ['2026-11-24', 'Conferences, no school'], ['2026-11-25', 'Conferences, no school'],
@@ -411,13 +422,16 @@ var TEXT_COLS = {
   punches: [4, 6],
   cards: [1],
   config: [1, 2],
-  daysoff: [2]
+  daysoff: [2],
+  menu: [1, 2, 3, 4, 5]
 };
 var RECENT_ORDER_ROWS = 500;
 
+var SCHEMA_VERSION = '2026-10-26b'; // change this when the tabs or columns change, so the next call re-checks them once
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureTabs_(ss);
+  PropertiesService.getScriptProperties().setProperty('SCHEMA', SCHEMA_VERSION);
   return 'Coffee cart tabs are ready.';
 }
 
@@ -448,7 +462,7 @@ function run_(req) {
     lock.waitLock(20000);
   }
   try {
-    ensureTabs_(ss);
+    ensureTabsOnce_(ss);
     var now = Date.now();
     var tz = ss.getSpreadsheetTimeZone();
     var day = Utilities.formatDate(new Date(now), tz, 'yyyy-MM-dd');
@@ -469,6 +483,17 @@ function run_(req) {
 }
 
 // ---------- sheet helpers ----------
+// Checking and formatting every tab is slow, so it happens once per schema version instead of on every request.
+function ensureTabsOnce_(ss) {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty('SCHEMA') === SCHEMA_VERSION) {
+    var have = {};
+    ss.getSheets().forEach(function (sh) { have[sh.getName()] = true; });
+    if (Object.keys(TABS).every(function (n) { return have[n]; })) return;
+  }
+  ensureTabs_(ss);
+  props.setProperty('SCHEMA', SCHEMA_VERSION);
+}
 function ensureTabs_(ss) {
   Object.keys(TABS).forEach(function (name) {
     var sh = ss.getSheetByName(name);
@@ -480,6 +505,10 @@ function ensureTabs_(ss) {
       sh = ss.insertSheet(name);
       sh.getRange(1, 1, 1, TABS[name].length).setValues([TABS[name]]);
       sh.setFrozenRows(1);
+      if (name === 'menu') {
+        sh.getRange(2, 1, MENU_SEED.length, 5).setValues(MENU_SEED);
+        sh.getRange(1, 7).setValue('One row per choice. list = syrup or sauce. Put yes under teachers and/or students to offer it to them. Put yes under sugarFree to show a syrup in the sugar free group. Delete the yes (or the row) to take a choice away.');
+      }
       if (name === 'daysoff') {
         sh.getRange(2, 1, DAYS_OFF_SEED.length, 2).setValues(DAYS_OFF_SEED);
         sh.setColumnWidth(2, 220);
@@ -603,6 +632,14 @@ function loadDb_(ss, tz, mode) {
     if (r[0] === 'orderDay') db.config.orderDay = normDay_(r[1], tz) || text_(r[1]).trim().toLowerCase();
     if (r[0] === 'daysAhead') db.config.daysAhead = text_(r[1]);
     if (r[0] === 'lastDay') db.config.lastDay = normDay_(r[1], tz);
+  });
+  var ms = ss.getSheetByName('menu');
+  var mLast = ms.getLastRow();
+  var on = function (v) { return /^(y|yes|x|true|1)/i.test(String(v).trim()); };
+  (mLast >= 2 ? readRows_(ms, 2, mLast - 1, 5) : []).forEach(function (r) {
+    var option = text_(r[1]).trim();
+    if (!option) return;
+    db.menu.push({ list: text_(r[0]).trim().toLowerCase(), option: option, teachers: on(r[2]), students: on(r[3]), sugarFree: on(r[4]) });
   });
   var ds = ss.getSheetByName('daysoff');
   var dLast = ds.getLastRow();
@@ -773,12 +810,31 @@ function labelToDate_(answer, tz, today) {
   }
   return a;
 }
-function refreshForm_(db, day, tz) {
+// the syrup and sauce choices teachers see on the form (from the menu tab; the built-in lists if the tab is empty)
+function formLists_(db) {
+  var rows = (db.menu || []).filter(function (r) { return r.teachers; });
+  var pick = function (list, sf) { return rows.filter(function (r) { return r.list === list && (sf === undefined || r.sugarFree === sf); }).map(function (r) { return r.option; }); };
+  var flavors = pick('syrup', false).concat(pick('syrup', true));
+  var sauces = pick('sauce');
+  if (!flavors.length) flavors = MENU.flavors.concat(MENU.sfFlavors.map(function (f) { return 'Sugar Free ' + f; }));
+  if (!sauces.length) sauces = MENU.sauces;
+  return { flavors: flavors, sauces: sauces };
+}
+function refreshFormOptions_(form, map, db) {
+  var lists = formLists_(db);
+  Object.keys(map.drinks).forEach(function (k) {
+    var ids = map.drinks[k];
+    if (ids.flavor) form.getItemById(ids.flavor).asCheckboxItem().setChoiceValues(lists.flavors);
+    if (ids.sauce) form.getItemById(ids.sauce).asMultipleChoiceItem().setChoiceValues(lists.sauces);
+  });
+}
+function refreshForm_(db, day, tz, withOptions) {
   var props = PropertiesService.getScriptProperties();
   var id = props.getProperty('FORM_ID');
   if (!id) return 'There is no teacher form yet.';
   var map = JSON.parse(props.getProperty('FORM_MAP'));
   var form = FormApp.openById(id);
+  if (withOptions) refreshFormOptions_(form, map, db);
   var open = CartLogic.openDays(db, day).filter(function (d) { return !d.full; });
   if (!open.length) {
     form.setAcceptingResponses(false);
@@ -791,12 +847,14 @@ function refreshForm_(db, day, tz) {
 }
 // Re-reads the Sheet and updates the days on the form. Runs by itself each morning and after a day fills up.
 // Run it by hand (or use the Coffee Cart menu) after you change days off, the limit, or cancel an order.
-function refreshTeacherChoices() {
+function refreshTeacherChoices() { return refreshTeacher_(true); }
+function refreshTeacherDays_() { return refreshTeacher_(false); } // quicker: only the days (used after each submission)
+function refreshTeacher_(withOptions) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var tz = ss.getSpreadsheetTimeZone();
-  ensureTabs_(ss);
+  ensureTabsOnce_(ss);
   var day = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd');
-  return refreshForm_(loadDb_(ss, tz, 'normal').db, day, tz);
+  return refreshForm_(loadDb_(ss, tz, 'normal').db, day, tz, withOptions);
 }
 function ensureDailyRefresh_() {
   var have = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'refreshTeacherChoices'; });
@@ -830,7 +888,7 @@ function upgradeTeacherForm() {
   return 'Form upgraded. ' + refreshTeacherChoices();
 }
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('Coffee Cart').addItem('Update the days on the teacher form', 'refreshTeacherChoices').addToUi();
+  SpreadsheetApp.getUi().createMenu('Coffee Cart').addItem('Update the teacher form (days, syrups, sauces)', 'refreshTeacherChoices').addToUi();
 }
 
 // Turn one form answer into an order request. answers = { <form item id>: response }
@@ -880,7 +938,7 @@ function onTeacherFormSubmit(e) {
     if (!out.ok && (out.error === 'full' || out.error === 'closed')) {
       notifyNotPlaced_(ss, tz, today, req.order, email, out);
     } else if (!out.ok) throw new Error(out.message || out.error);
-    try { refreshTeacherChoices(); } catch (x) { /* the days on the form catch up at the next submission or the morning refresh */ }
+    try { refreshTeacherDays_(); } catch (x) { /* the days on the form catch up at the next submission or the morning refresh */ }
   } catch (err) {
     // leave a note where the lead teacher can see it
     var cf = ss.getSheetByName('config');

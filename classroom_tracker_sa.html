@@ -451,6 +451,13 @@
     </div>
 
     <div class="section">
+      <p class="sec-label" style="margin-bottom:4px;">Pass data archive</p>
+      <p style="font-size:12px;color:#5F5E5A;margin-bottom:8px;">Moves pass history older than 60 days into a separate "passes_archive" tab in your Sheet, so the live sheet and this page stay fast. Archived passes stay searchable under Student Search.</p>
+      <p id="archive-status" style="font-size:12px;color:#5F5E5A;margin-bottom:8px;min-height:16px;"></p>
+      <button class="small-btn" onclick="archiveOldPassData()">Archive data older than 60 days</button>
+    </div>
+
+    <div class="section">
       <p class="sec-label" style="margin-bottom:8px;">Danger zone</p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="danger-btn" onclick="clearAllHistory()">Clear all history</button>
@@ -504,6 +511,8 @@ var SA_EMAIL = 'classroom-tracker@classroom-tracker-499621.iam.gserviceaccount.c
 var SHEET_PASSES = 'passes';
 var SHEET_CONFIG = 'config';
 var SHEET_EVENTS = 'event_hours';
+var SHEET_PASSES_ARCHIVE = 'passes_archive'; // older pass rows get moved here so the live "passes" tab stays small; still searchable under Student Search
+var PASSES_HEADER = ['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal'];
 
 // ============================================================
 // SHEETS RELAY — a small server holds the signing key now, instead
@@ -543,12 +552,48 @@ async function sheetsUpdate(range, values) {
      body:JSON.stringify({values:values})});
   return r.json();
 }
-async function sheetsAppend(values) {
+async function sheetsAppendTo(tab, colRange, values) {
   var token = await getAccessToken();
-  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(SHEET_PASSES)+'!A:J:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(tab)+'!'+colRange+':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',
     {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
      body:JSON.stringify({values:values})});
   return r.json();
+}
+async function sheetsAppend(values) { return sheetsAppendTo(SHEET_PASSES, 'A:L', values); }
+async function sheetsAppendEvent(values) { return sheetsAppendTo(SHEET_EVENTS, 'A:G', values); }
+// Spreadsheet-level metadata (tab titles) -- used to check whether the
+// "passes_archive" tab already exists before trying to create it.
+async function sheetsGetMeta() {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'?fields=sheets.properties.title',
+    {headers:{'Authorization':'Bearer '+token}});
+  return r.json();
+}
+// Structural changes (e.g. adding a new tab) go through :batchUpdate,
+// separate from the values endpoints above.
+async function sheetsBatchUpdate(requests) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+':batchUpdate',
+    {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+     body:JSON.stringify({requests:requests})});
+  return r.json();
+}
+// Clears cell contents (but not the tab itself) without needing an exact
+// row count -- used to trim leftover rows after rewriting a shorter range.
+async function sheetsClear(range) {
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values/'+encodeURIComponent(range)+':clear',
+    {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
+  return r.json();
+}
+// Pulls the first row number out of an append response's updatedRange,
+// e.g. "passes!A2851:L2853" -> 2851, so freshly appended trips/sessions
+// can be addressed directly by row for later targeted updates (no need
+// to search for them).
+function parseAppendStartRow(res) {
+  var range = res && res.updates ? res.updates.updatedRange : (res && res.tableRange);
+  var m = /![A-Za-z]+(\d+):/.exec(range||'');
+  return m ? parseInt(m[1], 10) : null;
 }
 
 // ============================================================
@@ -575,7 +620,7 @@ async function saveSheetId() {
   try {
     await getAccessToken();
     // Try writing headers
-    await sheetsUpdate(SHEET_PASSES+'!A1:L1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal']]);
+    await sheetsUpdate(SHEET_PASSES+'!A1:L1', [PASSES_HEADER]);
     localStorage.setItem('ct_sheet_id', id);
     SHEET_ID = id;
     status.textContent = 'Connected!';
@@ -603,6 +648,141 @@ function changeSheet() {
 }
 
 // ============================================================
+// ARCHIVE
+// ============================================================
+// Keeps the live "passes" tab (and this device's own localStorage) from
+// growing forever. Moves anything older than 60 days into a separate
+// "passes_archive" tab -- created automatically the first time this runs --
+// then rewrites the live tab with just what's left, sorted chronologically.
+// Student Search stays able to find archived passes too (see
+// loadArchivedPasses / buildStudentCard).
+var ARCHIVE_RETENTION_DAYS = 60;
+
+async function ensureArchiveTabExists() {
+  var meta = await sheetsGetMeta();
+  if (meta && meta.error) throw new Error(meta.error.message || 'Could not read the Sheet\'s tabs.');
+  var titles = ((meta && meta.sheets) || []).map(function(s){ return s.properties && s.properties.title; });
+  if (titles.indexOf(SHEET_PASSES_ARCHIVE) > -1) return;
+  var created = await sheetsBatchUpdate([{ addSheet: { properties: { title: SHEET_PASSES_ARCHIVE } } }]);
+  if (created && created.error) throw new Error(created.error.message || 'Could not create the "passes_archive" tab.');
+  var headerRes = await sheetsUpdate(SHEET_PASSES_ARCHIVE+'!A1:L1', [PASSES_HEADER]);
+  if (headerRes && headerRes.error) throw new Error(headerRes.error.message || 'Could not write headers to the "passes_archive" tab.');
+}
+
+function buildPassRow(entry) {
+  var t = entry.t;
+  return [t.out ? new Date(t.out).toISOString() : '', t.eventId||'', entry.classId, entry.className, entry.name,
+    t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'',
+    fmtLocalPT(t.out), fmtLocalPT(t.back)];
+}
+
+// Splits every trip currently in local passData into "old enough to
+// archive" vs. "stays live", by the day it happened on.
+function splitPassDataByCutoff(cutoffKey) {
+  var toArchive = [], toKeep = [];
+  cfg.classes.forEach(function(cls) {
+    var cd = passData[cls.id] || {};
+    Object.keys(cd).forEach(function(dateKey) {
+      var bucket = dateKey < cutoffKey ? toArchive : toKeep;
+      Object.keys(cd[dateKey]).forEach(function(name) {
+        (cd[dateKey][name] || []).forEach(function(t) {
+          bucket.push({ classId: cls.id, className: cls.name, name: name, dateKey: dateKey, t: t });
+        });
+      });
+    });
+  });
+  return { toArchive: toArchive, toKeep: toKeep };
+}
+
+async function archiveOldPassData() {
+  if (archiveInProgress) return;
+  if (!SHEET_ID) { alert('Connect a Google Sheet first (Settings > Google Sheet connection).'); return; }
+
+  var cutoff = new Date(); cutoff.setDate(cutoff.getDate() - ARCHIVE_RETENTION_DAYS);
+  var cutoffKey = cutoff.toISOString().slice(0,10);
+  var preview = splitPassDataByCutoff(cutoffKey);
+  if (!preview.toArchive.length) { alert('No pass data older than '+ARCHIVE_RETENTION_DAYS+' days yet -- nothing to archive.'); return; }
+
+  if (!confirm('Archive '+preview.toArchive.length+' pass row'+(preview.toArchive.length!==1?'s':'')+' older than '+fmtDate(cutoffKey)+'?\n\nThey\'ll move to a separate "passes_archive" tab in your Sheet (still searchable here under Student Search) and be removed from the live "passes" tab to keep it smaller.\n\nBest done when the kiosk isn\'t actively in use -- it pauses syncing while it runs. Continue?')) return;
+
+  archiveInProgress = true;
+  var statusEl = document.getElementById('archive-status');
+  if (statusEl) statusEl.textContent = 'Checking for the latest kiosk data...';
+
+  try {
+    await pollKioskEvents();
+    if (kioskMode === 'event') await pollKioskEventHours();
+
+    if (statusEl) statusEl.textContent = 'Preparing the archive tab...';
+    await ensureArchiveTabExists();
+
+    // Re-check right before the rewrite, to shrink the window where a
+    // Kiosk write could land without this device knowing about it yet.
+    await pollKioskEvents();
+    if (kioskMode === 'event') await pollKioskEventHours();
+    var split = splitPassDataByCutoff(cutoffKey);
+
+    if (statusEl) statusEl.textContent = 'Archiving '+split.toArchive.length+' row'+(split.toArchive.length!==1?'s':'')+'...';
+    var archiveRows = split.toArchive.map(buildPassRow);
+    var appendRes = await sheetsAppendTo(SHEET_PASSES_ARCHIVE, 'A:L', archiveRows);
+    if (appendRes && appendRes.error) throw new Error(appendRes.error.message || 'Could not write to the "passes_archive" tab.');
+
+    split.toKeep.sort(function(a,b){ return (a.t.out||0) - (b.t.out||0); });
+    var keepRows = split.toKeep.map(buildPassRow);
+    if (statusEl) statusEl.textContent = 'Rewriting the live "passes" tab...';
+    var updateRes = await sheetsUpdate(SHEET_PASSES+'!A2:L'+(Math.max(keepRows.length,1)+1), keepRows.length ? keepRows : [['']]);
+    if (updateRes && updateRes.error) throw new Error(updateRes.error.message || 'Could not rewrite the live "passes" tab.');
+    await sheetsClear(SHEET_PASSES+'!A'+(keepRows.length+2)+':L20000');
+
+    split.toKeep.forEach(function(entry, i) {
+      entry.t._row = i + 2;
+      entry.t._syncedBack = entry.t.back || null;
+      entry.t._syncedDest = entry.t.destination || '';
+    });
+
+    cfg.classes.forEach(function(cls) {
+      var cd = passData[cls.id] || {};
+      Object.keys(cd).forEach(function(dateKey) { if (dateKey < cutoffKey) delete cd[dateKey]; });
+    });
+    try { localStorage.setItem('ct_data', JSON.stringify(passData)); } catch(e) {}
+    archivedPassCache = null;
+    renderAll();
+    if (statusEl) statusEl.textContent = '';
+    alert('Archived '+split.toArchive.length+' row'+(split.toArchive.length!==1?'s':'')+' from before '+fmtDate(cutoffKey)+'. They\'re still searchable under Student Search.');
+  } catch(e) {
+    if (statusEl) statusEl.textContent = '';
+    alert('Archiving stopped partway through: '+e.message+'. Your local data on this device was not changed -- safe to try again once things look settled.');
+  } finally {
+    archiveInProgress = false;
+  }
+}
+
+// Lazily loads (and caches) every row from "passes_archive", so Student
+// Search can show a student's full history even after old rows have been
+// moved out of the live "passes" tab. Reset to null whenever new data is
+// archived, so the next search picks it up.
+async function loadArchivedPasses() {
+  if (archivedPassCache) return archivedPassCache;
+  if (!SHEET_ID) return (archivedPassCache = []);
+  try {
+    var meta = await sheetsGetMeta();
+    var titles = ((meta && meta.sheets) || []).map(function(s){ return s.properties && s.properties.title; });
+    if (titles.indexOf(SHEET_PASSES_ARCHIVE) === -1) return (archivedPassCache = []);
+    var res = await sheetsGet(SHEET_PASSES_ARCHIVE+'!A2:L200000');
+    var rows = (res && res.values) || [];
+    archivedPassCache = rows.map(function(row) {
+      var out = parseInt(row[7]) || 0;
+      return {
+        classId: row[2], className: row[3], name: row[4], type: row[5],
+        destination: row[6] || '', out: out, back: parseInt(row[8]) || 0,
+        backUnknown: row[9] === '1', dateKey: out ? new Date(out).toISOString().slice(0,10) : ''
+      };
+    });
+    return archivedPassCache;
+  } catch(e) { return (archivedPassCache = []); }
+}
+
+// ============================================================
 // SYNC
 // ============================================================
 var syncInterval = null;
@@ -625,22 +805,104 @@ function fmtLocalPT(ms) {
   } catch (e) { return ''; }
 }
 
-async function syncToSheets() {
-  if (!SHEET_ID) return;
-  setSyncStatus('syncing','Syncing...');
-  var rows = [];
+// Appends any not-yet-synced trips as new rows, and pushes narrow,
+// targeted updates (addressed by each trip's own known row) for anything
+// already in the sheet whose back/destination has changed since -- never
+// rewrites the tab wholesale, so it can never erase a row some other
+// device (the Kiosk) just wrote.
+async function syncPassesToSheet() {
+  var newRows = [], newTrips = [], updates = [];
   cfg.classes.forEach(function(cls) {
     var cd = passData[cls.id]||{};
     Object.keys(cd).forEach(function(dateKey) {
       Object.keys(cd[dateKey]).forEach(function(name) {
         (cd[dateKey][name]||[]).forEach(function(t) {
-          rows.push([t.out ? new Date(t.out).toISOString() : '', t.eventId||'', cls.id, cls.name, name,
+          var row = [t.out ? new Date(t.out).toISOString() : '', t.eventId||'', cls.id, cls.name, name,
             t.type, t.destination||'', t.out||'', t.back||'', t.backUnknown?'1':'',
-            fmtLocalPT(t.out), fmtLocalPT(t.back)]);
+            fmtLocalPT(t.out), fmtLocalPT(t.back)];
+          if (!t._row) {
+            newRows.push(row); newTrips.push(t);
+          } else if ((t.back||null) !== (t._syncedBack||null) || (t.destination||'') !== (t._syncedDest||'')) {
+            updates.push({trip:t, row:t._row});
+          }
         });
       });
     });
   });
+
+  var ops = [];
+  if (newRows.length) {
+    ops.push(sheetsAppend(newRows).then(function(res){
+      if (res && res.error) throw new Error(res.error.message || 'Could not write to the "passes" tab.');
+      var startRow = parseAppendStartRow(res);
+      if (startRow) {
+        newTrips.forEach(function(t, i) {
+          t._row = startRow + i;
+          t._syncedBack = t.back || null;
+          t._syncedDest = t.destination || '';
+        });
+      }
+    }));
+  }
+  updates.forEach(function(u) {
+    ops.push(sheetsUpdate(SHEET_PASSES+'!G'+u.row+':L'+u.row, [[
+      u.trip.destination||'', u.trip.out||'', u.trip.back||'', u.trip.backUnknown?'1':'',
+      fmtLocalPT(u.trip.out), fmtLocalPT(u.trip.back)
+    ]]).then(function(res){
+      if (res && res.error) throw new Error(res.error.message || 'Could not update the "passes" tab.');
+      u.trip._syncedBack = u.trip.back || null;
+      u.trip._syncedDest = u.trip.destination || '';
+    }));
+  });
+  if (!ops.length) return;
+  await Promise.all(ops);
+  try{localStorage.setItem('ct_data',JSON.stringify(passData));}catch(e){}
+}
+
+// Same append-only + targeted-update approach for the event_hours tab.
+async function syncEventHoursToSheet() {
+  var newRows = [], newSessions = [], updates = [];
+  (cfg.events||[]).forEach(function(ev){
+    (ev.students||[]).forEach(function(name){
+      eventSessions(ev.id,name).forEach(function(s){
+        var row = [new Date(s.in).toISOString(), s.sessionId||'', ev.id, ev.name, name, s.in, s.out||''];
+        if (!s._row) {
+          newRows.push(row); newSessions.push(s);
+        } else if ((s.out||null) !== (s._syncedOut||null)) {
+          updates.push({session:s, row:s._row});
+        }
+      });
+    });
+  });
+
+  var ops = [];
+  if (newRows.length) {
+    ops.push(sheetsAppendEvent(newRows).then(function(res){
+      if (res && res.error) throw new Error(res.error.message || 'Could not write to the "event_hours" tab.');
+      var startRow = parseAppendStartRow(res);
+      if (startRow) {
+        newSessions.forEach(function(s, i) {
+          s._row = startRow + i;
+          s._syncedOut = s.out || null;
+        });
+      }
+    }));
+  }
+  updates.forEach(function(u) {
+    ops.push(sheetsUpdate(SHEET_EVENTS+'!G'+u.row+':G'+u.row, [[u.session.out||'']]).then(function(res){
+      if (res && res.error) throw new Error(res.error.message || 'Could not update the "event_hours" tab.');
+      u.session._syncedOut = u.session.out || null;
+    }));
+  });
+  if (!ops.length) return;
+  await Promise.all(ops);
+  try{localStorage.setItem('ct_event_data',JSON.stringify(eventData));}catch(e){}
+}
+
+async function syncToSheets() {
+  if (!SHEET_ID) return;
+  if (archiveInProgress) return;
+  setSyncStatus('syncing','Syncing...');
 
   // Build roster data for kiosk
   var rosterData = {};
@@ -665,8 +927,7 @@ async function syncToSheets() {
 
   try {
     await Promise.all([
-      sheetsUpdate(SHEET_PASSES+'!A1:L1', [['timestamp','eventId','classId','className','studentName','type','destination','out','back','backUnknown','outLocal','backLocal']]),
-      sheetsUpdate(SHEET_PASSES+'!A2:L'+(Math.max(rows.length,1)+1), rows.length ? rows : [['']]),
+      syncPassesToSheet(),
       sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData),
       sheetsUpdate(SHEET_CONFIG+'!A11:B11', [['kioskPassCap', String(kioskPassCap||2)]])
     ]);
@@ -681,18 +942,7 @@ async function syncToSheets() {
   // Sheet must never break attendance/pass syncing above.
   if ((cfg.events||[]).length) {
     try {
-      var eventRows = [];
-      cfg.events.forEach(function(ev){
-        (ev.students||[]).forEach(function(name){
-          eventSessions(ev.id,name).forEach(function(s){
-            eventRows.push([new Date(s.in).toISOString(), s.sessionId||'', ev.id, ev.name, name, s.in, s.out||'']);
-          });
-        });
-      });
-      var r1 = await sheetsUpdate(SHEET_EVENTS+'!A1:G1', [['timestamp','sessionId','eventId','eventName','studentName','clockInMs','clockOutMs']]);
-      if (r1 && r1.error) throw new Error(r1.error.message || 'Could not write to the "event_hours" tab.');
-      var r2 = await sheetsUpdate(SHEET_EVENTS+'!A2:G'+(Math.max(eventRows.length,1)+1), eventRows.length ? eventRows : [['']]);
-      if (r2 && r2.error) throw new Error(r2.error.message || 'Could not write to the "event_hours" tab.');
+      await syncEventHoursToSheet();
       eventSyncError = '';
     } catch(e) {
       eventSyncError = e.message;
@@ -703,25 +953,31 @@ async function syncToSheets() {
 
 async function pollKioskEvents() {
   if (!SHEET_ID) return;
+  if (archiveInProgress) return;
   try {
     var res = await sheetsGet(SHEET_PASSES+'!A2:J5000');
     if (!res.values||!res.values.length) return;
     var changed = false;
     var today = todayKey();
-    res.values.forEach(function(row) {
+    res.values.forEach(function(row, idx) {
       var eventId=row[1],classId=row[2],name=row[4],type=row[5],dest=row[6]||'',out=parseInt(row[7])||0,back=parseInt(row[8])||0,backUnk=row[9]==='1';
       if(!eventId||!classId||!name||!type||!out) return;
       var dk=new Date(out).toISOString().slice(0,10);
+      var rowNum=idx+2;
       if(!passData[classId]) passData[classId]={};
       if(!passData[classId][dk]) passData[classId][dk]={};
       if(!passData[classId][dk][name]) passData[classId][dk][name]=[];
       var ex=passData[classId][dk][name].find(function(t){ return t.eventId===eventId; });
       if(!ex){
-        passData[classId][dk][name].push({eventId:eventId,type:type,destination:dest||null,out:out,back:back||null,backUnknown:backUnk});
+        passData[classId][dk][name].push({eventId:eventId,type:type,destination:dest||null,out:out,back:back||null,backUnknown:backUnk,_row:rowNum,_syncedBack:back||null,_syncedDest:dest||null});
         changed=true;
       } else {
         if(back&&!ex.back){ex.back=back;ex.backUnknown=backUnk;changed=true;}
         if(dest&&!ex.destination){ex.destination=dest;changed=true;}
+        // This row is confirmed to already be in the sheet -- never treat
+        // it as needing an append, and never re-push a value it already
+        // reflects.
+        ex._row=rowNum;ex._syncedBack=ex.back||null;ex._syncedDest=ex.destination||null;
       }
     });
     if(changed){try{localStorage.setItem('ct_data',JSON.stringify(passData));}catch(e){} renderAll();}
@@ -730,11 +986,12 @@ async function pollKioskEvents() {
 
 async function pollKioskEventHours() {
   if (!SHEET_ID || kioskMode !== 'event') return;
+  if (archiveInProgress) return;
   try {
     var res = await sheetsGet(SHEET_EVENTS+'!A2:G5000');
     if (!res.values||!res.values.length) return;
     var changed = false;
-    res.values.forEach(function(row) {
+    res.values.forEach(function(row, idx) {
       var sessionId=row[1],eventId=row[2],name=row[4],inMs=parseInt(row[5])||0,outMs=parseInt(row[6])||0;
       if(!sessionId||!eventId||!name||!inMs) return;
       var ev = eventById(eventId);
@@ -743,13 +1000,14 @@ async function pollKioskEventHours() {
       if(!exists){ ev.students=ev.students||[]; ev.students.push(name); changed=true; }
       ensureEventData(ev.id,name);
       var sessions=eventData[ev.id][name];
+      var rowNum=idx+2;
       var existingSession=sessions.find(function(s){return s.sessionId===sessionId;});
       if(!existingSession){
-        sessions.push({sessionId:sessionId,in:inMs,out:outMs||null});
+        sessions.push({sessionId:sessionId,in:inMs,out:outMs||null,_row:rowNum,_syncedOut:outMs||null});
         changed=true;
-      } else if(outMs && !existingSession.out){
-        existingSession.out=outMs;
-        changed=true;
+      } else {
+        if(outMs && !existingSession.out){ existingSession.out=outMs; changed=true; }
+        existingSession._row=rowNum;existingSession._syncedOut=existingSession.out||null;
       }
     });
     if(changed){
@@ -817,6 +1075,8 @@ var kioskEventId = null;
 var kioskPassCap = 2; // bathroom+water passes the kiosk allows out at once; teacher-adjustable, broadcast to the kiosk via config!A11
 var kioskWaitlist = []; // [{name, turn}], mirrored from the kiosk's own in-memory queue via config!A12 -- the kiosk writes this row, Tracker only ever reads it
 var pickerPicked = {};     // pickerPicked[classId][dateKey] = [names already drawn this round]
+var archiveInProgress = false; // true while archiveOldPassData() is running -- pauses the normal sync/poll timers so they can't race its tab rewrite
+var archivedPassCache = null;  // lazily-loaded rows from the "passes_archive" tab, for Student Search; null until first load, reset to null whenever new data is archived
 
 // ============================================================
 // LOCAL STORAGE
@@ -1230,7 +1490,7 @@ function submitNote(){
 function startTicker(){if(tickerInterval)clearInterval(tickerInterval);tickerInterval=setInterval(function(){renderGrid();renderSummary();if((cfg.events||[]).length)renderEventGrid();},5000);}
 function newDay(){if(!confirm('Start a new day? Today\'s data is saved to history.'))return;renderAll();}
 
-function showSearch(){showPhase('phase-search');document.getElementById('search-input').value='';document.getElementById('search-results').innerHTML='';setTimeout(function(){document.getElementById('search-input').focus();},80);}
+function showSearch(){showPhase('phase-search');document.getElementById('search-input').value='';document.getElementById('search-results').innerHTML='';loadArchivedPasses().then(function(){var inp=document.getElementById('search-input');if(inp&&inp.value.trim().length>=2)runSearch();});setTimeout(function(){document.getElementById('search-input').focus();},80);}
 function runSearch(){
   var q=document.getElementById('search-input').value.trim().toLowerCase();var el=document.getElementById('search-results');
   if(q.length<2){el.innerHTML='';return;}
@@ -1244,9 +1504,10 @@ function buildStudentCard(classId,className,name){
   var cd=passData[classId]||{};var allDays=Object.keys(cd).sort(function(a,b){return b.localeCompare(a);});
   var totals={absent:0,tardy:0,bathroom:0,water:0,other:0,notes:0};var timeline=[];
   allDays.forEach(function(day){(cd[day][name]||[]).forEach(function(t){if(t.type==='absent')totals.absent++;else if(t.type==='tardy')totals.tardy++;else if(t.type==='bathroom')totals.bathroom++;else if(t.type==='water')totals.water++;else if(t.type==='other')totals.other++;else if(t.type==='note')totals.notes++;timeline.push(Object.assign({day:day},t));});});
+  (archivedPassCache||[]).forEach(function(r){if(r.classId!==classId||r.name!==name)return;if(r.type==='absent')totals.absent++;else if(r.type==='tardy')totals.tardy++;else if(r.type==='bathroom')totals.bathroom++;else if(r.type==='water')totals.water++;else if(r.type==='other')totals.other++;else if(r.type==='note')totals.notes++;timeline.push({day:r.dateKey,type:r.type,destination:r.destination,out:r.out,back:r.back,backUnknown:r.backUnknown,archived:true});});
   var watched=isWatched(classId,name);var passCount=getBathroomCount(classId,name);
   var pills=[totals.absent?'<span class="stat-pill" style="background:#F0F0F0;color:#555555;">'+totals.absent+' absent</span>':'',totals.tardy?'<span class="stat-pill" style="background:#FFF0D0;color:#7A4500;">'+totals.tardy+' tardy</span>':'',totals.bathroom?'<span class="stat-pill" style="background:#E8F0FB;color:#1A3F7A;">'+totals.bathroom+' bathroom</span>':'',totals.water?'<span class="stat-pill" style="background:#E0F5F5;color:#0D6B6B;">'+totals.water+' water</span>':'',totals.other?'<span class="stat-pill" style="background:#FFF6DC;color:#7A5500;">'+totals.other+' other</span>':'',totals.notes?'<span class="stat-pill" style="background:#F5EAF9;color:#5B2D8E;">'+totals.notes+' note'+(totals.notes!==1?'s':'')+'</span>':''].filter(Boolean).join('');
-  var rows=timeline.sort(function(a,b){return b.out-a.out;}).map(function(t){var tc=TYPE_COLOR[t.type]||'#2C2C2A';var tl=TYPE_LABEL[t.type]||t.type;var notPass=['absent','tardy','note'].indexOf(t.type)>-1;var dur=t.backUnknown?'':t.back&&!notPass?Math.round((t.back-t.out)/1000/60)+'m':'';var extra=t.type==='note'?' - "'+t.text+'"':t.type==='other'&&t.destination?' - '+t.destination:t.type==='tardy'?' arrived '+fmtTime(t.out):'';var backStr=t.backUnknown?' (returned, time unknown)':t.back&&!notPass?' -> '+fmtTime(t.back):'';return'<div class="hist-row"><span style="color:#5F5E5A;min-width:70px;font-size:11px;">'+fmtDate(t.day)+'</span><span style="color:'+tc+';">'+tl+extra+'</span><span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(t.out))+backStr+(dur?' ('+dur+')':'')+'</span></div>';}).join('');
+  var rows=timeline.sort(function(a,b){return b.out-a.out;}).map(function(t){var tc=TYPE_COLOR[t.type]||'#2C2C2A';var tl=TYPE_LABEL[t.type]||t.type;var notPass=['absent','tardy','note'].indexOf(t.type)>-1;var dur=t.backUnknown?'':t.back&&!notPass?Math.round((t.back-t.out)/1000/60)+'m':'';var extra=t.type==='note'?' - "'+t.text+'"':t.type==='other'&&t.destination?' - '+t.destination:t.type==='tardy'?' arrived '+fmtTime(t.out):'';var backStr=t.backUnknown?' (returned, time unknown)':t.back&&!notPass?' -> '+fmtTime(t.back):'';return'<div class="hist-row"><span style="color:#5F5E5A;min-width:70px;font-size:11px;">'+fmtDate(t.day)+'</span><span style="color:'+tc+';">'+tl+extra+'</span><span style="color:#5F5E5A;font-size:11px;">'+(notPass?'':fmtTime(t.out))+backStr+(dur?' ('+dur+')':'')+(t.archived?' <span style="color:#9A9890;font-size:10px;">(archived)</span>':'')+'</span></div>';}).join('');
   return'<div class="section"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;"><div><p style="font-size:14px;font-weight:700;color:#2C2C2A;">'+name+'</p><p style="font-size:11px;color:#5F5E5A;">'+className+'</p></div>'+(watched?'<span style="font-size:11px;background:#FFF8E0;color:#7A5E00;border:1px solid #C09A20;border-radius:6px;padding:2px 8px;">Watched - '+passCount+' passes ('+cfg.passWindowDays+'d)</span>':'')+'</div>'+(pills?'<div style="margin-bottom:10px;">'+pills+'</div>':'<p style="font-size:12px;color:#5F5E5A;margin-bottom:10px;">No activity recorded yet</p>')+(rows?'<div style="border-top:1px solid #e8e6e0;padding-top:8px;">'+rows+'</div>':'')+'</div>';
 }
 
