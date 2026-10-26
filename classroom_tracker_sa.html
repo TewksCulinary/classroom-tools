@@ -955,7 +955,7 @@ async function pollKioskEvents() {
   if (!SHEET_ID) return;
   if (archiveInProgress) return;
   try {
-    var res = await sheetsGet(SHEET_PASSES+'!A2:J5000');
+    var res = await sheetsGet(SHEET_PASSES+'!A2:J200000');
     if (!res.values||!res.values.length) return;
     var changed = false;
     var today = todayKey();
@@ -988,7 +988,7 @@ async function pollKioskEventHours() {
   if (!SHEET_ID || kioskMode !== 'event') return;
   if (archiveInProgress) return;
   try {
-    var res = await sheetsGet(SHEET_EVENTS+'!A2:G5000');
+    var res = await sheetsGet(SHEET_EVENTS+'!A2:G200000');
     if (!res.values||!res.values.length) return;
     var changed = false;
     res.values.forEach(function(row, idx) {

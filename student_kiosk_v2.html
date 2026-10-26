@@ -325,7 +325,7 @@ function poll() {
 function readEventHours(ev) {
   kioskEventName = ev.name || 'Event';
   document.getElementById('class-name').textContent = kioskEventName + ' (Event Hours)';
-  sheetsGet(SHEET_EVENTS+'!A2:G5000').then(function(res){
+  sheetsGet(SHEET_EVENTS+'!A2:G200000').then(function(res){
     var rows = res.values||[];
     var namesSet = {};
     (ev.students||[]).forEach(function(n){ namesSet[n]=true; });
@@ -347,7 +347,7 @@ function readEventHours(ev) {
 
 function readCurrentPasses() {
   var today = new Date().toISOString().slice(0,10);
-  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+  sheetsGet(SHEET_PASSES+'!A2:J200000').then(function(res){
     var rows = res.values||[];
     var newState = {};
     var newClockIn = {};
@@ -621,7 +621,7 @@ function signBack() {
   passState[name] = null;
   renderGrid();
 
-  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res){
+  sheetsGet(SHEET_PASSES+'!A2:J200000').then(function(res){
     var rows = res.values||[];
     var rowIdx = -1;
     rows.forEach(function(r,i){
@@ -681,7 +681,7 @@ function eventClockOut(name) {
   delete eventActiveSessions[name];
   renderKioskEventGrid();
 
-  sheetsGet(SHEET_EVENTS+'!A2:G5000').then(function(res){
+  sheetsGet(SHEET_EVENTS+'!A2:G200000').then(function(res){
     var rows = res.values||[];
     var rowIdx = -1;
     rows.forEach(function(r,i){
