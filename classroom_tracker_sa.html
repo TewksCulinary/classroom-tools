@@ -586,6 +586,20 @@ async function sheetsClear(range) {
     {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'}});
   return r.json();
 }
+// Writes several distinct ranges in ONE HTTP request instead of one
+// request per range. Sheets enforces a per-user write-requests-per-minute
+// quota -- a sync cycle that otherwise fires off a separate sheetsUpdate
+// per changed trip can blow through that quota during a busy few minutes
+// (many students signing back in around the same time); batching keeps a
+// whole cycle's worth of narrow updates to a single request.
+async function sheetsBatchUpdateValues(data) {
+  if (!data.length) return {};
+  var token = await getAccessToken();
+  var r = await fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SHEET_ID+'/values:batchUpdate',
+    {method:'POST', headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},
+     body:JSON.stringify({valueInputOption:'RAW', data: data})});
+  return r.json();
+}
 // Pulls the first row number out of an append response's updatedRange,
 // e.g. "passes!A2851:L2853" -> 2851, so freshly appended trips/sessions
 // can be addressed directly by row for later targeted updates (no need
@@ -787,6 +801,19 @@ async function loadArchivedPasses() {
 // ============================================================
 var syncInterval = null;
 var lastSync = 0;
+var syncInFlight = false;   // true while a syncToSheets() cycle is actually running -- prevents two overlapping cycles from racing each other (e.g. both seeing the same new trip as "not yet appended" and double-writing it)
+var syncDebounceTimer = null;
+// save() used to call syncToSheets() immediately on every single local
+// change. One teacher action is fine, but a quick run of several (a line
+// of students all signing back in close together) meant one HTTP request
+// per action -- the direct cause of a "Quota exceeded... Write requests
+// per minute per user" error during busy stretches. Debouncing collapses
+// a burst of changes into one sync shortly after the last of them; the
+// regular 15s interval (startSyncInterval) still runs as a fallback.
+function scheduleSyncToSheets() {
+  if (syncDebounceTimer) clearTimeout(syncDebounceTimer);
+  syncDebounceTimer = setTimeout(function(){ syncDebounceTimer = null; syncToSheets(); }, 1500);
+}
 
 function setSyncStatus(type, msg) {
   var wrap = document.getElementById('sync-bar-wrap'); if(!wrap) return;
@@ -844,16 +871,21 @@ async function syncPassesToSheet() {
       }
     }));
   }
-  updates.forEach(function(u) {
-    ops.push(sheetsUpdate(SHEET_PASSES+'!G'+u.row+':L'+u.row, [[
-      u.trip.destination||'', u.trip.out||'', u.trip.back||'', u.trip.backUnknown?'1':'',
-      fmtLocalPT(u.trip.out), fmtLocalPT(u.trip.back)
-    ]]).then(function(res){
+  if (updates.length) {
+    var updateData = updates.map(function(u) {
+      return { range: SHEET_PASSES+'!G'+u.row+':L'+u.row, values: [[
+        u.trip.destination||'', u.trip.out||'', u.trip.back||'', u.trip.backUnknown?'1':'',
+        fmtLocalPT(u.trip.out), fmtLocalPT(u.trip.back)
+      ]] };
+    });
+    ops.push(sheetsBatchUpdateValues(updateData).then(function(res){
       if (res && res.error) throw new Error(res.error.message || 'Could not update the "passes" tab.');
-      u.trip._syncedBack = u.trip.back || null;
-      u.trip._syncedDest = u.trip.destination || '';
+      updates.forEach(function(u) {
+        u.trip._syncedBack = u.trip.back || null;
+        u.trip._syncedDest = u.trip.destination || '';
+      });
     }));
-  });
+  }
   if (!ops.length) return;
   await Promise.all(ops);
   try{localStorage.setItem('ct_data',JSON.stringify(passData));}catch(e){}
@@ -888,12 +920,15 @@ async function syncEventHoursToSheet() {
       }
     }));
   }
-  updates.forEach(function(u) {
-    ops.push(sheetsUpdate(SHEET_EVENTS+'!G'+u.row+':G'+u.row, [[u.session.out||'']]).then(function(res){
+  if (updates.length) {
+    var updateData = updates.map(function(u) {
+      return { range: SHEET_EVENTS+'!G'+u.row+':G'+u.row, values: [[u.session.out||'']] };
+    });
+    ops.push(sheetsBatchUpdateValues(updateData).then(function(res){
       if (res && res.error) throw new Error(res.error.message || 'Could not update the "event_hours" tab.');
-      u.session._syncedOut = u.session.out || null;
+      updates.forEach(function(u) { u.session._syncedOut = u.session.out || null; });
     }));
-  });
+  }
   if (!ops.length) return;
   await Promise.all(ops);
   try{localStorage.setItem('ct_event_data',JSON.stringify(eventData));}catch(e){}
@@ -902,6 +937,8 @@ async function syncEventHoursToSheet() {
 async function syncToSheets() {
   if (!SHEET_ID) return;
   if (archiveInProgress) return;
+  if (syncInFlight) return;
+  syncInFlight = true;
   setSyncStatus('syncing','Syncing...');
 
   // Build roster data for kiosk
@@ -928,8 +965,10 @@ async function syncToSheets() {
   try {
     await Promise.all([
       syncPassesToSheet(),
-      sheetsUpdate(SHEET_CONFIG+'!A1:B8', configData),
-      sheetsUpdate(SHEET_CONFIG+'!A11:B11', [['kioskPassCap', String(kioskPassCap||2)]])
+      sheetsBatchUpdateValues([
+        { range: SHEET_CONFIG+'!A1:B8', values: configData },
+        { range: SHEET_CONFIG+'!A11:B11', values: [['kioskPassCap', String(kioskPassCap||2)]] }
+      ])
     ]);
     lastSync = Date.now();
     setSyncStatus('synced','Synced '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}));
@@ -949,6 +988,7 @@ async function syncToSheets() {
     }
     renderEventSyncWarn();
   }
+  syncInFlight = false;
 }
 
 async function pollKioskEvents() {
@@ -1092,7 +1132,7 @@ function save() {
     Object.keys(watchList).forEach(function(id){wl[id]=Array.from(watchList[id]);});
     localStorage.setItem('ct_watch',JSON.stringify(wl));
   }catch(e){}
-  if(SHEET_ID) syncToSheets();
+  if(SHEET_ID) scheduleSyncToSheets();
 }
 
 function loadStorage() {
