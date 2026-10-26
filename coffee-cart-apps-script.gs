@@ -28,7 +28,7 @@ var CartLogic = (function () {
 
   function newDb() {
     return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
-      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '' }, daysOff: [] };
+      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '', orderDay: 'today' }, daysOff: [] };
   }
 
   // ---------- days and capacity ----------
@@ -53,6 +53,18 @@ var CartLogic = (function () {
     if ((db.daysOff || []).indexOf(d) >= 0) return false;
     if (db.config && db.config.lastDay && d > db.config.lastDay) return false;
     return true;
+  }
+  // the day counter orders are for: blank = the next school day, "today", or one chosen date
+  function nextSchoolDay(db, day) {
+    var d = addDays(day, 1), g = 0;
+    while (g++ < 40) { if (isSchoolDay(db, d)) return d; d = addDays(d, 1); }
+    return day;
+  }
+  function orderDay(db, day) {
+    var m = String((db.config && db.config.orderDay) || '').trim().toLowerCase();
+    if (m === 'today') return day;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(m) && m >= day) return m;
+    return nextSchoolDay(db, day);
   }
   function limitNum(v) {
     var n = parseInt(v, 10);
@@ -116,6 +128,10 @@ var CartLogic = (function () {
     return n + ' ' + (Math.abs(n) === 1 ? word : many);
   }
 
+  function capOf(db, d) {
+    var i = dayInfo(db, d);
+    return { date: d, max: i.max, today: i.count, todayFull: i.totalFull, maxCoffee: i.maxCoffee, coffee: i.coffee, coffeeFull: i.coffeeFull };
+  }
   function snapshot(db, now, day) {
     var cutoff = now - 3 * 3600 * 1000;
     var orders = db.orders.filter(function (o) { return !o.cancelled && (!o.done || (o.doneAt || 0) >= cutoff); });
@@ -125,10 +141,9 @@ var CartLogic = (function () {
       ok: true,
       serverNow: now,
       today: day,
-      cap: (function () {
-        var i = dayInfo(db, day);
-        return { max: i.max, today: i.count, todayFull: i.totalFull, maxCoffee: i.maxCoffee, coffee: i.coffee, coffeeFull: i.coffeeFull };
-      })(),
+      orderDay: orderDay(db, day),
+      cap: capOf(db, orderDay(db, day)),
+      capToday: capOf(db, day),
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
@@ -154,7 +169,7 @@ var CartLogic = (function () {
     }
     if (!o.items || !o.items.length) return fail('empty', 'There are no drinks in this order.');
     // an order can be for a later day (teacher orders); numbers count up within the day it is FOR
-    var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : day;
+    var forDate = /^\d{4}-\d{2}-\d{2}$/.test(String(o.forDate || '')) && o.forDate >= day ? o.forDate : (o.source !== 'form' && o.who === 'student' ? orderDay(db, day) : day);
     var asked = o.source === 'form' ? 'form' : '';
     if (asked === 'form' && !isSchoolDay(db, forDate)) {
       return fail('closed', 'There are no coffee cart orders on that day.');
@@ -357,7 +372,7 @@ var CartLogic = (function () {
     return fail('unknown-action', 'Unknown request.');
   }
 
-  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, dayInfo: dayInfo, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
+  return { newDb: newDb, handle: handle, snapshot: snapshot, orderDay: orderDay, isSchoolDay: isSchoolDay, drinksOn: drinksOn, dayInfo: dayInfo, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
 })();
 
 // ---- end shared rules ----
@@ -375,6 +390,7 @@ var CONFIG_DEFAULTS = [
   ['maxDrinks', ''],     // most drinks of ALL kinds on one day. Leave blank for no limit.
   ['maxCoffee', '20'],   // most coffee drinks (mocha, latte, americano, hot chocolate, steamer) on one day. Sodas, Lotus and tea are not counted. Blank = no limit.
   ['daysAhead', '5'],    // how many school days ahead teachers can order
+  ['orderDay', ''],      // the day counter orders are for. Blank = the next school day. Type "today", or a date like 2026-11-03, to change it.
   ['lastDay', '2027-06-15'] // last day of school: no orders after this
 ];
 // Weekends are skipped automatically. These are the no-school days from the 2026-27 Reynolds calendar.
@@ -584,6 +600,7 @@ function loadDb_(ss, tz, mode) {
     if (r[0] === 'pinHash') db.pinHash = text_(r[1]);
     if (r[0] === 'maxDrinks') db.config.maxDrinks = text_(r[1]);
     if (r[0] === 'maxCoffee') db.config.maxCoffee = text_(r[1]);
+    if (r[0] === 'orderDay') db.config.orderDay = normDay_(r[1], tz) || text_(r[1]).trim().toLowerCase();
     if (r[0] === 'daysAhead') db.config.daysAhead = text_(r[1]);
     if (r[0] === 'lastDay') db.config.lastDay = normDay_(r[1], tz);
   });
