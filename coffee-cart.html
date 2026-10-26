@@ -186,7 +186,7 @@ var CartLogic = (function () {
 
   function newDb() {
     return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
-      config: { maxDrinks: 20, daysAhead: 5, lastDay: '' }, daysOff: [] };
+      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '' }, daysOff: [] };
   }
 
   // ---------- days and capacity ----------
@@ -212,28 +212,44 @@ var CartLogic = (function () {
     if (db.config && db.config.lastDay && d > db.config.lastDay) return false;
     return true;
   }
-  function maxDrinks(db) {
-    var n = parseInt(db.config && db.config.maxDrinks, 10);
+  function limitNum(v) {
+    var n = parseInt(v, 10);
     return isNaN(n) || n < 1 ? 0 : n; // 0 means no limit
   }
+  function maxDrinks(db) { return limitNum(db.config && db.config.maxDrinks); }
+  function maxCoffee(db) { return limitNum(db.config && db.config.maxCoffee); }
+  // drinks that take the machines and the most time count toward the coffee limit
+  var COFFEE_NAMES = ['Mocha', 'Latte', 'Americano', 'Hot Chocolate', 'Steamer'];
+  function isCoffee(it) {
+    var t = String(it.title || '');
+    if (/^Hot Chocolate/.test(t)) return true;
+    t = t.replace(/^(Hot|Iced)\s+/, '');
+    return COFFEE_NAMES.some(function (n) { return t.indexOf(n) === 0; });
+  }
   // drinks promised for a day (cancelled orders do not count)
-  function drinksOn(db, d) {
-    var n = 0;
+  function countsOn(db, d) {
+    var total = 0, coffee = 0;
     db.orders.forEach(function (o) {
-      if (!o.cancelled && (o.forDate || o.day) === d) n += o.items.length;
+      if (o.cancelled || (o.forDate || o.day) !== d) return;
+      o.items.forEach(function (it) { total++; if (isCoffee(it)) coffee++; });
     });
-    return n;
+    return { total: total, coffee: coffee };
+  }
+  function drinksOn(db, d) { return countsOn(db, d).total; }
+  function dayInfo(db, d) {
+    var n = countsOn(db, d), mt = maxDrinks(db), mc = maxCoffee(db), left = null;
+    if (mt) left = Math.max(mt - n.total, 0);
+    if (mc) { var lc = Math.max(mc - n.coffee, 0); left = left === null ? lc : Math.min(left, lc); }
+    var tf = !!mt && n.total >= mt, cf = !!mc && n.coffee >= mc;
+    return { date: d, count: n.total, coffee: n.coffee, max: mt, maxCoffee: mc, left: left, full: tf || cf, totalFull: tf, coffeeFull: cf };
   }
   // the next few school days (today first, when it is one) with how full each is
   function openDays(db, today) {
     var ahead = parseInt(db.config && db.config.daysAhead, 10);
     if (isNaN(ahead) || ahead < 1) ahead = 5;
-    var max = maxDrinks(db), out = [], d = today, guard = 0;
+    var out = [], d = today, guard = 0;
     while (out.length < ahead && guard++ < 120) {
-      if (isSchoolDay(db, d)) {
-        var c = drinksOn(db, d);
-        out.push({ date: d, count: c, max: max, left: max ? Math.max(max - c, 0) : null, full: !!max && c >= max });
-      }
+      if (isSchoolDay(db, d)) out.push(dayInfo(db, d));
       d = addDays(d, 1);
     }
     return out;
@@ -267,7 +283,10 @@ var CartLogic = (function () {
       ok: true,
       serverNow: now,
       today: day,
-      cap: { max: maxDrinks(db), today: drinksOn(db, day), todayFull: !!maxDrinks(db) && drinksOn(db, day) >= maxDrinks(db) },
+      cap: (function () {
+        var i = dayInfo(db, day);
+        return { max: i.max, today: i.count, todayFull: i.totalFull, maxCoffee: i.maxCoffee, coffee: i.coffee, coffeeFull: i.coffeeFull };
+      })(),
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
@@ -298,15 +317,21 @@ var CartLogic = (function () {
     if (asked === 'form' && !isSchoolDay(db, forDate)) {
       return fail('closed', 'There are no coffee cart orders on that day.');
     }
-    var max = maxDrinks(db);
-    if (max && !canOverride) {
-      var have = drinksOn(db, forDate), want = Math.min(o.items.length, 20);
-      if (have + want > max) {
-        var res = fail('full', have >= max ? 'The coffee cart is full for that day (' + have + ' of ' + max + ' drinks).'
-          : 'Only ' + (max - have) + ' more ' + (max - have === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + have + ' of ' + max + ' taken).');
-        res.resp.date = forDate; res.resp.count = have; res.resp.max = max;
-        return res;
+    if (!canOverride) {
+      var info = dayInfo(db, forDate);
+      var wantT = 0, wantC = 0;
+      o.items.slice(0, 20).forEach(function (it) { wantT++; if (isCoffee(it)) wantC++; });
+      var res = null;
+      if (info.max && info.count + wantT > info.max) {
+        res = fail('full', info.count >= info.max ? 'The coffee cart is full for that day (' + info.count + ' of ' + info.max + ' drinks).'
+          : 'Only ' + (info.max - info.count) + ' more ' + (info.max - info.count === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + info.count + ' of ' + info.max + ' taken).');
+        res.resp.count = info.count; res.resp.max = info.max;
+      } else if (info.maxCoffee && wantC && info.coffee + wantC > info.maxCoffee) {
+        res = fail('full', info.coffee >= info.maxCoffee ? 'Coffee drinks are full for that day (' + info.coffee + ' of ' + info.maxCoffee + '). A soda or Lotus would still fit.'
+          : 'Only ' + (info.maxCoffee - info.coffee) + ' more coffee ' + (info.maxCoffee - info.coffee === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + info.coffee + ' of ' + info.maxCoffee + ' taken).');
+        res.resp.count = info.coffee; res.resp.max = info.maxCoffee;
       }
+      if (res) { res.resp.date = forDate; return res; }
     }
     var num = 0;
     db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
@@ -490,7 +515,7 @@ var CartLogic = (function () {
     return fail('unknown-action', 'Unknown request.');
   }
 
-  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
+  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, dayInfo: dayInfo, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
 })();
 </script>
 <script>
@@ -499,16 +524,23 @@ var CartLogic = (function () {
 
   // ---------- menu data (edit here to change the menu) ----------
   var DRINKS = [
-    { id: 'mocha',     name: 'Mocha',              color: '#6B3F2A', steps: ['temp', 'sauce', 'milk', 'flavor'] },
-    { id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['temp', 'milk', 'flavor'], sauceOnFlavor: true },
-    { id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'flavor'], sauceOnFlavor: true },
-    { id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['milk', 'flavor'], sauceOnFlavor: true },
-    { id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['milk', 'flavor'], sauceOnFlavor: true },
+    { coffee: true, id: 'mocha',     name: 'Mocha',              color: '#6B3F2A', steps: ['temp', 'sauce', 'milk', 'flavor'] },
+    { coffee: true, id: 'latte',     name: 'Latte',              color: '#B98A5E', steps: ['temp', 'milk', 'flavor'], sauceOnFlavor: true },
+    { coffee: true, id: 'americano', name: 'Americano',          color: '#3B2A20', steps: ['temp', 'flavor'], sauceOnFlavor: true },
+    { coffee: true, id: 'hotchoc',   name: 'Hot Chocolate',      color: '#8A4B38', steps: ['milk', 'flavor'], sauceOnFlavor: true },
+    { coffee: true, id: 'steamer',   name: 'Steamer',            color: '#E6D3B3', steps: ['milk', 'flavor'], sauceOnFlavor: true },
     { id: 'lotus',     name: 'Lotus (sugar free)', color: '#E58FAE', steps: ['flavor'], icon: 'iced' },
     { id: 'soda',      name: 'Italian Soda',       color: '#7FB8DA', steps: ['flavor'], icon: 'iced' },
     { id: 'tea',       name: 'Tea',                color: '#9DB86A', steps: ['temp', 'tea', 'flavor'] }
   ];
   DRINKS.forEach(function (d) { d.steps = d.steps.concat('notes'); });
+  // the short student menu: no notes, no extras
+  var STUDENT_SYRUPS = ['Blue Raspberry', 'Strawberry', 'Sour Gummy Worm'];
+  var STUDENT_DRINKS = [
+    { id: 'ssoda',  name: 'Italian Soda', color: '#7FB8DA', steps: ['stsyrup'], icon: 'iced' },
+    { id: 'slotus', name: 'Lotus',        color: '#E58FAE', steps: ['stsyrup'], icon: 'iced' },
+    { id: 'smocha', name: 'Mocha',        color: '#6B3F2A', steps: ['temp'], coffee: true, defaults: { sauce: 'Mocha', milk: 'Regular' } }
+  ];
 
   var SAUCES = ['Mocha', 'Sugar Free White Mocha'];
   var MILKS = ['Regular', 'Fat Free', 'Half & Half', 'Almond', 'Oat'];
@@ -525,6 +557,7 @@ var CartLogic = (function () {
     sauce:  { crumb: 'Sauce',  title: 'Pick a sauce',  hint: 'Choose one.', cols: 2, list: SAUCES },
     milk:   { crumb: 'Milk',   title: 'Pick a milk',   hint: 'Choose one.', cols: 3, list: MILKS },
     tea:    { crumb: 'Tea',    title: 'Pick a tea',    hint: 'Choose one.', cols: 2, list: TEAS },
+    stsyrup: { crumb: 'Syrups', title: 'Pick up to 2 syrups', hint: 'Choose one or two.' },
     flavor: { crumb: 'Flavor', title: 'Add a flavor?', hint: 'Tap as many as you want, or leave it on No flavor.' },
     notes:  { crumb: 'Notes',  title: 'Any notes?',    hint: 'Optional. Tap a quick note, type your own, or just tap Add to order.' }
   };
@@ -539,10 +572,10 @@ var CartLogic = (function () {
   var CONN_KEY = 'coffeeCartConn.v1', DB_KEY = 'coffeeCartDb.v1', OUTBOX_KEY = 'coffeeCartOutbox.v1', OLD_PUNCH_KEY = 'coffeeCartPunch.v1';
   var POLL_MS = MODE === 'queue' ? 4000 : 10000;
   var state = {
-    screen: 'drink', drink: null, step: 0, sel: {}, flavors: [],
+    screen: 'who', who: null, drink: null, step: 0, sel: {}, flavors: [],
     cart: [], name: '', method: null, room: '',
     pay: null, teacherId: null, teacherQuery: '', result: null, focusName: false,
-    prevScreen: 'drink', adminUnlocked: false, changingPin: false, adminMsg: '', pinHash: null,
+    prevScreen: 'who', adminUnlocked: false, changingPin: false, adminMsg: '', pinHash: null,
     orders: [], nextId: 1, sending: false, sendError: '',
     connOpen: false, connUrl: '', connCode: '', connMsg: '', connBusy: false, connFocus: false
   };
@@ -694,7 +727,7 @@ var CartLogic = (function () {
   }
   function $(id) { return document.getElementById(id); }
   function val(id) { var el = $(id); return el ? el.value : ''; }
-  function drinkObj() { return DRINKS.filter(function (d) { return d.id === state.drink; })[0] || null; }
+  function drinkObj() { return DRINKS.concat(STUDENT_DRINKS).filter(function (d) { return d.id === state.drink; })[0] || null; }
   function currentKey() { var d = drinkObj(); return d ? d.steps[state.step] : null; }
   function isOptionalSauce() { var d = drinkObj(); return currentKey() === 'sauce' && d.id !== 'mocha'; }
   function teacherById(id) { return punch.teachers.filter(function (t) { return t.id === id; })[0] || null; }
@@ -729,6 +762,7 @@ var CartLogic = (function () {
   function stepReady() {
     var d = drinkObj(); if (!d) return false;
     var key = currentKey();
+    if (key === 'stsyrup') return state.flavors.length >= 1;
     var required = (key === 'sauce' && d.id === 'mocha') || key === 'milk' || key === 'tea' || key === 'temp';
     return !required || !!state.sel[key];
   }
@@ -777,11 +811,17 @@ var CartLogic = (function () {
     var m = Math.floor((nowMs() - o.createdAt) / 60000);
     return m < 1 ? 'just now' : m === 1 ? '1 min ago' : m + ' min ago';
   }
+  function capLines() {
+    var c = net.cap, out = [];
+    if (!c) return out;
+    if (c.maxCoffee) out.push({ text: 'Coffee drinks today: ' + c.coffee + ' of ' + c.maxCoffee, full: c.coffeeFull });
+    if (c.max) out.push({ text: 'All drinks today: ' + c.today + ' of ' + c.max, full: c.todayFull });
+    return out;
+  }
   function capInfoHtml() {
-    var c = net.cap;
-    if (!c || !c.max) return '';
-    var full = c.today >= c.max;
-    return '<div class="info"' + (full ? ' style="background:#FBE3E0;border-color:#B3261E"' : '') + '><b>Today:</b> ' + c.today + ' of ' + c.max + ' drinks' + (full ? ' · <b>FULL</b>' : '') + '</div>';
+    return capLines().map(function (l) {
+      return '<div class="info"' + (l.full ? ' style="background:#FBE3E0;border-color:#B3261E"' : '') + '>' + esc(l.text) + (l.full ? ' · <b>FULL</b>' : '') + '</div>';
+    }).join('');
   }
   function sentText(o) {
     var placed = new Date(o.createdAt), today = new Date(nowMs());
@@ -800,10 +840,11 @@ var CartLogic = (function () {
   // ---------- rendering ----------
   function renderCrumbs() {
     var d = drinkObj();
-    var labels = d ? ['Drink'].concat(d.steps.map(function (k) { return STEPS[k].crumb; }), 'Name', 'Pay') : ['Drink', 'Options', 'Name', 'Pay'];
+    var stu = state.who === 'student';
+    var labels = d ? ['Drink'].concat(d.steps.map(function (k) { return STEPS[k].crumb; }), stu ? ['Name'] : ['Name', 'Pay']) : (stu ? ['Drink', 'Options', 'Name'] : ['Drink', 'Options', 'Name', 'Pay']);
     var active = 0;
     if (state.screen === 'options') active = state.step + 1;
-    else if (state.screen === 'review') active = labels.length - 2;
+    else if (state.screen === 'review') active = labels.length - (stu ? 1 : 2);
     else if (state.screen === 'pay') active = labels.length - 1;
     else if (state.screen === 'done') active = labels.length;
     return '<div class="crumbs">' + labels.map(function (l, i) {
@@ -907,15 +948,21 @@ var CartLogic = (function () {
   }
 
   function renderMain() {
-    var html = state.screen === 'admin' ? '' : renderCrumbs();
+    var html = state.screen === 'admin' || state.screen === 'who' ? '' : renderCrumbs();
     var d = drinkObj();
 
     if (state.screen === 'admin') html += adminHtml();
 
+    if (state.screen === 'who') {
+      html += '<h1>Who is ordering?</h1><div class="grid" style="grid-template-columns:repeat(2,minmax(0,1fr))">' +
+        tile('Teacher', false, 'setWho', 'teacher', 'big') + tile('Student', false, 'setWho', 'student', 'big') + '</div>';
+    }
     if (state.screen === 'drink') {
-      html += '<h1>What drink is it?</h1><div class="drinks">' + DRINKS.map(function (x) {
-        return '<button class="drink" data-action="pickDrink" data-v="' + x.id + '">' + (x.icon === 'iced' ? glass(x.color) : cup(x.color)) + '<span>' + esc(x.name) + '</span></button>';
-      }).join('') + '</div>';
+      var menu = state.who === 'student' ? STUDENT_DRINKS : DRINKS, cp = net.cap || {};
+      html += '<h1>What drink is it?</h1><div class="drinks">' + menu.map(function (x) {
+        var fullNow = cp.todayFull || (x.coffee && cp.coffeeFull);
+        return '<button class="drink" data-action="pickDrink" data-v="' + x.id + '">' + (x.icon === 'iced' ? glass(x.color) : cup(x.color)) + '<span>' + esc(x.name) + (fullNow ? ' · FULL today' : '') + '</span></button>';
+      }).join('') + '</div>' + (state.cart.length ? '' : '<div><button class="small" data-action="changeWho">← Teacher or student</button></div>');
     }
 
     if (state.screen === 'options') {
@@ -941,6 +988,8 @@ var CartLogic = (function () {
         }
         body += '</div>';
         if (withSauce) { title = 'Add a flavor or sauce?'; hint = 'Tap as many flavors as you want, and one sauce if you like. Or leave it on No flavor or sauce.'; }
+      } else if (key === 'stsyrup') {
+        body += '<div class="grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">' + STUDENT_SYRUPS.map(function (f) { return tile(f, state.flavors.indexOf(f) >= 0, 'toggleSyrup', f, 'big'); }).join('') + '</div>';
       } else if (key === 'notes') {
         body += '<div style="display:flex;flex-direction:column;gap:14px">' +
           '<label class="section-label" for="drinkNotes">Type a note</label>' +
@@ -984,7 +1033,7 @@ var CartLogic = (function () {
       }
       html += '<div class="muted" style="font-size:20px;line-height:1.4">Check the ticket on the right. Tap Remove to take a drink off.</div></div>' +
         '<div class="row"><button class="secondary" data-action="addAnother">+ Add another drink</button>' +
-        '<button id="toPayBtn" class="primary" data-action="toPay"' + (canProceed() ? '' : ' disabled') + '>Next</button></div>';
+        '<button id="toPayBtn" class="primary" data-action="toPay"' + (canProceed() ? '' : ' disabled') + '>' + (state.who === 'student' ? 'Send order' : 'Next') + '</button></div>';
     }
 
     if (state.screen === 'pay') {
@@ -1089,7 +1138,12 @@ var CartLogic = (function () {
     var m = c.milk === 'Regular' ? 'regular milk' : c.milk === 'Half & Half' ? 'half & half' : c.milk.toLowerCase() + ' milk';
     return c.iced ? 'Add ice, then pour in cold ' + m : 'Steam ' + m + ' with the thermometer, until the needle is in the green area';
   }
-  function syrupStep(c, per) { return c.flavors.length ? 'Syrup, ' + per + ' of each: ' + c.flavors.join(', ') : null; }
+  function syrupStep(c, per) {
+    if (!c.flavors.length) return null;
+    // two pumps in all: one flavor gets 2 pumps, two flavors get 1 pump each
+    if (per === '2 pumps' && c.flavors.length > 1) return 'Syrup, 1 pump of each: ' + c.flavors.join(', ');
+    return 'Syrup, ' + per + (c.flavors.length > 1 ? ' of each' : '') + ': ' + c.flavors.join(', ');
+  }
   function sauceStep(c, amount) { return c.sauce ? c.sauce + ' sauce, ' + amount : null; }
   function mochaSauceStep(c) {
     if (!c.sauce) return null;
@@ -1137,7 +1191,7 @@ var CartLogic = (function () {
     var fin = state.orders.filter(function (o) { return o.done; }).sort(function (a, b) { return (b.doneAt || 0) - (a.doneAt || 0); }).slice(0, MODE === 'queue' ? 8 : 3);
     var html;
     if (MODE === 'queue') {
-      html = '<div class="qhead"><div class="side-title">Coffee Cart Queue</div><div class="badge" aria-label="' + open.length + ' waiting">' + open.length + '</div>' + (net.cap && net.cap.max ? '<div style="font-size:24px;font-weight:700;color:' + (net.cap.today >= net.cap.max ? '#B3261E' : 'inherit') + '">Today ' + net.cap.today + ' of ' + net.cap.max + ' drinks' + (net.cap.today >= net.cap.max ? ' · FULL' : '') + '</div>' : '') + '<div class="spacer"></div>' +
+      html = '<div class="qhead"><div class="side-title">Coffee Cart Queue</div><div class="badge" aria-label="' + open.length + ' waiting">' + open.length + '</div>' + capLines().map(function (l) { return '<div style="font-size:22px;font-weight:700;color:' + (l.full ? '#B3261E' : 'inherit') + '">' + esc(l.text) + (l.full ? ' \u00B7 FULL' : '') + '</div>'; }).join('') + '<div class="spacer"></div>' +
         '<button class="small" data-action="openConn">Connection</button></div>' + statusHtml();
       if (!open.length) html += '<div class="muted" style="font-size:26px;line-height:1.4">No orders waiting.</div>';
       else html += '<div class="qgrid">' + open.map(qcardHtml).join('') + '</div>';
@@ -1177,12 +1231,13 @@ var CartLogic = (function () {
 
   // ---------- actions ----------
   function resetOrder() {
-    state.screen = 'drink'; state.drink = null; state.step = 0; state.sel = {}; state.flavors = [];
+    state.screen = 'who'; state.who = null; state.drink = null; state.step = 0; state.sel = {}; state.flavors = [];
     state.cart = []; state.name = ''; state.method = null; state.room = '';
     state.pay = null; state.teacherId = null; state.teacherQuery = ''; state.result = null; state.sendError = ''; state.fullErr = false;
   }
   function finishDrink() {
     var d = drinkObj();
+    if (d.defaults) extend(state.sel, d.defaults);
     var lines = linesFor(state.sel, state.flavors).filter(function (l) { return l[0] !== 'Temp'; });
     state.cart.push({
       id: state.nextId++, title: (state.sel.temp ? state.sel.temp + ' ' : '') + d.name,
@@ -1231,6 +1286,12 @@ var CartLogic = (function () {
   }
 
   var actions = {
+    setWho: function (v) { state.who = v; state.screen = 'drink'; },
+    changeWho: function () { state.who = null; state.screen = 'who'; },
+    toggleSyrup: function (v) {
+      var i = state.flavors.indexOf(v);
+      if (i >= 0) state.flavors.splice(i, 1); else if (state.flavors.length < 2) state.flavors.push(v);
+    },
     pickDrink: function (v) { state.drink = v; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'options'; },
     pickOption: function (v, key) { state.sel[key] = v; },
     toggleFlavor: function (v) {
@@ -1256,7 +1317,11 @@ var CartLogic = (function () {
     },
     addAnother: function () { state.screen = 'drink'; },
     setMethod: function (v) { state.method = v; },
-    toPay: function () { if (canProceed()) state.screen = 'pay'; },
+    toPay: function () {
+      if (!canProceed()) return;
+      if (state.who === 'student') { state.pay = 'other'; state.teacherId = null; sendOrder(null); return; }
+      state.screen = 'pay';
+    },
     backToReview: function () { state.screen = 'review'; },
     setPay: function (v) {
       state.pay = v;

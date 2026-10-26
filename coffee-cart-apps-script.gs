@@ -28,7 +28,7 @@ var CartLogic = (function () {
 
   function newDb() {
     return { orders: [], teachers: [], ledger: [], cards: [], pinHash: '', nextTid: 1,
-      config: { maxDrinks: 20, daysAhead: 5, lastDay: '' }, daysOff: [] };
+      config: { maxDrinks: 20, maxCoffee: '', daysAhead: 5, lastDay: '' }, daysOff: [] };
   }
 
   // ---------- days and capacity ----------
@@ -54,28 +54,44 @@ var CartLogic = (function () {
     if (db.config && db.config.lastDay && d > db.config.lastDay) return false;
     return true;
   }
-  function maxDrinks(db) {
-    var n = parseInt(db.config && db.config.maxDrinks, 10);
+  function limitNum(v) {
+    var n = parseInt(v, 10);
     return isNaN(n) || n < 1 ? 0 : n; // 0 means no limit
   }
+  function maxDrinks(db) { return limitNum(db.config && db.config.maxDrinks); }
+  function maxCoffee(db) { return limitNum(db.config && db.config.maxCoffee); }
+  // drinks that take the machines and the most time count toward the coffee limit
+  var COFFEE_NAMES = ['Mocha', 'Latte', 'Americano', 'Hot Chocolate', 'Steamer'];
+  function isCoffee(it) {
+    var t = String(it.title || '');
+    if (/^Hot Chocolate/.test(t)) return true;
+    t = t.replace(/^(Hot|Iced)\s+/, '');
+    return COFFEE_NAMES.some(function (n) { return t.indexOf(n) === 0; });
+  }
   // drinks promised for a day (cancelled orders do not count)
-  function drinksOn(db, d) {
-    var n = 0;
+  function countsOn(db, d) {
+    var total = 0, coffee = 0;
     db.orders.forEach(function (o) {
-      if (!o.cancelled && (o.forDate || o.day) === d) n += o.items.length;
+      if (o.cancelled || (o.forDate || o.day) !== d) return;
+      o.items.forEach(function (it) { total++; if (isCoffee(it)) coffee++; });
     });
-    return n;
+    return { total: total, coffee: coffee };
+  }
+  function drinksOn(db, d) { return countsOn(db, d).total; }
+  function dayInfo(db, d) {
+    var n = countsOn(db, d), mt = maxDrinks(db), mc = maxCoffee(db), left = null;
+    if (mt) left = Math.max(mt - n.total, 0);
+    if (mc) { var lc = Math.max(mc - n.coffee, 0); left = left === null ? lc : Math.min(left, lc); }
+    var tf = !!mt && n.total >= mt, cf = !!mc && n.coffee >= mc;
+    return { date: d, count: n.total, coffee: n.coffee, max: mt, maxCoffee: mc, left: left, full: tf || cf, totalFull: tf, coffeeFull: cf };
   }
   // the next few school days (today first, when it is one) with how full each is
   function openDays(db, today) {
     var ahead = parseInt(db.config && db.config.daysAhead, 10);
     if (isNaN(ahead) || ahead < 1) ahead = 5;
-    var max = maxDrinks(db), out = [], d = today, guard = 0;
+    var out = [], d = today, guard = 0;
     while (out.length < ahead && guard++ < 120) {
-      if (isSchoolDay(db, d)) {
-        var c = drinksOn(db, d);
-        out.push({ date: d, count: c, max: max, left: max ? Math.max(max - c, 0) : null, full: !!max && c >= max });
-      }
+      if (isSchoolDay(db, d)) out.push(dayInfo(db, d));
       d = addDays(d, 1);
     }
     return out;
@@ -109,7 +125,10 @@ var CartLogic = (function () {
       ok: true,
       serverNow: now,
       today: day,
-      cap: { max: maxDrinks(db), today: drinksOn(db, day), todayFull: !!maxDrinks(db) && drinksOn(db, day) >= maxDrinks(db) },
+      cap: (function () {
+        var i = dayInfo(db, day);
+        return { max: i.max, today: i.count, todayFull: i.totalFull, maxCoffee: i.maxCoffee, coffee: i.coffee, coffeeFull: i.coffeeFull };
+      })(),
       orders: orders,
       teachers: db.teachers.map(function (t) { return { id: t.id, name: t.name, punches: t.punches }; }),
       hasPin: !!db.pinHash,
@@ -140,15 +159,21 @@ var CartLogic = (function () {
     if (asked === 'form' && !isSchoolDay(db, forDate)) {
       return fail('closed', 'There are no coffee cart orders on that day.');
     }
-    var max = maxDrinks(db);
-    if (max && !canOverride) {
-      var have = drinksOn(db, forDate), want = Math.min(o.items.length, 20);
-      if (have + want > max) {
-        var res = fail('full', have >= max ? 'The coffee cart is full for that day (' + have + ' of ' + max + ' drinks).'
-          : 'Only ' + (max - have) + ' more ' + (max - have === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + have + ' of ' + max + ' taken).');
-        res.resp.date = forDate; res.resp.count = have; res.resp.max = max;
-        return res;
+    if (!canOverride) {
+      var info = dayInfo(db, forDate);
+      var wantT = 0, wantC = 0;
+      o.items.slice(0, 20).forEach(function (it) { wantT++; if (isCoffee(it)) wantC++; });
+      var res = null;
+      if (info.max && info.count + wantT > info.max) {
+        res = fail('full', info.count >= info.max ? 'The coffee cart is full for that day (' + info.count + ' of ' + info.max + ' drinks).'
+          : 'Only ' + (info.max - info.count) + ' more ' + (info.max - info.count === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + info.count + ' of ' + info.max + ' taken).');
+        res.resp.count = info.count; res.resp.max = info.max;
+      } else if (info.maxCoffee && wantC && info.coffee + wantC > info.maxCoffee) {
+        res = fail('full', info.coffee >= info.maxCoffee ? 'Coffee drinks are full for that day (' + info.coffee + ' of ' + info.maxCoffee + '). A soda or Lotus would still fit.'
+          : 'Only ' + (info.maxCoffee - info.coffee) + ' more coffee ' + (info.maxCoffee - info.coffee === 1 ? 'drink fits' : 'drinks fit') + ' that day (' + info.coffee + ' of ' + info.maxCoffee + ' taken).');
+        res.resp.count = info.coffee; res.resp.max = info.maxCoffee;
       }
+      if (res) { res.resp.date = forDate; return res; }
     }
     var num = 0;
     db.orders.forEach(function (x) { if ((x.forDate || x.day) === forDate && x.num > num) num = x.num; });
@@ -332,7 +357,7 @@ var CartLogic = (function () {
     return fail('unknown-action', 'Unknown request.');
   }
 
-  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
+  return { newDb: newDb, handle: handle, snapshot: snapshot, isSchoolDay: isSchoolDay, drinksOn: drinksOn, dayInfo: dayInfo, openDays: openDays, maxDrinks: maxDrinks, addDays: addDays };
 })();
 
 // ---- end shared rules ----
@@ -347,7 +372,8 @@ var TABS = {
 };
 // First-time contents. After that the lead teacher edits these on the Sheet.
 var CONFIG_DEFAULTS = [
-  ['maxDrinks', '20'],   // most drinks the cart can make on one day (counter orders and teacher orders together)
+  ['maxDrinks', ''],     // most drinks of ALL kinds on one day. Leave blank for no limit.
+  ['maxCoffee', '20'],   // most coffee drinks (mocha, latte, americano, hot chocolate, steamer) on one day. Sodas, Lotus and tea are not counted. Blank = no limit.
   ['daysAhead', '5'],    // how many school days ahead teachers can order
   ['lastDay', '2027-06-15'] // last day of school: no orders after this
 ];
@@ -415,9 +441,8 @@ function run_(req) {
     if (result.changes) saveChanges_(ss, tz, loaded, result.changes);
     if (req.action === 'addOrder' && result.resp.ok && result.changes && result.changes.ordersAdded.length) {
       var oa = result.changes.ordersAdded[0];
-      var mx = CartLogic.maxDrinks(loaded.db);
       // a day just filled up: take it off the teacher form
-      if (mx && CartLogic.drinksOn(loaded.db, oa.forDate) >= mx) {
+      if (CartLogic.dayInfo(loaded.db, oa.forDate).full) {
         try { refreshForm_(loaded.db, day, tz); } catch (x) { /* the form is only a convenience */ }
       }
     }
@@ -452,6 +477,11 @@ function ensureTabs_(ss) {
   var cf = ss.getSheetByName('config');
   var haveKeys = {};
   if (cf.getLastRow() >= 2) cf.getRange(2, 1, cf.getLastRow() - 1, 1).getValues().forEach(function (r) { haveKeys[String(r[0])] = true; });
+  if (!haveKeys.maxCoffee && haveKeys.maxDrinks) { // older sheet: the old overall 20 now becomes the coffee limit
+    cf.getRange(2, 1, cf.getLastRow() - 1, 2).getValues().forEach(function (r, i) {
+      if (String(r[0]) === 'maxDrinks' && String(r[1]) === '20') cf.getRange(i + 2, 2).setValue('');
+    });
+  }
   CONFIG_DEFAULTS.forEach(function (kv) {
     if (!haveKeys[kv[0]]) appendRows_(cf, [kv]);
   });
@@ -553,6 +583,7 @@ function loadDb_(ss, tz, mode) {
     rows.config[text_(r[0])] = i + 2;
     if (r[0] === 'pinHash') db.pinHash = text_(r[1]);
     if (r[0] === 'maxDrinks') db.config.maxDrinks = text_(r[1]);
+    if (r[0] === 'maxCoffee') db.config.maxCoffee = text_(r[1]);
     if (r[0] === 'daysAhead') db.config.daysAhead = text_(r[1]);
     if (r[0] === 'lastDay') db.config.lastDay = normDay_(r[1], tz);
   });
@@ -637,6 +668,8 @@ var MENU = {
     { id: 'tea', name: 'Tea', steps: ['temp', 'tea', 'flavor'] }
   ]
 };
+var METHOD_DELIVERY = 'Delivery';
+var METHOD_PICKUP = 'Pickup (I will come get it)';
 var PAY_PUNCH = 'Punch card';
 var PAY_OTHER = 'Another way (cash or other)';
 
@@ -664,7 +697,8 @@ function createTeacherForm() {
 
   var map = { drinks: {} };
   map.teacher = form.addTextItem().setTitle('Your name').setHelpText('First and last name. Your school email is recorded too, so your punch card follows you.').setRequired(true).getId();
-  map.room = form.addTextItem().setTitle('Room number').setHelpText('Where should we deliver it?').setRequired(true).getId();
+  map.method = form.addMultipleChoiceItem().setTitle('Delivery or pickup?').setChoiceValues([METHOD_DELIVERY, METHOD_PICKUP]).setRequired(true).getId();
+  map.room = form.addTextItem().setTitle('Room number (for delivery)').setHelpText('Leave blank for pickup.').setRequired(false).getId();
   map.date = form.addListItem().setTitle('What day should it be delivered?').setHelpText('Days that are full are not listed.').setChoiceValues(['(loading)']).setRequired(true).getId();
   map.pay = form.addMultipleChoiceItem().setTitle('How are you paying?').setChoiceValues([PAY_PUNCH, PAY_OTHER]).setRequired(true).getId();
   var drinkQ = form.addMultipleChoiceItem().setTitle('Which drink would you like?').setRequired(true);
@@ -708,7 +742,7 @@ function dayLabel_(iso, tz) {
 }
 function dayChoiceLabel_(d, tz) {
   var base = dayLabel_(d.date, tz);
-  return d.max && d.left <= 5 ? base + ' \u00B7 ' + d.left + (d.left === 1 ? ' drink left' : ' drinks left') : base;
+  return d.left !== null && d.left <= 5 ? base + ' \u00B7 ' + d.left + (d.left === 1 ? ' drink left' : ' drinks left') : base;
 }
 // the form answer is a label such as "Tue, Oct 27"; find the date it means
 function labelToDate_(answer, tz, today) {
@@ -767,6 +801,14 @@ function upgradeTeacherForm() {
     map.date = li.getId();
     props.setProperty('FORM_MAP', JSON.stringify(map));
   }
+  if (!map.method) { // older form: add the delivery-or-pickup question just above the room question
+    var room = form.getItemById(map.room);
+    var q = form.addMultipleChoiceItem().setTitle('Delivery or pickup?').setChoiceValues([METHOD_DELIVERY, METHOD_PICKUP]).setRequired(true);
+    form.moveItem(q.getIndex(), room.getIndex());
+    room.asTextItem().setTitle('Room number (for delivery)').setHelpText('Leave blank for pickup.').setRequired(false);
+    map.method = q.getId();
+    props.setProperty('FORM_MAP', JSON.stringify(map));
+  }
   ensureDailyRefresh_();
   return 'Form upgraded. ' + refreshTeacherChoices();
 }
@@ -797,7 +839,8 @@ function buildFormRequest_(map, answers, responseId, email, tz, today) {
   return {
     action: 'addOrder',
     order: {
-      id: 'form-' + responseId, name: name, method: 'delivery', room: String(answers[map.room] || '').trim(),
+      id: 'form-' + responseId, name: name, method: answers[map.method] === METHOD_PICKUP ? 'pickup' : 'delivery',
+      room: answers[map.method] === METHOD_PICKUP ? '' : String(answers[map.room] || '').trim(),
       forDate: tz && today ? labelToDate_(answers[map.date], tz, today) : String(answers[map.date] || ''), source: 'form',
       items: [{ title: (temp ? temp + ' ' : '') + d.name, detail: lines.length ? lines.join(' · ') : 'Plain' }],
       pay: pay, teacherName: pay === 'punch' ? name : '', teacherEmail: pay === 'punch' ? String(email || '').trim().toLowerCase() : ''
