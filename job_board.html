@@ -26,7 +26,7 @@
   .cell { position:relative; background:var(--card); border:2.5px solid var(--border); border-radius:18px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; min-width:0; min-height:0; transition:border-color 0.2s, background 0.2s; }
   .cell.empty { background:var(--card-empty); border-color:#1f3a43; border-style:dashed; }
 
-  .job-input { width:100%; background:transparent; border:none; color:var(--fg); text-align:center; font-family:'Lexend',system-ui,sans-serif; font-weight:600; font-size:clamp(13px,2.4vw,22px); line-height:1.25; resize:none; outline:none; padding:4px; max-height:72%; }
+  .job-input { width:100%; height:76%; background:transparent; border:none; color:var(--fg); text-align:center; font-family:'Lexend',system-ui,sans-serif; font-weight:600; line-height:1.25; resize:none; outline:none; padding:4px; overflow:hidden; }
   .job-input::placeholder { color:#5f7d87; font-weight:400; }
   .cell.empty .job-input::placeholder { color:#48626c; }
 
@@ -40,7 +40,6 @@
 
   @media (max-height:480px) {
     #topbar h1 { display:none; }
-    .job-input { font-size:clamp(11px,2.6vw,18px); }
   }
 </style>
 </head>
@@ -91,7 +90,7 @@
     for (var i = 0; i < N; i++) {
       html += '' +
         '<div class="cell" data-i="'+i+'">' +
-          '<textarea class="job-input" data-i="'+i+'" placeholder="Job..." rows="1" maxlength="40"></textarea>' +
+          '<textarea class="job-input" data-i="'+i+'" placeholder="Job..." maxlength="40"></textarea>' +
           '<div class="num-wrap"><div class="num-badge" contenteditable="true" spellcheck="false" data-i="'+i+'"></div></div>' +
         '</div>';
     }
@@ -113,6 +112,7 @@
         save();
         renderCellState(i);
         updateShuffleBtn();
+        fitText(c.input);
       });
       c.numBadge.addEventListener('input', function(){
         var digits = c.numBadge.textContent.replace(/[^0-9]/g,'').slice(0,2);
@@ -135,12 +135,35 @@
     cells[i].wrap.classList.toggle('empty', !filled);
   }
 
+  // ------------------------------------------------------------------
+  // Auto-shrink a job's font size so the whole thing stays visible and
+  // wraps onto multiple lines instead of being cut off / scrollable.
+  // Mirrors the old clamp(13px,2.4vw,22px) as the starting (largest) size.
+  // ------------------------------------------------------------------
+  function baseFontPx(){
+    return Math.max(13, Math.min(22, window.innerWidth * 0.024));
+  }
+  function fitText(ta){
+    var max = baseFontPx();
+    var min = 10;
+    ta.style.fontSize = max + 'px';
+    var size = max;
+    while (ta.scrollHeight > ta.clientHeight + 1 && size > min) {
+      size -= 1;
+      ta.style.fontSize = size + 'px';
+    }
+  }
+  function fitAllText(){
+    cells.forEach(function(c){ fitText(c.input); });
+  }
+
   function renderAll(){
     cells.forEach(function(c, i){
       c.input.value = state.jobs[i] || '';
       c.numBadge.textContent = (state.nums[i] != null) ? String(state.nums[i]) : '';
       c.numBadge.classList.remove('landed');
       renderCellState(i);
+      fitText(c.input);
     });
     updateShuffleBtn();
   }
@@ -237,6 +260,15 @@
   document.getElementById('clearNumsBtn').onclick = clearNumbers;
   document.getElementById('clearAllBtn').onclick = clearAll;
   document.getElementById('fullBtn').onclick = fullscreen;
+
+  var resizeTimer = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(fitAllText, 120);
+  });
+  document.addEventListener('fullscreenchange', function(){
+    setTimeout(fitAllText, 120);
+  });
 
   load();
   buildGrid();
