@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Board</title>
+<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#10242b; --fg:#ffffff; --accent:#ffc857; --card:#1a3540; --card-empty:#162b33; --border:#2a5666; --green:#4ADE80; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { font-family:'Lexend',system-ui,sans-serif; background:var(--bg); color:var(--fg); display:flex; flex-direction:column; align-items:center; overflow:hidden; }
+
+  #topbar { width:100%; display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:10px; padding:10px 14px; }
+  #topbar h1 { font-size:clamp(16px,2.4vw,22px); font-weight:700; margin:0 10px 0 0; letter-spacing:0.01em; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; align-items:center; }
+  button { font:inherit; font-weight:600; color:var(--fg); background:var(--card); border:2px solid var(--border); border-radius:10px; padding:8px 14px; cursor:pointer; font-size:clamp(12px,1.6vw,15px); }
+  button:hover { background:#234754; }
+  button.primary { background:var(--accent); color:#10242b; border-color:var(--accent); font-weight:700; }
+  button.primary:hover { background:#ffd27a; }
+  button:disabled { opacity:0.45; cursor:default; }
+
+  #stage { flex:1; width:100%; display:flex; align-items:center; justify-content:center; padding:26px 14px 14px; min-height:0; }
+  #grid { display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:min(2vw,16px); width:min(94vw, 90vh, 980px); height:min(90vh, 94vw, 980px); }
+
+  .cell { position:relative; background:var(--card); border:2.5px solid var(--border); border-radius:18px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:10px; min-width:0; min-height:0; transition:border-color 0.2s, background 0.2s; }
+  .cell.empty { background:var(--card-empty); border-color:#1f3a43; border-style:dashed; }
+
+  .job-input { width:100%; background:transparent; border:none; color:var(--fg); text-align:center; font-family:'Lexend',system-ui,sans-serif; font-weight:600; font-size:clamp(13px,2.4vw,22px); line-height:1.25; resize:none; outline:none; padding:4px; max-height:72%; }
+  .job-input::placeholder { color:#5f7d87; font-weight:400; }
+  .cell.empty .job-input::placeholder { color:#48626c; }
+
+  .num-wrap { position:absolute; top:-14px; right:-14px; width:clamp(34px,8vw,64px); height:clamp(34px,8vw,64px); }
+  .num-badge { width:100%; height:100%; border-radius:50%; background:#0b1a1f; border:3px solid var(--accent); color:var(--accent); font-weight:800; font-size:clamp(14px,4vw,30px); display:flex; align-items:center; justify-content:center; text-align:center; cursor:text; transition:border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s; }
+  .num-badge:empty::before { content:'?'; opacity:0.5; }
+  .num-badge.landed { background:#123a1f; border-color:var(--green); color:var(--green); transform:scale(1.12); }
+  .cell.empty .num-wrap { display:none; }
+
+  #hint { font-size:clamp(11px,1.6vw,13px); color:#7d9aa3; padding:0 14px 10px; text-align:center; }
+
+  @media (max-height:480px) {
+    #topbar h1 { display:none; }
+    .job-input { font-size:clamp(11px,2.6vw,18px); }
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>🧹 Job Board</h1>
+  <div class="row">
+    <button id="shuffleBtn" class="primary">🎲 Shuffle Groups</button>
+    <button id="clearNumsBtn">Clear numbers</button>
+    <button id="clearAllBtn">Clear all</button>
+    <button id="fullBtn">Fullscreen</button>
+  </div>
+</div>
+
+<div id="stage">
+  <div id="grid"></div>
+</div>
+
+<div id="hint">Type a job in each square you need — leave the rest blank. Tap a number badge to set it by hand, or hit Shuffle to assign them randomly.</div>
+
+<script>
+(function(){
+  var N = 9;
+  var STORE_KEY = 'jobboard_state_v1';
+  var grid = document.getElementById('grid');
+  var cells = []; // {wrap, input, numWrap, numBadge}
+  var state = { jobs: new Array(N).fill(''), nums: new Array(N).fill(null) };
+  var spinTimer = null;
+
+  function load(){
+    try {
+      var raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      var parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.jobs) && parsed.jobs.length === N) {
+        state.jobs = parsed.jobs;
+        state.nums = (Array.isArray(parsed.nums) && parsed.nums.length === N) ? parsed.nums : new Array(N).fill(null);
+      }
+    } catch(e) {}
+  }
+  function save(){
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); } catch(e) {}
+  }
+
+  function buildGrid(){
+    var html = '';
+    for (var i = 0; i < N; i++) {
+      html += '' +
+        '<div class="cell" data-i="'+i+'">' +
+          '<textarea class="job-input" data-i="'+i+'" placeholder="Job..." rows="1" maxlength="40"></textarea>' +
+          '<div class="num-wrap"><div class="num-badge" contenteditable="true" spellcheck="false" data-i="'+i+'"></div></div>' +
+        '</div>';
+    }
+    grid.innerHTML = html;
+
+    grid.querySelectorAll('.cell').forEach(function(el){
+      var i = +el.dataset.i;
+      cells[i] = {
+        wrap: el,
+        input: el.querySelector('.job-input'),
+        numBadge: el.querySelector('.num-badge')
+      };
+    });
+
+    cells.forEach(function(c, i){
+      c.input.addEventListener('input', function(){
+        state.jobs[i] = c.input.value;
+        if (!c.input.value.trim()) { state.nums[i] = null; c.numBadge.textContent = ''; }
+        save();
+        renderCellState(i);
+        updateShuffleBtn();
+      });
+      c.numBadge.addEventListener('input', function(){
+        var digits = c.numBadge.textContent.replace(/[^0-9]/g,'').slice(0,2);
+        if (c.numBadge.textContent !== digits) c.numBadge.textContent = digits;
+        state.nums[i] = digits === '' ? null : parseInt(digits, 10);
+        c.numBadge.classList.remove('landed');
+        save();
+      });
+      c.numBadge.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') { e.preventDefault(); c.numBadge.blur(); }
+      });
+      c.numBadge.addEventListener('focus', function(){
+        document.getSelection().selectAllChildren(c.numBadge);
+      });
+    });
+  }
+
+  function renderCellState(i){
+    var filled = !!state.jobs[i] && !!state.jobs[i].trim();
+    cells[i].wrap.classList.toggle('empty', !filled);
+  }
+
+  function renderAll(){
+    cells.forEach(function(c, i){
+      c.input.value = state.jobs[i] || '';
+      c.numBadge.textContent = (state.nums[i] != null) ? String(state.nums[i]) : '';
+      c.numBadge.classList.remove('landed');
+      renderCellState(i);
+    });
+    updateShuffleBtn();
+  }
+
+  function filledIndexes(){
+    var out = [];
+    for (var i = 0; i < N; i++) if (state.jobs[i] && state.jobs[i].trim()) out.push(i);
+    return out;
+  }
+
+  function updateShuffleBtn(){
+    document.getElementById('shuffleBtn').disabled = filledIndexes().length < 2;
+  }
+
+  function shuffle(arr){
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function shuffleGroups(){
+    if (spinTimer) return;
+    var idxs = filledIndexes();
+    if (idxs.length < 2) return;
+    var finalNums = shuffle(idxs.map(function(_, k){ return k + 1; }));
+
+    document.getElementById('shuffleBtn').disabled = true;
+
+    idxs.forEach(function(i, k){
+      cells[i].numBadge.classList.remove('landed');
+      cells[i].numBadge.setAttribute('contenteditable', 'false');
+    });
+
+    var tick = 0;
+    var maxTicks = 16;
+    var stopAt = {};
+    idxs.forEach(function(i, k){ stopAt[i] = 9 + k * 3 + Math.floor(Math.random()*3); });
+
+    spinTimer = setInterval(function(){
+      tick++;
+      var allDone = true;
+      idxs.forEach(function(i, k){
+        if (tick >= stopAt[i]) {
+          if (cells[i].numBadge.textContent !== String(finalNums[k])) {
+            cells[i].numBadge.textContent = String(finalNums[k]);
+            cells[i].numBadge.classList.add('landed');
+            state.nums[i] = finalNums[k];
+          }
+        } else {
+          allDone = false;
+          cells[i].numBadge.textContent = String(1 + Math.floor(Math.random() * idxs.length));
+        }
+      });
+      if (allDone || tick > maxTicks + 6) {
+        clearInterval(spinTimer);
+        spinTimer = null;
+        idxs.forEach(function(i, k){
+          cells[i].numBadge.textContent = String(finalNums[k]);
+          cells[i].numBadge.classList.add('landed');
+          state.nums[i] = finalNums[k];
+          cells[i].numBadge.setAttribute('contenteditable', 'true');
+        });
+        save();
+        updateShuffleBtn();
+      }
+    }, 80);
+  }
+
+  function clearNumbers(){
+    state.nums = new Array(N).fill(null);
+    cells.forEach(function(c){ c.numBadge.textContent=''; c.numBadge.classList.remove('landed'); });
+    save();
+  }
+
+  function clearAll(){
+    if (!confirm('Clear all jobs and numbers?')) return;
+    state = { jobs: new Array(N).fill(''), nums: new Array(N).fill(null) };
+    save();
+    renderAll();
+  }
+
+  function fullscreen(){
+    try {
+      if (document.fullscreenElement) { document.exitFullscreen(); return; }
+      var p = document.documentElement.requestFullscreen();
+      if (p && p.catch) p.catch(function(){});
+    } catch(e) {}
+  }
+
+  document.getElementById('shuffleBtn').onclick = shuffleGroups;
+  document.getElementById('clearNumsBtn').onclick = clearNumbers;
+  document.getElementById('clearAllBtn').onclick = clearAll;
+  document.getElementById('fullBtn').onclick = fullscreen;
+
+  load();
+  buildGrid();
+  renderAll();
+})();
+</script>
+</body>
+</html>
