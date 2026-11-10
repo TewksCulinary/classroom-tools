@@ -555,7 +555,7 @@ var CartLogic = (function () {
   var STUDENT_DRINKS = [
     { id: 'ssoda',  name: 'Italian Soda', color: '#7FB8DA', steps: ['stsyrup'], icon: 'iced' },
     { id: 'slotus', name: 'Lotus',        color: '#E58FAE', steps: ['stsyrup'], icon: 'iced' },
-    { id: 'smocha', name: 'Mocha',        color: '#6B3F2A', steps: ['temp'], coffee: true, defaults: { sauce: 'Mocha', milk: 'Regular' } }
+    { id: 'smocha', name: 'Mocha',        color: '#6B3F2A', steps: [], icon: 'iced', coffee: true, defaults: { temp: 'Iced', sauce: 'Mocha', milk: 'Regular' } }
   ];
 
   var SAUCES = ['Mocha', 'Sugar Free White Mocha'];
@@ -1344,7 +1344,10 @@ var CartLogic = (function () {
       var i = state.flavors.indexOf(v);
       if (i >= 0) state.flavors.splice(i, 1); else if (state.flavors.length < 2) state.flavors.push(v);
     },
-    pickDrink: function (v) { state.drink = v; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'options'; },
+    pickDrink: function (v) {
+      state.drink = v; state.step = 0; state.sel = {}; state.flavors = []; state.screen = 'options';
+      if (drinkObj() && drinkObj().steps.length === 0) finishDrink();
+    },
     pickOption: function (v, key) { state.sel[key] = v; },
     toggleFlavor: function (v) {
       var i = state.flavors.indexOf(v);
