@@ -13,7 +13,19 @@
   #app { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; padding:16px; min-width:0; transition:background .3s; }
   #app.done { animation:flash 1s steps(2) infinite; }
   @keyframes flash { 0%{background:#10242b;} 50%{background:#b3261e;} }
-  #display { font-size:clamp(56px,22vw,200px); font-weight:700; letter-spacing:.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #face { display:flex; align-items:center; justify-content:center; gap:.18em; font-size:clamp(56px,20vw,200px); line-height:1; }
+  .no-glass #face { font-size:clamp(56px,22vw,200px); }
+  #display { font-size:1em; font-weight:700; letter-spacing:.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  #hourglass { height:1.1em; width:auto; flex-shrink:0; transform-origin:50% 50%; }
+  .no-glass #hourglass { display:none; }
+  #hourglass .glass { fill:rgba(255,255,255,.08); stroke:#fff; stroke-width:3; stroke-linejoin:round; }
+  #hourglass .cap { stroke:#fff; stroke-width:6; stroke-linecap:round; }
+  #hourglass .sand { fill:var(--accent); }
+  #stream { display:none; stroke:var(--accent); stroke-width:2.5; stroke-dasharray:4 3; }
+  .running #stream { display:block; animation:fall .35s linear infinite; }
+  @keyframes fall { to { stroke-dashoffset:-7; } }
+  #hourglass.flip { animation:flip .9s ease-in-out; }
+  @keyframes flip { from { transform:rotate(180deg); } to { transform:rotate(360deg); } }
   #message { font-size:clamp(18px,5vw,40px); font-weight:600; color:var(--accent); text-align:center; min-height:1.3em; }
   .row { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; align-items:center; }
   button { font:inherit; font-weight:600; color:var(--fg); background:var(--btn); border:2px solid var(--fg); border-radius:12px; padding:10px 18px; cursor:pointer; font-size:clamp(14px,3.5vw,20px); }
@@ -31,17 +43,33 @@
   .compact button { font-size:13px; padding:6px 12px; border-radius:10px; border-width:2px; }
   html:has(.compact), body:has(.compact) { overflow:hidden; }
   #app.compact { gap:6px; padding:6px; min-width:0; min-height:0; overflow:hidden; }
-  .compact #display { font-size:min(30vw, 55vh); }
+  .compact #face { font-size:min(24vw, 50vh); }
+  .compact.no-glass #face { font-size:min(30vw, 55vh); }
+  .compact #hourglass { height:1em; }
   .compact #message { font-size:min(7vw, 11vh); min-height:0; }
   .compact #message:empty { display:none; }
   /* Shrink the window enough and extras drop away, leaving only the time */
+  @media (max-height:200px), (max-width:300px) { .compact #hourglass { display:none; } .compact #face { font-size:min(30vw, 55vh); } }
   @media (max-height:170px) { .compact .row { display:none; } }
   @media (max-height:110px) { .compact #message { display:none; } }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="display">05:00</div>
+  <div id="face">
+    <svg id="hourglass" viewBox="0 0 100 160" aria-hidden="true">
+      <defs>
+        <clipPath id="clipTop"><path d="M18,10 L82,10 C82,40 56,62 53,80 L47,80 C44,62 18,40 18,10 Z"/></clipPath>
+        <clipPath id="clipBot"><path d="M47,80 L53,80 C56,98 82,120 82,150 L18,150 C18,120 44,98 47,80 Z"/></clipPath>
+      </defs>
+      <path class="glass" d="M18,10 L82,10 C82,40 56,62 53,80 C56,98 82,120 82,150 L18,150 C18,120 44,98 47,80 C44,62 18,40 18,10 Z"/>
+      <g clip-path="url(#clipTop)"><path id="sandTop" class="sand" d=""/></g>
+      <g clip-path="url(#clipBot)"><path id="sandBot" class="sand" d=""/></g>
+      <line id="stream" x1="50" y1="80" x2="50" y2="150"/>
+      <path class="cap" d="M10,8 H90 M10,152 H90"/>
+    </svg>
+    <div id="display">05:00</div>
+  </div>
   <div id="message"></div>
   <div class="row" id="quick">
     <button data-min="2">2 min</button>
@@ -70,6 +98,9 @@
       </select>
     </div>
     <div class="row">
+      <label for="glassToggle"><input type="checkbox" id="glassToggle" checked> Show hourglass</label>
+    </div>
+    <div class="row">
       <button id="popout" class="small">Pop out ⧉</button>
     </div>
   </div>
@@ -85,29 +116,46 @@
   let total = 300, remaining = 300, endAt = null, tick = null;
 
   function fmt(s){ s = Math.max(0, Math.ceil(s)); const m = Math.floor(s/60), r = s%60; return String(m).padStart(2,'0')+':'+String(r).padStart(2,'0'); }
-  function render(){ display.textContent = fmt(remaining); document.title = (endAt ? fmt(remaining)+' – ' : '') + 'Classroom Timer'; }
+  function drawSand(){
+    const frac = total > 0 ? Math.min(1, Math.max(0, remaining/total)) : 0;
+    const topY = 80 - 66*frac, dip = Math.min(8, 80 - topY);
+    $('sandTop').setAttribute('d', `M0,${topY} Q50,${topY+2*dip} 100,${topY} L100,80 L0,80 Z`);
+    const pileY = 150 - 66*(1-frac);
+    $('sandBot').setAttribute('d', `M0,150 L0,${pileY+8} Q50,${pileY-8} 100,${pileY+8} L100,150 Z`);
+    $('stream').setAttribute('y2', pileY);
+  }
+  function flip(){
+    const h = $('hourglass'); h.classList.remove('flip'); void h.getBoundingClientRect(); h.classList.add('flip');
+  }
+  $('hourglass').addEventListener('animationend', e => { if (e.animationName === 'flip') $('hourglass').classList.remove('flip'); });
+  function render(){ display.textContent = fmt(remaining); drawSand(); document.title = (endAt ? fmt(remaining)+' – ' : '') + 'Classroom Timer'; }
   function beep(){
     try {
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
       [0,.4,.8].forEach(t=>{ const o=ctx.createOscillator(), g=ctx.createGain(); o.frequency.value=880; o.connect(g); g.connect(ctx.destination); g.gain.setValueAtTime(.3,ctx.currentTime+t); g.gain.exponentialRampToValueAtTime(.001,ctx.currentTime+t+.3); o.start(ctx.currentTime+t); o.stop(ctx.currentTime+t+.3); });
     } catch(e){}
   }
-  function stop(){ clearInterval(tick); tick = null; endAt = null; $('start').textContent = 'Start'; }
+  function stop(){ clearInterval(tick); tick = null; endAt = null; app.classList.remove('running'); $('start').textContent = 'Start'; }
   function updateMessage(){
     const done = app.classList.contains('done');
     message.textContent = (done || $('showMode').value === 'always') ? $('msg').value : '';
   }
   function finish(){ stop(); remaining = 0; render(); app.classList.add('done'); updateMessage(); beep(); }
-  function setTime(sec){ stop(); total = remaining = sec; app.classList.remove('done'); updateMessage(); render(); }
+  function setTime(sec){
+    const wasDone = app.classList.contains('done');
+    stop(); total = remaining = sec; app.classList.remove('done'); updateMessage(); render();
+    if (wasDone) flip();
+  }
 
   function start(){
     if (tick){ // pause
       remaining = (endAt - Date.now())/1000; stop(); render(); $('start').textContent = 'Resume'; return;
     }
-    if (remaining <= 0) remaining = total;
+    if (remaining <= 0) { remaining = total; flip(); }
     app.classList.remove('done'); updateMessage();
     endAt = Date.now() + remaining*1000;
     $('start').textContent = 'Pause';
+    app.classList.add('running');
     tick = setInterval(()=>{ remaining = (endAt - Date.now())/1000; if (remaining <= 0) finish(); else render(); }, 200);
     render();
   }
@@ -126,6 +174,13 @@
   $('msg').addEventListener('input', updateMessage);
   $('showMode').addEventListener('change', updateMessage);
 
+  function applyGlass(on){ app.classList.toggle('no-glass', !on); $('glassToggle').checked = on; }
+  $('glassToggle').addEventListener('change', () => {
+    applyGlass($('glassToggle').checked);
+    try { localStorage.setItem('timerGlass', $('glassToggle').checked ? '1' : '0'); } catch(e){}
+  });
+  try { if (localStorage.getItem('timerGlass') === '0') applyGlass(false); } catch(e){}
+
   // Pop out: always-on-top Picture-in-Picture window where supported, else a small window.
   $('popout').onclick = async () => {
     if (window.documentPictureInPicture) {
@@ -142,7 +197,7 @@
         return;
       } catch(e){}
     }
-    const p = new URLSearchParams({ compact:'1', msg:$('msg').value, mode:$('showMode').value, sec:Math.max(1, Math.round(remaining)) });
+    const p = new URLSearchParams({ compact:'1', msg:$('msg').value, mode:$('showMode').value, sec:Math.max(1, Math.round(remaining)), tot:total, glass:$('glassToggle').checked ? '1' : '0' });
     window.open(location.pathname + '?' + p.toString(), 'timerpop', 'popup=yes,width=340,height=280');
   };
 
@@ -151,7 +206,8 @@
     app.classList.add('compact');
     if (q.get('msg') !== null) $('msg').value = q.get('msg');
     if (q.get('mode')) $('showMode').value = q.get('mode');
-    if (+q.get('sec') > 0) setTime(+q.get('sec'));
+    if (q.get('glass')) applyGlass(q.get('glass') === '1');
+    if (+q.get('sec') > 0) { setTime(+q.get('sec')); if (+q.get('tot') >= +q.get('sec')) { total = +q.get('tot'); } }
   }
   updateMessage();
   render();
