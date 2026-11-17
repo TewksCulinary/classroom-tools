@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Classroom Timer</title>
-<link href="https://fonts.googleapis.com/css2?family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
+  /* Lexend is hosted in the fonts/ folder next to this file, so it works offline and on networks that block Google Fonts. */
+  @font-face { font-family:'Lexend'; font-style:normal; font-weight:100 900; font-display:swap; src:url('fonts/lexend-latin-wght-normal.woff2') format('woff2'); }
   :root { --bg:#10242b; --fg:#ffffff; --accent:#ffc857; --btn:#1d3d48; --btn-h:#2a5666; }
   * { box-sizing:border-box; }
   html { height:100%; }
@@ -18,6 +19,9 @@
   #face { display:flex; align-items:center; justify-content:center; gap:.18em; font-size:clamp(56px,min(20vw,32vh),200px); line-height:1; }
   .no-glass #face { font-size:clamp(56px,min(22vw,32vh),200px); }
   #display { font-size:1em; font-weight:700; letter-spacing:.02em; font-variant-numeric:tabular-nums; line-height:1; }
+  /* Every digit gets the same fixed-width slot so the time never shifts as the numbers change. */
+  #display span { display:inline-block; text-align:center; }
+  #display .d { width:var(--dw, .66em); }
   #hourglass { height:1.1em; width:auto; flex-shrink:0; transform-origin:50% 50%; }
   .no-glass #hourglass { display:none; }
   #hourglass .glass { fill:rgba(255,255,255,.08); stroke:#fff; stroke-width:3; stroke-linejoin:round; }
@@ -130,7 +134,25 @@
     const h = $('hourglass'); h.classList.remove('flip'); void h.getBoundingClientRect(); h.classList.add('flip');
   }
   $('hourglass').addEventListener('animationend', e => { if (e.animationName === 'flip') $('hourglass').classList.remove('flip'); });
-  function render(){ display.textContent = fmt(remaining); drawSand(); document.title = (endAt ? fmt(remaining)+' – ' : '') + 'Classroom Timer'; }
+  let lastText = null;
+  // Measure the widest digit in the font actually in use (Lexend may load after the page does).
+  function measureDigits(){
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;';
+    display.appendChild(probe);
+    let max = 0;
+    for (const ch of '0123456789') { probe.textContent = ch; max = Math.max(max, probe.getBoundingClientRect().width); }
+    const fs = parseFloat(getComputedStyle(display).fontSize);
+    probe.remove();
+    if (max > 0 && fs > 0) display.style.setProperty('--dw', (max/fs).toFixed(4) + 'em');
+  }
+  function showTime(){
+    const t = fmt(remaining);
+    if (t === lastText) return;
+    lastText = t;
+    display.innerHTML = [...t].map(c => c === ':' ? '<span class="c">:</span>' : '<span class="d">' + c + '</span>').join('');
+  }
+  function render(){ showTime(); drawSand(); document.title = (endAt ? fmt(remaining)+' – ' : '') + 'Classroom Timer'; }
   function beep(){
     try {
       const ctx = new (window.AudioContext||window.webkitAudioContext)();
@@ -190,8 +212,12 @@
         const pip = await documentPictureInPicture.requestWindow({ width: 340, height: 260 });
         [...document.styleSheets].forEach(ss => {
           if (ss.href) { const l = pip.document.createElement('link'); l.rel='stylesheet'; l.href=ss.href; pip.document.head.appendChild(l); }
-          else { const st = pip.document.createElement('style'); st.textContent=[...ss.cssRules].map(r=>r.cssText).join('\n'); pip.document.head.appendChild(st); }
+          else { const st = pip.document.createElement('style'); st.textContent=[...ss.cssRules].filter(r => !(r instanceof CSSFontFaceRule)).map(r=>r.cssText).join('\n'); pip.document.head.appendChild(st); }
         });
+        // The pop-out window has no base URL of its own, so give it Lexend by absolute address.
+        const fontCss = pip.document.createElement('style');
+        fontCss.textContent = `@font-face{font-family:'Lexend';font-style:normal;font-weight:100 900;font-display:swap;src:url('${new URL('fonts/lexend-latin-wght-normal.woff2', document.baseURI).href}') format('woff2');}`;
+        pip.document.head.appendChild(fontCss);
         pip.document.body.style.cssText = 'margin:0;display:flex;height:100vh;background:#10242b;';
         pip.document.body.appendChild(app);
         app.classList.add('compact');
@@ -212,7 +238,13 @@
     if (+q.get('sec') > 0) { setTime(+q.get('sec')); if (+q.get('tot') >= +q.get('sec')) { total = +q.get('tot'); } }
   }
   updateMessage();
+  measureDigits();
   render();
+  if (document.fonts && document.fonts.load) {
+    const refit = () => { measureDigits(); lastText = null; render(); };
+    // If the font file is missing the page just keeps the system font, so errors are ignored here.
+    Promise.all([document.fonts.load('700 1em Lexend'), document.fonts.ready]).then(refit, refit);
+  }
 })();
 </script>
 </body>
