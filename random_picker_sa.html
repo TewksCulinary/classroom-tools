@@ -232,7 +232,7 @@ function poll() {
 
 function readTodayTrips() {
   var today = todayKey();
-  sheetsGet(SHEET_PASSES+'!A2:J5000').then(function(res) {
+  sheetsGet(SHEET_PASSES+'!A2:J200000').then(function(res) {
     var rows = res.values || [];
     var trips = {};
     students.forEach(function(n){ trips[n] = []; });
